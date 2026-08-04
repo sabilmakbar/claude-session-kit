@@ -34,7 +34,9 @@ detection is manual and renaming is buried in the UI.
    (cheap heuristic first: does any title word appear in the last N user messages?).
    Surfaced as a session-end or session-start ping, same `additionalContext` pattern
    as the memory kit's hooks. Optionally a headless-Claude scorer later, only if the
-   heuristic proves too dumb.
+   heuristic proves too dumb. On drift the ping offers a fork: **rename** (same work,
+   evolved topic) or **split** into a fresh session via a handoff note — the drift
+   guardrail described in DESIGN-handoff.md's same-machine use case.
 3. **Rename helper** — a skill (`/rename-session`) that proposes a title from the
    transcript and applies it where writable. Open question below decides "where".
 

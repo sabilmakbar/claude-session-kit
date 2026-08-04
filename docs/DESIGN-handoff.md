@@ -1,4 +1,4 @@
-# Design: session handoff between machines
+# Design: session handoff (between machines, and between sessions)
 
 ## The problem
 
@@ -14,6 +14,21 @@ from that run:
 2. **A handoff is more than transcripts.** The useful bundle was transcripts + a WIP
    backlog + a held diff — state that belongs to no repo. The WIP note turned out to be
    the most valuable file in the bundle.
+
+## Second use case: same-machine session split (drift guardrail)
+
+A handoff is also the right move when a session's context has expanded way past its
+topic, drifted to something else entirely, or started absorbing unrelated questions.
+Instead of renaming the session (right only when the same work evolved), the fix is to
+**split**: auto-draft a HANDOFF.md from the current session's state (open threads,
+decisions made, artifacts touched), export it, and start a fresh session seeded with it.
+The old session keeps its honest title; the new topic gets a lean context instead of
+inheriting an overgrown one. Same-machine splits are handoff-lite: no transcripts in the
+bundle, just the note (the old transcript stays put and resumable).
+
+The naming feature's drift detector (DESIGN-naming.md) is the trigger: on drift it
+offers the fork — *rename* (work evolved) or *split* (topic changed). Wiring: detector
+pings → user picks → `/handoff` drafts the note.
 
 ## Proposed format: one bundle, one manifest
 
