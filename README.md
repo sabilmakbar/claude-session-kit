@@ -52,5 +52,17 @@ handoff/    planned  export / import scripts + manifest format
 deliberately excluded: it only caches the rendered tab, and the tab resolves from the
 transcript anyway. See [docs/DESIGN-naming.md](docs/DESIGN-naming.md).
 
+## Shells
+
+**bash and zsh.** Both are tested; the suite runs under bash and sources the library
+under zsh explicitly, because the two differ in how a sourced file learns its own path
+(`BASH_SOURCE` vs `$0`) — a difference that silently broke the kit once.
+
+Other shells fail at parse time (`dash: Syntax error: redirection unexpected`), which is
+a deliberate, loud failure rather than a silent misbehaviour. If you need to source the
+library from somewhere that cannot report the sourced file's path, set
+`CLAUDE_SESSION_KIT_ROOT` to the kit root; a wrong or missing root produces an error
+naming that variable rather than a confusing path.
+
 Design rule carried over from the memory kit: plain files, plain bash, no server, no
 telemetry; every behavior covered by the test suite; installers idempotent.

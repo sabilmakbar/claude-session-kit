@@ -286,6 +286,21 @@ else
     ok "sources cleanly under zsh (skipped, no zsh)"
 fi
 
+# The override is what a caller uses when its shell cannot report the sourced path.
+if bash -c "CLAUDE_SESSION_KIT_ROOT='$ROOT' . '$ROOT/naming/rename.sh' && rename_command x >/dev/null" 2>/dev/null; then
+    ok "CLAUDE_SESSION_KIT_ROOT overrides self-location"
+else
+    bad "CLAUDE_SESSION_KIT_ROOT overrides self-location" "sourced" "failed"
+fi
+
+# A shell that resolves the path wrongly must say so, not fail obscurely later.
+# This is the shape the zsh bug took: it parsed fine and pointed somewhere absurd.
+OUT=$(bash -c "CLAUDE_SESSION_KIT_ROOT=/nonexistent . '$ROOT/naming/rename.sh'" 2>&1)
+case "$OUT" in
+    *CLAUDE_SESSION_KIT_ROOT*) ok "a bad root fails loudly and names the fix" ;;
+    *) bad "a bad root fails loudly and names the fix" "actionable error" "${OUT:-silence}" ;;
+esac
+
 # --- result -----------------------------------------------------------------
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"

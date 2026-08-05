@@ -25,11 +25,22 @@
 #
 # Source it; do not execute it.
 
-# BASH_SOURCE is bash-only; zsh sets $0 to the sourced file instead. Both are
-# needed — the tests run under bash, but an interactive shell is often zsh.
-_nr_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# Finding core/ from here is the one thing that genuinely differs between shells:
+# bash sets BASH_SOURCE, zsh sets $0 when sourcing, and others set neither. Guessing
+# further shells is a losing game, so verify the result instead and name an escape
+# hatch. This kit is bash/zsh only — every other shell fails to parse it outright
+# (dash: "Syntax error: redirection unexpected"), which is a fine, loud failure. The
+# case worth guarding is a shell that parses fine but resolves the path wrong, which
+# is exactly how the zsh bug hid: silently, behind a nonsense path.
+_nr_root="${CLAUDE_SESSION_KIT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd)}"
+if [ ! -r "$_nr_root/core/sessions.sh" ]; then
+    echo "rename.sh: cannot find core/sessions.sh (looked in '${_nr_root:-unresolved}')" >&2
+    echo "  This shell may not expose the sourced file's path." >&2
+    echo "  Set CLAUDE_SESSION_KIT_ROOT to the kit root, or source from bash or zsh." >&2
+    return 1 2>/dev/null || exit 1
+fi
 # shellcheck source=../core/sessions.sh
-. "$_nr_dir/../core/sessions.sh"
+. "$_nr_root/core/sessions.sh"
 
 # Not an arbitrary sanity limit — it is what keeps the append atomic.
 #
