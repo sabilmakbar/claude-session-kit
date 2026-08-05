@@ -1,0 +1,70 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    # ubuntu matters as much as macos here: everything in this kit was developed
+    # on macOS, and the accessors it wraps are undocumented internals whose paths
+    # and shell behaviour differ between the two.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install dependencies
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq jq zsh
+          else
+            # macOS ships jq on GitHub runners and zsh in the base image.
+            command -v jq  >/dev/null || brew install jq
+            command -v zsh >/dev/null || brew install zsh
+          fi
+
+      - name: Versions
+        run: |
+          bash --version | head -1
+          zsh --version
+          jq --version
+
+      # The suite builds its own $HOME under mktemp and never reads the real one,
+      # so it is safe on a runner that has no ~/.claude at all.
+      - name: Run tests
+        run: bash tests/run.sh
+
+      # The zsh case is not incidental. A sourced file learns its own path
+      # differently in bash and zsh, and that difference silently broke the kit
+      # once while this suite stayed green.
+      - name: Sourcing works under zsh
+        run: zsh -c '. ./naming/rename.sh && rename_command check >/dev/null'
+
+      - name: Installer is idempotent
+        run: |
+          export CLAUDE_SESSION_KIT_PREFIX="$RUNNER_TEMP/claude-a"
+          ./install.sh
+          ./install.sh                     # second run must be a no-op, not an error
+          test -r "$CLAUDE_SESSION_KIT_PREFIX/session-kit/core/sessions.sh"
+          test -r "$CLAUDE_SESSION_KIT_PREFIX/skills/rename-session/SKILL.md"
+
+      - name: Installed skill has no unrewritten relative sources
+        run: |
+          export CLAUDE_SESSION_KIT_PREFIX="$RUNNER_TEMP/claude-b"
+          ./install.sh
+          ! grep -qE '^\. (core|naming)/' \
+            "$CLAUDE_SESSION_KIT_PREFIX/skills/rename-session/SKILL.md"
+
+      - name: Uninstall removes what it installed
+        run: |
+          export CLAUDE_SESSION_KIT_PREFIX="$RUNNER_TEMP/claude-c"
+          ./install.sh
+          ./install.sh --uninstall
+          test ! -d "$CLAUDE_SESSION_KIT_PREFIX/session-kit"
+          test ! -d "$CLAUDE_SESSION_KIT_PREFIX/skills/rename-session"
