@@ -33,6 +33,102 @@ reaches this doc. The wrong-session case produces no bundle at all: nothing has 
 and nothing needs carrying over, so the remedy is an early warning, not a handoff.
 Wiring: detector pings → user picks → `/handoff` drafts the note, for split only.
 
+### Same-machine splits do not produce a bundle
+
+Designed 2026-08-05. A same-machine split writes a **plain folder**, read once by the
+fresh session, and no tarball is involved.
+
+Ask what the bundle format actually buys: checksums, collision detection, a source
+hostname. Every one of those exists because files crossed a gap between machines. On one
+machine nothing crosses a gap — the old transcript never moves and stays resumable — so
+the packaging is ceremony around a file that stays put.
+
+That splits the feature along a real seam rather than an arbitrary one:
+
+| | Carrier | Why |
+|---|---|---|
+| Cross-machine | `session-handoff-<date>.tar.gz` + manifest | files move; integrity and collisions matter |
+| Same-machine | a folder holding the note | nothing moves; only the context transfers |
+
+**Archive the folder, do not delete it.** The note is the most valuable artefact in a
+handoff (lesson 2 above), and it is the only written record of *why* the split happened.
+Deleting it buys a few kilobytes and cannot be undone; moving it out of the way gets the
+same tidiness while keeping the evidence. Whatever performs the move must run **after**
+the session that wrote it has finished — a session tidying up its own working files
+mid-flight is how you lose them.
+
+### Verifying the handoff: the note declares its own assertions
+
+The tempting design — have a verifier quiz the fresh session and compare against the
+original — fails whichever ground truth you pick:
+
+- **Against the note**: the note is in the new session's context, so it passes always.
+  That is a receipt, not verification.
+- **Against the original transcript**: the note is *deliberately* lossy, so the verifier
+  flags the new session for not knowing things that were never meant to transfer.
+
+The sharpest failure is **retracted knowledge**. A good note records only the endpoints;
+the transcript holds the endpoints *and* everything abandoned on the way. Worse, a
+discarded approach is usually discussed at length and then dropped in one sentence, so it
+is the *more* strongly represented of the two. A verifier grading against the transcript
+would mark the fresh session wrong for giving the correct answer. (This design session is
+the example: a sidecar was adopted and dropped, the tab was called unreachable and then
+proved reachable, the renamer was scoped three different ways.)
+
+So invert it: **the original session writes the note and, alongside it, the specific
+claims a reader must be able to restate.** The verifier checks those and nothing else. No
+fuzzy comparison against a whole transcript, so no false failures from abandoned
+branches; and not trivially passable, because assertions can target things the note
+states once and briefly. The session that did the work is also far better placed than any
+grader to know which three facts are load-bearing.
+
+**Point it at the note, not at the new session, and run it early.** On one machine the
+original session is still sitting there, resumable — so a failed check does not mean
+"keep the folder", it means "the note is inadequate and you can fix it right now". That
+signal is only available in the same-machine case, precisely because nothing was torn
+down. Used as a deletion gate it is a lot of machinery for a question whose safe default
+is "keep the file"; used as a note-quality check it runs while the fix is still cheap.
+
+### After a split, the old session becomes a record, not a workspace
+
+A split that leaves the old session still working the same topic is not a split — it is a
+fork, and you end up with two divergent contexts on one piece of work.
+
+But two different things can be asked of the old session, and only one should be guarded:
+
+- **Continuing the handed-over work** — redirect. That is what moved.
+- **Recalling what happened before the split** — answer normally. The old session is the
+  only place the *argument* survives; the note carries the conclusion.
+
+A guard that blocked both would destroy the reason to keep the old session at all.
+
+**Soft guard, not refusal.** Deciding "is this question about the handed-over topic" is
+the same unproven content-matching as drift detection. A false positive on an injected
+hint costs a sentence of noise; a false positive on a hard refusal blocks legitimate work
+and leaves the user arguing with a hook. Same uncertain signal, very different blast
+radius.
+
+Mechanism: a `UserPromptSubmit` / `SessionStart` hook injecting `additionalContext`, the
+same pattern the memory kit uses (both events confirmed present in the extension's
+settings schema).
+
+**This is where a kit-owned state file is justified** — the opposite of the naming
+decision, for a specific reason. The name sidecar was dropped because Claude Code already
+stores names and reads them, so ours would have been a second source of truth. "This
+session handed topic X to session Y on this date" is something Claude Code has no concept
+of and no store for: nothing to duplicate, nothing to conflict with. It must also survive
+restarts, which rules out the pid-file.
+
+Two requirements, or it becomes a trap:
+
+- **A release.** One obvious step to remove the guard, for when the work belongs back in
+  the original session after all. A guard you cannot turn off turns a stale marker into a
+  permanently half-crippled session.
+- **A destination.** The redirect must name where the work went, which means the split
+  records the link in both directions when it happens rather than reconstructing it later.
+
+Same-machine only. Across machines the original session is usually not present to guard.
+
 ## Proposed format: one bundle, one manifest
 
 ```
@@ -88,5 +184,16 @@ line count, sha256. Plus: bundle date, source hostname, kit version.
   `custom-title` itself — an imported session shows its real name in the normal session
   picker, not only in this kit's tooling. Imported sessions are also the safe case for
   writing it: no process is attached, so there is no concurrent writer to interleave
-  with. Whether the VS Code *tab* picks the name up on open is untested (see the open
-  item in DESIGN-naming.md); the picker entry does not depend on that answer.
+  with. The VS Code *tab* picks it up too, the next time that session is opened —
+  verified 2026-08-05, see DESIGN-naming.md.
+
+  **Import is also the right place to normalise titles**, which a live session is not. A
+  running session's auto-titler re-emits `ai-title` after every turn, so anything written
+  there competes with a process that writes more often than we do. No such race exists
+  around an imported transcript with no process attached. If a bundle carries a malformed
+  or missing title, import is where it gets fixed.
+
+  Import is likewise the concrete caller that brings back the other-session write path
+  deferred in DESIGN-naming.md's decision record: it knows exactly which sessions it just
+  installed and can assert against its own manifest — an independent source, unlike a
+  caller that satisfies a check from the same lookup it just performed.
