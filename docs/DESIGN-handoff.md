@@ -27,8 +27,11 @@ inheriting an overgrown one. Same-machine splits are handoff-lite: no transcript
 bundle, just the note (the old transcript stays put and resumable).
 
 The naming feature's drift detector (DESIGN-naming.md) is the trigger: on drift it
-offers the fork — *rename* (work evolved) or *split* (topic changed). Wiring: detector
-pings → user picks → `/handoff` drafts the note.
+offers a three-way fork — *rename* (work evolved), *split* (topic changed), or *wrong
+session* (the user opened the wrong tab and asked something unrelated). Only **split**
+reaches this doc. The wrong-session case produces no bundle at all: nothing has evolved
+and nothing needs carrying over, so the remedy is an early warning, not a handoff.
+Wiring: detector pings → user picks → `/handoff` drafts the note, for split only.
 
 ## Proposed format: one bundle, one manifest
 
@@ -50,8 +53,9 @@ line count, sha256. Plus: bundle date, source hostname, kit version.
    bundle. Refuses to run if a ref is ambiguous.
 2. **`handoff/import.sh <bundle>`** — verify checksums; refuse on session-id collision
    with a *different* file (byte-identical = skip silently); install under the current
-   machine's project dir; write each session's title to the durable name sidecar
-   (DESIGN-naming.md) so it survives the move; print the HANDOFF.md note.
+   machine's project dir; append each session's manifest `title` as a `custom-title`
+   line in its transcript (DESIGN-naming.md) so the name survives the move and appears
+   in the target machine's session picker; print the HANDOFF.md note.
 3. **Skill `/handoff`** — interactive wrapper: pick sessions, draft the HANDOFF.md from
    the current session's state, run export, tell the user where the bundle is.
 
@@ -64,12 +68,25 @@ line count, sha256. Plus: bundle date, source hostname, kit version.
 - No cwd rewriting. Imported sessions keep their original `cwd` fields; resume
   continues in the target machine's directory, and that mismatch is accepted.
 
-## Open questions (answer before building)
+## Resolved questions (2026-08-04)
 
-- Where import places sessions: current project dir (what the prototype did — they
-  show in the picker where you work) vs. recreating the source's encoded-cwd dir
-  (truer, but they land in a project dir that may not exist on the target). Prototype
-  experience says current project dir; revisit if it pollutes pickers.
-- Whether import should also carry pending non-repo state automatically (e.g. the
-  feedback tracker at `~/.local/share/claude-feedback/`) or leave that to the memory
-  kit's own sync story. Leaning: leave it out; one kit per concern.
+- **Where import places sessions: the current project dir.** Confirming the prototype's
+  behaviour and the stated leaning. The alternative (recreating the source's encoded-cwd
+  dir) is truer to the origin but lands sessions in a project dir that may not exist on
+  the target, where nothing surfaces them. Revisit only if it pollutes pickers in
+  practice.
+- **Import does not carry pending non-repo state.** Confirming the leaning: one kit per
+  concern. The feedback tracker at `~/.local/share/claude-feedback/` stays the memory
+  kit's problem, and this kit does not reach into it.
+- **Titles survive the move as `custom-title` transcript entries.** DESIGN-naming.md
+  resolved the durable name to the transcript's own `custom-title` line rather than a
+  kit-owned sidecar, which settles lesson 1 above: import appends each manifest `title`
+  to the installed transcript, so descriptive names no longer live only in export
+  filenames or a hand-written table.
+
+  This is strictly better than the sidecar it replaces, because Claude Code reads
+  `custom-title` itself — an imported session shows its real name in the normal session
+  picker, not only in this kit's tooling. Imported sessions are also the safe case for
+  writing it: no process is attached, so there is no concurrent writer to interleave
+  with. Whether the VS Code *tab* picks the name up on open is untested (see the open
+  item in DESIGN-naming.md); the picker entry does not depend on that answer.
