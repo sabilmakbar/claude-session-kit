@@ -30,7 +30,7 @@ cs_encode_cwd() { printf '%s' "${1//\//-}"; }
 
 # Highest version seen across live pid-files. Empty if none are running.
 cs_running_version() {
-    local f v
+    local f="" v=""
     for f in "$(_cs_pids_dir)"/*.json; do
         [ -f "$f" ] || continue
         v=$(jq -r '.version // empty' "$f" 2>/dev/null) && [ -n "$v" ] && printf '%s\n' "$v"
@@ -42,7 +42,7 @@ cs_running_version() {
 cs_version_guard() {
     [ -n "${_CS_VERSION_WARNED:-}" ] && return 0
     _CS_VERSION_WARNED=1
-    local running
+    local running=""
     running=$(cs_running_version)
     [ -z "$running" ] && return 0
     [ "$running" = "$CS_VERIFIED_VERSION" ] && return 0
@@ -55,7 +55,7 @@ cs_version_guard() {
 
 # cs_transcript_path <session-id> -> path, or non-zero if not found.
 cs_transcript_path() {
-    local id="$1" f
+    local id="$1" f=""
     [ -n "$id" ] || return 1
     for f in "$(_cs_projects_dir)"/*/"$id".jsonl; do
         [ -f "$f" ] && { printf '%s' "$f"; return 0; }
@@ -111,7 +111,7 @@ cs_first_prompt() {
 
 # cs_pid_file <session-id> -> path of the registration file, if one exists.
 cs_pid_file() {
-    local id="$1" f
+    local id="$1" f=""
     [ -n "$id" ] || return 1
     for f in "$(_cs_pids_dir)"/*.json; do
         [ -f "$f" ] || continue
@@ -123,7 +123,7 @@ cs_pid_file() {
 # True when a registration exists AND its process is actually alive. Pid-files
 # are pruned by Claude Code but a stale one must never read as live.
 cs_is_live() {
-    local f pid
+    local f="" pid=""
     f=$(cs_pid_file "$1") || return 1
     pid=$(jq -r '.pid // empty' "$f" 2>/dev/null)
     [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
@@ -151,7 +151,7 @@ cs_is_live() {
 # prompt: "documents-41" is less use than "Brush up on SQL skills", and derived
 # names collide across concurrent sessions.
 cs_resolve_name() {
-    local id="$1" pf name src tr v
+    local id="$1" pf="" name="" src="" tr="" v=""
     [ -n "$id" ] || return 1
     cs_version_guard
 
@@ -181,7 +181,7 @@ cs_resolve_name() {
 
 # cs_list -> TSV: session-id, live flag, resolved name.
 cs_list() {
-    local f id
+    local f="" id=""
     cs_version_guard
     for f in "$(_cs_projects_dir)"/*/*.jsonl; do
         [ -f "$f" ] || continue
@@ -197,7 +197,7 @@ cs_list() {
 # substring can legitimately match several sessions, because derived names
 # collide (two concurrent sessions have both been observed named documents-7c).
 cs_find() {
-    local ref="$1" id live name
+    local ref="$1" id="" live="" name=""
     [ -n "$ref" ] || return 1
     if cs_transcript_path "$ref" >/dev/null 2>&1; then printf '%s\n' "$ref"; return 0; fi
     while IFS=$'\t' read -r id live name; do

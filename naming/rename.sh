@@ -67,7 +67,7 @@ rename_check_title() {
 
 # rename_current_title -> the title a rename would replace. Empty if never renamed.
 rename_current_title() {
-    local id tr
+    local id="" tr=""
     id=$(cs_current_id); [ -n "$id" ] || return 1
     tr=$(cs_transcript_path "$id") || return 1
     cs_custom_title "$tr"
@@ -82,7 +82,7 @@ rename_current_title() {
 # who wrote it, so its advantage lasts one process lifetime while the paste it
 # costs is permanent. Full reasoning in the decision record.
 rename_apply() {
-    local title="$1" id tr line
+    local title="$1" id="" tr="" line=""
     rename_check_title "$title" || return 1
     cs_have_deps || { echo "rename: jq not found" >&2; return 1; }
     cs_version_guard

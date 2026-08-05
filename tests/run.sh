@@ -34,8 +34,10 @@ add_user()   { add_line "$1" "$(jq -cn --arg t "$2" '{type:"user",message:{conte
 
 # pidfile <pid> <id> <name> [nameSource]
 pidfile() {
-    jq -n --arg p "$1" --arg i "$2" --arg n "$3" --arg s "${4:-}" \
-        '{pid:($p|tonumber),sessionId:$i,name:$n,version:"2.1.221"}
+    # Match CS_VERIFIED_VERSION so the version guard stays quiet; a mismatch here is
+    # noise, and the guard's own behaviour is not what these cases are testing.
+    jq -n --arg p "$1" --arg i "$2" --arg n "$3" --arg s "${4:-}" --arg v "$CS_VERIFIED_VERSION" \
+        '{pid:($p|tonumber),sessionId:$i,name:$n,version:$v}
          + (if $s=="" then {} else {nameSource:$s} end)' >"$PIDS/$1.json"
 }
 
