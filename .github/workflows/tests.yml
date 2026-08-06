@@ -66,3 +66,8 @@ jobs:
           ./install.sh --uninstall
           test ! -d "$CLAUDE_SESSION_KIT_PREFIX/session-kit"
           test ! -d "$CLAUDE_SESSION_KIT_PREFIX/skills/rename-session"
+
+      # Not a gate: it needs a real ~/.claude and a runner has none, so it skips here.
+      # Running it proves the skip path stays healthy.
+      - name: Smoke test (skips without ~/.claude)
+        run: bash tests/smoke.sh

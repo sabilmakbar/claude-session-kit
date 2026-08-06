@@ -24,7 +24,8 @@ cs_find "memory review"                  # UUID, short-id prefix, or name substr
 . naming/rename.sh
 rename_apply "A new title"               # the session you are in, and only that one
 
-bash tests/run.sh
+bash tests/run.sh                        # fixtures, runs anywhere
+bash tests/smoke.sh                      # real ~/.claude, invariants only, skips on CI
 ```
 
 ## The two problems it solves
