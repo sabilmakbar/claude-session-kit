@@ -7,7 +7,10 @@
 
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Same bash/zsh difference the library guards against. Hard-coding bash here would
+# mean the suite could only ever run under bash, which is precisely the blind spot
+# that let a zsh bug and a bash-5 bug both ship green.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 PASS=0; FAIL=0
 
 ok()   { PASS=$((PASS+1)); printf '  ok   %s\n' "$1"; }

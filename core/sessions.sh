@@ -28,13 +28,24 @@ cs_current_id() { printf '%s' "${CLAUDE_CODE_SESSION_ID:-}"; }
 # cwd -> project dir name. Claude Code replaces every "/" with "-".
 cs_encode_cwd() { printf '%s' "${1//\//-}"; }
 
+# Directory listing goes through find, never shell globs.
+#
+# bash expands an unmatched glob to the literal pattern, so `[ -f "$f" ] || continue`
+# skips it harmlessly. zsh treats an unmatched glob as a fatal error and aborts the
+# command — which silently broke every listing and lookup for zsh users while the
+# bash-only suite stayed green. find behaves identically in both shells.
+_cs_find_files() {  # <dir> <mindepth> <maxdepth> <name-pattern>
+    find "$1" -mindepth "$2" -maxdepth "$3" -name "$4" -type f 2>/dev/null
+}
+
 # Highest version seen across live pid-files. Empty if none are running.
 cs_running_version() {
     local f="" v=""
-    for f in "$(_cs_pids_dir)"/*.json; do
-        [ -f "$f" ] || continue
-        v=$(jq -r '.version // empty' "$f" 2>/dev/null) && [ -n "$v" ] && printf '%s\n' "$v"
-    done | sort -V | tail -1
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        v=$(jq -r '.version // empty' "$f" 2>/dev/null)
+        [ -n "$v" ] && printf '%s\n' "$v"
+    done < <(_cs_find_files "$(_cs_pids_dir)" 1 1 '*.json') | sort -V | tail -1
 }
 
 # Warn once per shell if the running version is not the one this kit was verified
@@ -57,10 +68,9 @@ cs_version_guard() {
 cs_transcript_path() {
     local id="$1" f=""
     [ -n "$id" ] || return 1
-    for f in "$(_cs_projects_dir)"/*/"$id".jsonl; do
-        [ -f "$f" ] && { printf '%s' "$f"; return 0; }
-    done
-    return 1
+    f=$(_cs_find_files "$(_cs_projects_dir)" 2 2 "$id.jsonl" | head -1)
+    [ -n "$f" ] || return 1
+    printf '%s' "$f"
 }
 
 # _cs_last_of_type <file> <type> <field> -> last non-empty value of that type.
@@ -111,13 +121,14 @@ cs_first_prompt() {
 
 # cs_pid_file <session-id> -> path of the registration file, if one exists.
 cs_pid_file() {
-    local id="$1" f=""
+    local id="$1" f="" hit=""
     [ -n "$id" ] || return 1
-    for f in "$(_cs_pids_dir)"/*.json; do
-        [ -f "$f" ] || continue
-        [ "$(jq -r '.sessionId // empty' "$f" 2>/dev/null)" = "$id" ] && { printf '%s' "$f"; return 0; }
-    done
-    return 1
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        [ "$(jq -r '.sessionId // empty' "$f" 2>/dev/null)" = "$id" ] && { hit="$f"; break; }
+    done < <(_cs_find_files "$(_cs_pids_dir)" 1 1 '*.json')
+    [ -n "$hit" ] || return 1
+    printf '%s' "$hit"
 }
 
 # True when a registration exists AND its process is actually alive. Pid-files
@@ -183,11 +194,11 @@ cs_resolve_name() {
 cs_list() {
     local f="" id=""
     cs_version_guard
-    for f in "$(_cs_projects_dir)"/*/*.jsonl; do
-        [ -f "$f" ] || continue
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
         id=$(basename "$f" .jsonl)
         printf '%s\t%s\t%s\n' "$id" "$(cs_is_live "$id" && echo live || echo dead)" "$(cs_resolve_name "$id")"
-    done
+    done < <(_cs_find_files "$(_cs_projects_dir)" 2 2 '*.jsonl')
 }
 
 # cs_find <ref> -> matching session ids, one per line.

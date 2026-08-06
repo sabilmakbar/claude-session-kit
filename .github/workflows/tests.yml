@@ -40,11 +40,14 @@ jobs:
       - name: Run tests
         run: bash tests/run.sh
 
-      # The zsh case is not incidental. A sourced file learns its own path
-      # differently in bash and zsh, and that difference silently broke the kit
-      # once while this suite stayed green.
-      - name: Sourcing works under zsh
-        run: zsh -c '. ./naming/rename.sh && rename_command check >/dev/null'
+      # Run the WHOLE suite under zsh, not just a sourcing smoke check.
+      #
+      # An earlier version only verified that the library could be sourced from zsh.
+      # It passed while cs_find, cs_list and cs_pid_file were all completely broken
+      # there, because zsh treats an unmatched glob as a fatal error where bash
+      # expands it to a literal. Checking "it loads" proves nothing about "it works".
+      - name: Run tests under zsh
+        run: zsh tests/run.sh
 
       - name: Installer is idempotent
         run: |
