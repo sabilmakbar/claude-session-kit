@@ -3,12 +3,9 @@
 # outside this file. Each case builds a throwaway $HOME and points the kit at it
 # via CLAUDE_SESSION_KIT_HOME.
 #
-# Run: bash tests/run.sh   (CI also runs: zsh tests/run.sh)
-#
-# Name the interpreter rather than running ./tests/run.sh — the shebang would pin it
-# to bash every time, and the zsh path would never be exercised. That blind spot has
-# already shipped two bugs: an unmatched glob is fatal in zsh but harmless in bash,
-# and an unassigned `local` is unbound in bash 5 but empty in the bash 3.2 macOS ships.
+# Run: bash tests/run.sh  /  zsh tests/run.sh
+# Name the shell — ./tests/run.sh pins it to bash and never exercises zsh, a blind
+# spot that has already shipped two bugs.
 
 set -uo pipefail
 

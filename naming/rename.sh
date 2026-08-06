@@ -23,12 +23,8 @@
 # for the concurrentSessions registry, safe only because exactly one process writes
 # it, through an in-memory queue nothing external can join.
 #
-# Source it; do not execute it.
-#
-# The shebang above is a DIALECT HINT for shellcheck and editors — it is not
-# enforcement. A sourced file is interpreted by whatever shell sourced it, so this
-# routinely runs under zsh despite saying bash. Both are supported and the suite
-# runs under both; do not add bash-only syntax on the strength of that first line.
+# Source it; do not execute it. The shebang is a dialect hint, not enforcement — a
+# sourced file runs under the caller's shell. bash and zsh both work; keep it that way.
 
 # Finding core/ from here is the one thing that genuinely differs between shells:
 # bash sets BASH_SOURCE, zsh sets $0 when sourcing, and others set neither. Guessing
