@@ -26,7 +26,14 @@ rename_apply "A new title"               # the session you are in, and only that
 
 bash tests/run.sh                        # fixtures, runs anywhere
 bash tests/smoke.sh                      # real ~/.claude, invariants only, skips on CI
+bash tests/smoke.sh --report             # last failure, redacted and safe to paste
 ```
+
+`smoke.sh` is what you run when Claude Code updates and the kit warns that internals
+may have moved. A `SessionStart` hook can do it for you; `install.sh` prints the line
+to add. On failure it writes a report built from safe fields only — versions, check
+names, and 8-character session ids, never titles or paths — so it can be pasted into
+an issue without carrying your work into it.
 
 ## The two problems it solves
 

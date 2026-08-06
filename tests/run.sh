@@ -317,6 +317,76 @@ case "$OUT" in
 esac
 drop_home
 
+# --- failure reporting ------------------------------------------------------
+#
+# The report is built to be pasted into an issue on a repo that will be public, so
+# these cases are about what must NOT be in it. A malformed JSONL line is the
+# cheapest way to force a real failure without faking one.
+
+echo "failure reporting"
+
+SECRET="Acme Corp migration for client Contoso"
+
+new_home
+ID=77777777-0000-0000-0000-000000000001; transcript "$ID" >/dev/null
+add_custom "$ID" "$SECRET"
+printf 'this is not json\n' >>"$PROJ/$ID.jsonl"
+jq -n --arg v "$CS_VERIFIED_VERSION" '{pid:1,sessionId:"z",name:"n",version:$v}' >"$PIDS/1.json"
+
+OUT=$(bash "$ROOT/tests/smoke.sh" 2>&1); RC=$?
+REPORT="$FAKE/.claude/session-kit/last-failure.md"
+
+is  "a malformed line makes smoke.sh fail"  1 "$RC"
+[ -f "$REPORT" ] && ok "a failure writes a report" || bad "a failure writes a report" "file" "missing"
+
+grep -Fq "$SECRET" "$REPORT" 2>/dev/null \
+    && bad "the report leaks no session title" "absent" "PRESENT" \
+    || ok "the report leaks no session title"
+
+grep -Fq "$HOME" "$REPORT" 2>/dev/null \
+    && bad "the report leaks no home path" "absent" "PRESENT" \
+    || ok "the report leaks no home path"
+
+grep -Fq "$(id -un)" "$REPORT" 2>/dev/null \
+    && bad "the report leaks no username" "absent" "PRESENT" \
+    || ok "the report leaks no username"
+
+grep -q "every transcript parses as JSONL" "$REPORT" 2>/dev/null \
+    && ok "the report names the failed check" \
+    || bad "the report names the failed check" "check name" "absent"
+
+grep -q "claude code running" "$REPORT" 2>/dev/null \
+    && ok "the report records the environment" \
+    || bad "the report records the environment" "version fields" "absent"
+
+is "--report prints the recorded failure" 0 \
+   "$(bash "$ROOT/tests/smoke.sh" --report >/dev/null 2>&1; echo $?)"
+bash "$ROOT/tests/smoke.sh" --report 2>/dev/null | grep -q 'smoke failure' \
+    && ok "--report emits the report body" \
+    || bad "--report emits the report body" "body" "nothing"
+
+# A failing run must not record the version as verified, or the warning would
+# clear while the kit is still broken.
+[ -f "$FAKE/.claude/session-kit/.verified" ] \
+    && bad "a failing run records no verified version" "absent" "PRESENT" \
+    || ok "a failing run records no verified version"
+drop_home
+
+# A later passing run must clear the stale report.
+new_home
+ID=77777777-0000-0000-0000-000000000002; transcript "$ID" >/dev/null
+add_ai "$ID" "Perfectly fine"
+jq -n --arg v "$CS_VERIFIED_VERSION" '{pid:1,sessionId:"z",name:"n",version:$v}' >"$PIDS/1.json"
+mkdir -p "$FAKE/.claude/session-kit"
+echo "stale" >"$FAKE/.claude/session-kit/last-failure.md"
+bash "$ROOT/tests/smoke.sh" >/dev/null 2>&1
+[ -f "$FAKE/.claude/session-kit/last-failure.md" ] \
+    && bad "a passing run clears a stale report" "removed" "still there" \
+    || ok "a passing run clears a stale report"
+is "a passing run records the verified version" \
+   "$CS_VERIFIED_VERSION" "$(cat "$FAKE/.claude/session-kit/.verified" 2>/dev/null)"
+drop_home
+
 # --- sourcing from other shells ---------------------------------------------
 # rename.sh locates core/ relative to itself. BASH_SOURCE is bash-only, so a
 # naive lookup breaks the moment someone sources it from an interactive zsh.

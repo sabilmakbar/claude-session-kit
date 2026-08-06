@@ -26,8 +26,11 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 PASS=0; FAIL=0; SKIP=0
 
+FAILED=""; SUSPECT=""
+
 ok()   { PASS=$((PASS+1)); printf '  ok   %s\n' "$1"; }
-bad()  { FAIL=$((FAIL+1)); printf '  FAIL %s\n     expected: %s\n     actual:   %s\n' "$1" "$2" "$3"; }
+bad()  { FAIL=$((FAIL+1)); FAILED="$FAILED$1|$2|$3
+"; printf '  FAIL %s\n     expected: %s\n     actual:   %s\n' "$1" "$2" "$3"; }
 is()   { [ "$2" = "$3" ] && ok "$1" || bad "$1" "$2" "$3"; }
 skip() { SKIP=$((SKIP+1)); printf '  skip %s (%s)\n' "$1" "$2"; }
 
@@ -35,9 +38,96 @@ skip() { SKIP=$((SKIP+1)); printf '  skip %s (%s)\n' "$1" "$2"; }
 # can write a transcript is never in scope, so a typo here cannot damage real data.
 . "$ROOT/core/sessions.sh"
 
+REPORT="$(_cs_state_dir)/last-failure.md"
+
+# --- the shareable failure report -------------------------------------------
+#
+# This file is written to be pasted into an issue, so it is built to be safe to
+# publish. That is a design constraint, not a courtesy: transcripts are full of
+# real work. Titles name repositories, clients and projects, and the project
+# directory names Claude Code uses are the full cwd with slashes swapped, so
+# "-Users-<you>-Documents" carries a username and a directory layout.
+#
+# Two layers, in this order:
+#
+#   1. Construct from safe fields only. Nothing here reads a title or a path. A
+#      session is identified by the first 8 characters of its id, which is enough
+#      to find the file yourself and means nothing to anyone else.
+#   2. Redact whatever got through. A backstop for fields added later by someone
+#      who has not read this comment.
+#
+# Layer 1 is the real protection. Layer 2 exists because layer 1 depends on every
+# future edit staying disciplined, and that is not a safe thing to depend on.
+#
+# The console output is NOT redacted, deliberately. That is your terminal, and
+# seeing the offending title is what makes a failure debuggable. Only the file
+# meant for sharing is stripped.
+redact() {
+    sed -e "s|$HOME|~|g" -e "s|$(id -un 2>/dev/null || echo __nouser__)|USER|g"
+}
+
+write_report() {
+    local running="" verified=""
+    running=$(cs_running_version 2>/dev/null)
+    verified=$(cs_verified_version 2>/dev/null)
+    mkdir -p "$(_cs_state_dir)" 2>/dev/null || return 1
+    {
+        echo "# claude-session-kit: smoke failure"
+        echo
+        echo "The read-only accessors stopped agreeing with the real transcript layout."
+        echo "No titles or paths are included; sessions appear as the first 8 characters"
+        echo "of their id so you can find them locally."
+        echo
+        echo '## Environment'
+        echo
+        printf -- '- claude code running: `%s`\n' "${running:-unknown}"
+        printf -- '- last verified against: `%s`\n' "${verified:-unknown}"
+        printf -- '- kit verified for: `%s`\n' "$CS_VERIFIED_VERSION"
+        printf -- '- os: `%s`\n' "$(uname -sr 2>/dev/null)"
+        printf -- '- bash: `%s`\n' "$(bash --version 2>/dev/null | head -1 | sed 's/.*version //;s/ .*//')"
+        printf -- '- zsh: `%s`\n' "$(zsh --version 2>/dev/null | awk '{print $2}')"
+        printf -- '- jq: `%s`\n' "$(jq --version 2>/dev/null)"
+        printf -- '- transcripts scanned: `%s`\n' "$N"
+        echo
+        echo '## Failed checks'
+        echo
+        printf '%s' "$FAILED" | while IFS='|' read -r nm exp act; do
+            [ -n "$nm" ] || continue
+            printf -- '- **%s** — expected `%s`, got `%s`\n' "$nm" "$exp" "$act"
+        done
+        if [ -n "$SUSPECT" ]; then
+            echo
+            echo '## Sessions involved'
+            echo
+            printf '%s' "$SUSPECT" | sort -u | while IFS= read -r s; do
+                [ -n "$s" ] && printf -- '- `%s`\n' "$s"
+            done
+        fi
+        echo
+        echo '## Reproduce'
+        echo
+        echo '```'
+        echo 'bash tests/smoke.sh'
+        echo '```'
+    } 2>/dev/null | redact >"$REPORT" 2>/dev/null
+}
+
 # --- preconditions ----------------------------------------------------------
 #
 # Skipping is a pass, not a failure. A CI runner has no ~/.claude and never will.
+
+# --report prints the last recorded failure and exits.
+#
+# Separate from running the checks on purpose. Auto-filing was considered and
+# rejected: gh is not on a hook's PATH (/opt/homebrew/bin), so it would silently do
+# nothing; the hook fires every session start, so a persistent failure would file a
+# duplicate every time; and anything leaving the machine should be a deliberate act,
+# not a side effect of a background process.
+if [ "${1:-}" = "--report" ]; then
+    [ -r "$REPORT" ] || { echo "smoke: no failure recorded"; exit 0; }
+    cat "$REPORT"
+    exit 0
+fi
 
 command -v jq >/dev/null 2>&1 || { echo "smoke: jq not found — nothing to check"; exit 0; }
 
@@ -85,6 +175,9 @@ check_whole_entry() {  # <file> <id> <type> <resolved> <entries>
     checked_titles=$((checked_titles+1))
     printf '%s\n' "$5" | grep -Fxq "$got" && return 0
     notanentry=$((notanentry+1))
+    # The id goes to the report; the title stays on your terminal only.
+    SUSPECT="$SUSPECT${2:0:8}
+"
     printf '     %s: %s resolved to a value that is not an entry in the file\n' "${2:0:8}" "$3"
     printf '     got: %s\n' "$got"
 }
@@ -213,6 +306,10 @@ if [ "$FAIL" -eq 0 ]; then
             && printf '%s\n' "$running" >"$(_cs_state_dir)/.verified" 2>/dev/null \
             && printf 'verified against Claude Code %s\n' "$running"
     fi
+    # A stale failure report sitting next to a passing run reads as a live problem.
+    rm -f "$REPORT" 2>/dev/null
+else
+    write_report && printf '\nreport written: %s\n  paste it with: bash tests/smoke.sh --report\n' "$REPORT"
 fi
 
 [ "$FAIL" -eq 0 ]
