@@ -26,15 +26,9 @@ cs_have_deps() { command -v jq >/dev/null 2>&1; }
 # The session this script is running inside, if any.
 cs_current_id() { printf '%s' "${CLAUDE_CODE_SESSION_ID:-}"; }
 
-# cwd -> project dir name. Claude Code replaces every "/" with "-".
-cs_encode_cwd() { printf '%s' "${1//\//-}"; }
-
-# Directory listing goes through find, never shell globs.
-#
-# bash expands an unmatched glob to the literal pattern, so `[ -f "$f" ] || continue`
-# skips it harmlessly. zsh treats an unmatched glob as a fatal error and aborts the
-# command — which silently broke every listing and lookup for zsh users while the
-# bash-only suite stayed green. find behaves identically in both shells.
+# Listing goes through find, never shell globs: zsh treats an unmatched glob as a fatal
+# error where bash expands it to a literal, which silently broke every listing and
+# lookup for zsh users while the bash-only suite stayed green. find matches both.
 _cs_find_files() {  # <dir> <mindepth> <maxdepth> <name-pattern>
     find "$1" -mindepth "$2" -maxdepth "$3" -name "$4" -type f 2>/dev/null
 }
@@ -76,20 +70,12 @@ cs_transcript_path() {
 
 # _cs_last_of_type <file> <type> <field> -> last non-empty value of that type.
 #
-# grep pre-filters so we only parse candidate lines, then jq re-checks .type —
-# a user message quoting the marker string parses fine and is filtered out.
-#
-# Walks entries newest-first and returns the first usable one, so an unusable
-# entry never masks a good earlier name. Two kinds occur in real transcripts:
-#
-#   empty      — /rename with no argument leaves one behind
-#   multi-line — /rename accepts pasted free text verbatim
-#
-# Multi-line values are the subtle one: this pipeline is line-oriented, so a
-# title containing newlines would otherwise make `tail -1` return the last line
-# *of that title* rather than the last title. Whitespace is collapsed inside jq
-# so every entry emits exactly one line, which is also all a tab or picker can
-# render anyway.
+# grep pre-filters candidate lines; jq re-checks .type, so a user message quoting the
+# marker string is filtered out. Unusable entries are dropped rather than allowed to
+# mask a good earlier name — both empty (/rename with no argument) and multi-line
+# (pasted free text) values occur in real transcripts. Whitespace is collapsed inside
+# jq because this pipeline is line-oriented: a title containing newlines would make
+# `tail -1` return the last line *of that title* rather than the last title.
 _cs_last_of_type() {
     local file="$1" type="$2" field="$3"
     [ -f "$file" ] || return 1
@@ -153,15 +139,10 @@ cs_is_live() {
 #   5. pid-file name with derived/auto       (documents-41; uninformative, collides)
 #   6. short id
 #
-# custom-title outranks even an explicit pid-file name. /rename writes both at
-# once so they normally agree, but the kit can write custom-title on its own —
-# which makes it the newer value whenever the two differ. Ranking the pid-file
-# first would let a stale name shadow a fresh rename, while the tab (which reads
-# custom-title) showed the new one.
-#
-# A derived pid-file name ranks below both transcript titles and the first
-# prompt: "documents-41" is less use than "Brush up on SQL skills", and derived
-# names collide across concurrent sessions.
+# custom-title outranks even an explicit pid-file name: /rename writes both at once so
+# they normally agree, but the kit writes custom-title alone, making it the newer value
+# whenever the two differ. Ranking the pid-file first let a stale name shadow a fresh
+# rename while the tab, which reads custom-title, showed the new one.
 cs_resolve_name() {
     local id="$1" pf="" name="" src="" tr="" v=""
     [ -n "$id" ] || return 1
@@ -204,18 +185,31 @@ cs_list() {
 
 # cs_find <ref> -> matching session ids, one per line.
 #
-# Accepts a full UUID, a short id prefix, or a case-insensitive name substring.
-# Prints every match; callers that need exactly one must check the count. A
-# substring can legitimately match several sessions, because derived names
-# collide (two concurrent sessions have both been observed named documents-7c).
+# Accepts a full UUID, a short-id prefix, or a case-insensitive name substring. Prints
+# every match; callers needing exactly one must check the count, because derived names
+# genuinely collide (two concurrent sessions have both been observed as documents-7c).
+#
+# Ids are matched from filenames and win outright; names are searched only when no id
+# matched. Resolving a name costs a pid-file scan and several jq calls per session, so
+# the old single pass through cs_list paid that for every session on the machine and
+# then discarded it on the id branch. An id fragment that also appears inside someone's
+# title is not a real case — titles are sentences.
 cs_find() {
-    local ref="$1" id="" live="" name=""
+    local ref="$1" id="" live="" name="" f="" hit="" lower=""
     [ -n "$ref" ] || return 1
     if cs_transcript_path "$ref" >/dev/null 2>&1; then printf '%s\n' "$ref"; return 0; fi
+
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        id=$(basename "$f" .jsonl)
+        case "$id" in "$ref"*) printf '%s\n' "$id"; hit=1;; esac
+    done < <(_cs_find_files "$(_cs_projects_dir)" 2 2 '*.jsonl')
+    [ -n "$hit" ] && return 0
+
+    lower=$(printf '%s' "$ref" | tr '[:upper:]' '[:lower:]')
     while IFS=$'\t' read -r id live name; do
-        case "$id" in "$ref"*) printf '%s\n' "$id"; continue;; esac
         case "$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')" in
-            *"$(printf '%s' "$ref" | tr '[:upper:]' '[:lower:]')"*) printf '%s\n' "$id";;
+            *"$lower"*) printf '%s\n' "$id";;
         esac
     done < <(cs_list)
 }

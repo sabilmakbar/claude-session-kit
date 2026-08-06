@@ -49,25 +49,20 @@ jobs:
       - name: Run tests under zsh
         run: zsh tests/run.sh
 
-      - name: Installer is idempotent
+      # One prefix through the whole lifecycle: install, install again, then uninstall.
+      # Separate prefixes per assertion only proved each step works from clean.
+      - name: Installer round-trip
         run: |
-          export CLAUDE_SESSION_KIT_PREFIX="$RUNNER_TEMP/claude-a"
+          export CLAUDE_SESSION_KIT_PREFIX="$RUNNER_TEMP/claude"
           ./install.sh
           ./install.sh                     # second run must be a no-op, not an error
           test -r "$CLAUDE_SESSION_KIT_PREFIX/session-kit/core/sessions.sh"
           test -r "$CLAUDE_SESSION_KIT_PREFIX/skills/rename-session/SKILL.md"
 
-      - name: Installed skill has no unrewritten relative sources
-        run: |
-          export CLAUDE_SESSION_KIT_PREFIX="$RUNNER_TEMP/claude-b"
-          ./install.sh
+          # A missed rewrite installs a skill that silently cannot find its libraries.
           ! grep -qE '^\. (core|naming)/' \
             "$CLAUDE_SESSION_KIT_PREFIX/skills/rename-session/SKILL.md"
 
-      - name: Uninstall removes what it installed
-        run: |
-          export CLAUDE_SESSION_KIT_PREFIX="$RUNNER_TEMP/claude-c"
-          ./install.sh
           ./install.sh --uninstall
           test ! -d "$CLAUDE_SESSION_KIT_PREFIX/session-kit"
           test ! -d "$CLAUDE_SESSION_KIT_PREFIX/skills/rename-session"

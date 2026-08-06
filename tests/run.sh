@@ -18,7 +18,6 @@ PASS=0; FAIL=0
 ok()   { PASS=$((PASS+1)); printf '  ok   %s\n' "$1"; }
 bad()  { FAIL=$((FAIL+1)); printf '  FAIL %s\n     expected: %s\n     actual:   %s\n' "$1" "$2" "$3"; }
 is()   { [ "$2" = "$3" ] && ok "$1" || bad "$1" "$2" "$3"; }
-isnt() { [ "$2" != "$3" ] && ok "$1" || bad "$1" "not $2" "$3"; }
 
 # --- fixture helpers --------------------------------------------------------
 
@@ -284,7 +283,7 @@ drop_home
 echo "portability"
 
 if command -v zsh >/dev/null 2>&1; then
-    if zsh -c ". '$ROOT/naming/rename.sh' && rename_command x >/dev/null" 2>/dev/null; then
+    if zsh -c ". '$ROOT/naming/rename.sh' && rename_check_title x >/dev/null" 2>/dev/null; then
         ok "sources cleanly under zsh"
     else
         bad "sources cleanly under zsh" "sourced" "failed to find core/sessions.sh"
@@ -294,7 +293,7 @@ else
 fi
 
 # The override is what a caller uses when its shell cannot report the sourced path.
-if bash -c "CLAUDE_SESSION_KIT_ROOT='$ROOT' . '$ROOT/naming/rename.sh' && rename_command x >/dev/null" 2>/dev/null; then
+if bash -c "CLAUDE_SESSION_KIT_ROOT='$ROOT' . '$ROOT/naming/rename.sh' && rename_check_title x >/dev/null" 2>/dev/null; then
     ok "CLAUDE_SESSION_KIT_ROOT overrides self-location"
 else
     bad "CLAUDE_SESSION_KIT_ROOT overrides self-location" "sourced" "failed"

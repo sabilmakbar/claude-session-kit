@@ -9,20 +9,7 @@ You read the transcript, decide one title, and apply it the only way that works 
 that session. The user should not have to invent a name or know which storage layer
 is involved.
 
-## 1. Pick the target
-
-Default to the current session (`$CLAUDE_CODE_SESSION_ID`). If the user named a
-different one, resolve it:
-
-```bash
-. core/sessions.sh
-cs_find "<what the user said>"      # UUID, short-id prefix, or name substring
-```
-
-If `cs_find` returns more than one id, stop and ask which. Do not guess — derived
-names collide, so a substring genuinely can match several sessions.
-
-## 2. Read the arc
+## 1. Read the arc
 
 ```bash
 . core/sessions.sh
@@ -33,7 +20,7 @@ cs_resolve_name "$CLAUDE_CODE_SESSION_ID"      # the name it has now
 For the current session you already have the conversation in context — use it, and
 read the transcript only to recover earlier parts that have been compacted away.
 
-## 3. Write one title
+## 2. Write one title
 
 **Name the arc, not either endpoint.** This is the whole job, and both ends are
 traps. The existing `ai-title` is pinned to the opening message and never updates,
@@ -76,7 +63,7 @@ Then:
   splits in two.
 - Keep it under 200 characters and on a single line.
 
-## 4. Apply it
+## 3. Apply it
 
 Apply it directly. No paste, no follow-up step:
 
@@ -109,8 +96,12 @@ Restoring a previous name is another append, never an edit:
 
 ```bash
 . naming/rename.sh
-rename_current_title "<session-id>"        # what it is now, before you change it
-rename_apply "<session-id>" "<old title>"  # append the old value back
+rename_current_title            # what it is now — capture this BEFORE renaming
+rename_apply "<old title>"      # append the old value back
 ```
+
+Neither takes a session id. `rename_apply` reads its title from `$1`, so passing an
+id first would append the **UUID** as the title — it is a valid single-line string
+under 200 characters, so every check passes and nothing complains.
 
 Never rewrite or hand-edit a transcript to remove a title.

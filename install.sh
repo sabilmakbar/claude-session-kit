@@ -25,13 +25,12 @@ for arg in "$@"; do
     esac
 done
 
-say() { printf '%s\n' "$1"; }
 run() { [ "$DRY" -eq 1 ] && { printf '  would: %s\n' "$*"; return 0; }; "$@"; }
 
 if [ "$UNINSTALL" -eq 1 ]; then
-    say "uninstalling"
+    echo "uninstalling"
     run rm -rf "$DEST_LIB" "$DEST_SKILL"
-    say "removed $DEST_LIB and $DEST_SKILL"
+    echo "removed $DEST_LIB and $DEST_SKILL"
     exit 0
 fi
 
@@ -54,7 +53,7 @@ fi
 
 # --- libraries --------------------------------------------------------------
 
-say "installing to $DEST_LIB"
+echo "installing to $DEST_LIB"
 run mkdir -p "$DEST_LIB/core" "$DEST_LIB/naming"
 run cp "$ROOT/core/sessions.sh"  "$DEST_LIB/core/sessions.sh"
 run cp "$ROOT/naming/rename.sh"  "$DEST_LIB/naming/rename.sh"
@@ -65,7 +64,7 @@ run cp "$ROOT/naming/rename.sh"  "$DEST_LIB/naming/rename.sh"
 # from a checkout. Installed, cwd is whatever project the user is in, so rewrite
 # those to absolute paths at copy time.
 
-say "installing skill to $DEST_SKILL"
+echo "installing skill to $DEST_SKILL"
 run mkdir -p "$DEST_SKILL"
 if [ "$DRY" -eq 1 ]; then
     printf '  would: rewrite source paths and write %s/SKILL.md\n' "$DEST_SKILL"
@@ -85,12 +84,12 @@ fi
 
 if [ "$DRY" -eq 0 ]; then
     # shellcheck source=/dev/null
-    ( . "$DEST_LIB/naming/rename.sh" && rename_command x >/dev/null ) 2>/dev/null || {
+    ( . "$DEST_LIB/naming/rename.sh" && rename_check_title x ) >/dev/null 2>&1 || {
         echo "install.sh: installed copy failed to load" >&2; exit 1; }
-    say "verified: installed copy loads"
+    echo "verified: installed copy loads"
 fi
 
-say ""
-say "done. /rename-session is available in new sessions."
-say "the libraries are usable directly too:"
-say "  . $DEST_LIB/core/sessions.sh && cs_list"
+echo
+echo "done. /rename-session is available in new sessions."
+echo "the libraries are usable directly too:"
+echo "  . $DEST_LIB/core/sessions.sh && cs_list"
