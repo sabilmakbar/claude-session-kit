@@ -13,6 +13,11 @@
 # rendered tab, and the tab itself resolves from the transcript.
 #
 # Source it; do not execute it.
+#
+# The shebang above is a DIALECT HINT for shellcheck and editors — it is not
+# enforcement. A sourced file is interpreted by whatever shell sourced it, so this
+# routinely runs under zsh despite saying bash. Both are supported and the suite
+# runs under both; do not add bash-only syntax on the strength of that first line.
 
 CS_VERIFIED_VERSION="2.1.222"
 
