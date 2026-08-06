@@ -39,7 +39,8 @@ fi
 command -v jq >/dev/null 2>&1 || {
     echo "install.sh: jq is required (brew install jq)" >&2; exit 1; }
 
-for f in core/sessions.sh naming/rename.sh tests/smoke.sh skills/rename-session/SKILL.md; do
+for f in core/sessions.sh naming/rename.sh tests/smoke.sh hooks/version-check.sh \
+         skills/rename-session/SKILL.md; do
     [ -f "$ROOT/$f" ] || { echo "install.sh: missing $f — run from a full checkout" >&2; exit 1; }
 done
 
@@ -54,7 +55,7 @@ fi
 # --- libraries --------------------------------------------------------------
 
 echo "installing to $DEST_LIB"
-run mkdir -p "$DEST_LIB/core" "$DEST_LIB/naming" "$DEST_LIB/tests"
+run mkdir -p "$DEST_LIB/core" "$DEST_LIB/naming" "$DEST_LIB/tests" "$DEST_LIB/hooks"
 run cp "$ROOT/core/sessions.sh"  "$DEST_LIB/core/sessions.sh"
 run cp "$ROOT/naming/rename.sh"  "$DEST_LIB/naming/rename.sh"
 
@@ -62,6 +63,11 @@ run cp "$ROOT/naming/rename.sh"  "$DEST_LIB/naming/rename.sh"
 # Advice that names a file only a checkout has is advice most users cannot follow.
 # It locates core/ as ../core relative to itself, so this layout works unchanged.
 run cp "$ROOT/tests/smoke.sh"    "$DEST_LIB/tests/smoke.sh"
+
+# The SessionStart hook is installed but NOT wired up: adding it to settings.json
+# is the user's call, not an installer's. Printed at the end instead.
+run cp "$ROOT/hooks/version-check.sh" "$DEST_LIB/hooks/version-check.sh"
+run chmod +x "$DEST_LIB/hooks/version-check.sh"
 
 # --- skill ------------------------------------------------------------------
 #
@@ -100,3 +106,6 @@ echo "the libraries are usable directly too:"
 echo "  . $DEST_LIB/core/sessions.sh && cs_list"
 echo "if Claude Code updates and the kit warns that internals may have moved:"
 echo "  bash $DEST_LIB/tests/smoke.sh"
+echo
+echo "to re-verify automatically instead, add to SessionStart in settings.json:"
+echo "  \"$DEST_LIB/hooks/version-check.sh\" 2>/dev/null || true"

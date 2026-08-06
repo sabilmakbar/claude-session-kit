@@ -15,11 +15,29 @@
 # Source it; do not execute it. The shebang is a dialect hint, not enforcement — a
 # sourced file runs under the caller's shell. bash and zsh both work; keep it that way.
 
+# The version the AUTHOR tested against. A floor, not the whole answer — see
+# cs_verified_version.
 CS_VERIFIED_VERSION="2.1.222"
 
 _cs_home()         { printf '%s' "${CLAUDE_SESSION_KIT_HOME:-$HOME}"; }
 _cs_projects_dir() { printf '%s/.claude/projects' "$(_cs_home)"; }
 _cs_pids_dir()     { printf '%s/.claude/sessions' "$(_cs_home)"; }
+_cs_state_dir()    { printf '%s/.claude/session-kit' "$(_cs_home)"; }
+
+# The newest Claude Code version smoke.sh has PASSED against on THIS machine, falling
+# back to the author's. Written by smoke.sh, never by this library: core/ stays
+# read-only, which is the invariant everything else leans on.
+#
+# This is what makes the warning mean something. Comparing against a constant baked
+# into the source warns forever after any update, even one already checked, and a
+# warning that never clears is one people stop reading.
+cs_verified_version() {
+    local f="" v=""
+    f="$(_cs_state_dir)/.verified"
+    [ -r "$f" ] && v=$(head -1 "$f" 2>/dev/null | tr -d '[:space:]')
+    [ -n "$v" ] || v="$CS_VERIFIED_VERSION"
+    printf '%s' "$v"
+}
 
 cs_have_deps() { command -v jq >/dev/null 2>&1; }
 
@@ -54,12 +72,13 @@ cs_running_version() {
 cs_version_guard() {
     [ -n "${_CS_VERSION_WARNED:-}" ] && return 0
     _CS_VERSION_WARNED=1
-    local running=""
+    local running="" verified=""
     running=$(cs_running_version)
     [ -z "$running" ] && return 0
-    [ "$running" = "$CS_VERIFIED_VERSION" ] && return 0
-    printf 'claude-session-kit: running Claude Code %s, verified against %s.\n' \
-        "$running" "$CS_VERIFIED_VERSION" >&2
+    verified=$(cs_verified_version)
+    [ "$running" = "$verified" ] && return 0
+    printf 'claude-session-kit: running Claude Code %s, last verified against %s.\n' \
+        "$running" "$verified" >&2
     printf '  Internals may have moved. Check with: bash tests/smoke.sh (from the kit root)\n' >&2
     return 0
 }

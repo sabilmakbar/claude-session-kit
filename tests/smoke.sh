@@ -41,7 +41,7 @@ skip() { SKIP=$((SKIP+1)); printf '  skip %s (%s)\n' "$1" "$2"; }
 
 command -v jq >/dev/null 2>&1 || { echo "smoke: jq not found — nothing to check"; exit 0; }
 
-PROJECTS="$HOME/.claude/projects"
+PROJECTS="$(_cs_projects_dir)"
 [ -d "$PROJECTS" ] || { echo "smoke: no $PROJECTS — skipping (this is fine on CI)"; exit 0; }
 
 FILES=$(find "$PROJECTS" -mindepth 2 -maxdepth 2 -name '*.jsonl' -type f 2>/dev/null)
@@ -154,8 +154,14 @@ printf '       (%d live in the sample)\n' "$live"
 
 # The current session, if we are inside one, is the strongest single case available:
 # it is known to exist and known to be live.
+#
+# Only meaningful against the real home. With CLAUDE_SESSION_KIT_HOME redirected the
+# id names a session that lives somewhere else, so these would fail on the redirect
+# rather than on anything about the kit.
 cur=$(cs_current_id)
-if [ -n "$cur" ]; then
+if [ -n "${CLAUDE_SESSION_KIT_HOME:-}" ]; then
+    skip "current-session checks" "CLAUDE_SESSION_KIT_HOME is redirected"
+elif [ -n "$cur" ]; then
     cs_transcript_path "$cur" >/dev/null 2>&1
     is "the current session has a transcript" 0 $?
     [ -n "$(cs_resolve_name "$cur" 2>/dev/null)" ] \
@@ -192,4 +198,21 @@ is "reading a dead session never changes its transcript" 0 "$changed"
 printf '       (%d dead transcripts watched)\n' "$watched"
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
+
+# The one write in this file, and the only reason it is not purely read-only.
+#
+# Recording the version that PASSED is what lets the version guard go quiet again.
+# Without it the guard compares against a constant in the source and warns after
+# every update forever, including ones already checked. On failure nothing is
+# written, so the warning keeps appearing until someone looks — the absent write
+# IS the failure report, which is why no marker file is needed.
+if [ "$FAIL" -eq 0 ]; then
+    running=$(cs_running_version)
+    if [ -n "$running" ]; then
+        mkdir -p "$(_cs_state_dir)" 2>/dev/null \
+            && printf '%s\n' "$running" >"$(_cs_state_dir)/.verified" 2>/dev/null \
+            && printf 'verified against Claude Code %s\n' "$running"
+    fi
+fi
+
 [ "$FAIL" -eq 0 ]

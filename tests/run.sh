@@ -276,6 +276,47 @@ is "refuses a session with no transcript" 1 "$?"
 unset CLAUDE_CODE_SESSION_ID
 drop_home
 
+# --- version tracking -------------------------------------------------------
+#
+# The guard compares against what smoke.sh last PASSED against on this machine, not
+# the constant in the source. Otherwise every update warns forever, including ones
+# already checked, and a warning that never clears stops being read.
+
+echo "version tracking"
+
+new_home
+is "falls back to the author's version with no state file" \
+   "$CS_VERIFIED_VERSION" "$(cs_verified_version)"
+
+mkdir -p "$FAKE/.claude/session-kit"
+echo "9.9.9" >"$FAKE/.claude/session-kit/.verified"
+is "a recorded version overrides the author's" "9.9.9" "$(cs_verified_version)"
+
+printf '  2.5.0 \n' >"$FAKE/.claude/session-kit/.verified"
+is "surrounding whitespace is ignored" "2.5.0" "$(cs_verified_version)"
+
+: >"$FAKE/.claude/session-kit/.verified"
+is "an empty state file falls back, never resolves empty" \
+   "$CS_VERIFIED_VERSION" "$(cs_verified_version)"
+drop_home
+
+# The guard must stay quiet once the running version has been verified here, and
+# speak up again the moment it moves.
+new_home
+mkdir -p "$FAKE/.claude/session-kit"
+echo "9.9.9" >"$FAKE/.claude/session-kit/.verified"
+jq -n '{pid:1,sessionId:"z",name:"n",version:"9.9.9"}' >"$PIDS/1.json"
+OUT=$(unset _CS_VERSION_WARNED; cs_version_guard 2>&1)
+is "silent when running matches the recorded version" "" "$OUT"
+
+jq -n '{pid:1,sessionId:"z",name:"n",version:"9.9.10"}' >"$PIDS/1.json"
+OUT=$(unset _CS_VERSION_WARNED; cs_version_guard 2>&1)
+case "$OUT" in
+    *9.9.10*9.9.9*smoke.sh*) ok "warns on a new version and names smoke.sh" ;;
+    *) bad "warns on a new version and names smoke.sh" "both versions + smoke.sh" "${OUT:-silence}" ;;
+esac
+drop_home
+
 # --- sourcing from other shells ---------------------------------------------
 # rename.sh locates core/ relative to itself. BASH_SOURCE is bash-only, so a
 # naive lookup breaks the moment someone sources it from an interactive zsh.
