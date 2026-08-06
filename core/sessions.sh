@@ -45,6 +45,12 @@ cs_running_version() {
 
 # Warn once per shell if the running version is not the one this kit was verified
 # against. Never blocks: an unverified version is a caution, not an error.
+#
+# The warning names smoke.sh because this is the only moment anything tells you to run
+# it. Nothing else triggers it: CI cannot (a runner has no ~/.claude, so it always
+# skips) and install.sh runs run.sh instead. A warning with no next step gets ignored,
+# and "internals may have moved" is not answerable by reading it — only by checking the
+# accessors against real transcripts, which is exactly what smoke.sh does.
 cs_version_guard() {
     [ -n "${_CS_VERSION_WARNED:-}" ] && return 0
     _CS_VERSION_WARNED=1
@@ -52,8 +58,9 @@ cs_version_guard() {
     running=$(cs_running_version)
     [ -z "$running" ] && return 0
     [ "$running" = "$CS_VERIFIED_VERSION" ] && return 0
-    printf 'claude-session-kit: running Claude Code %s, verified against %s; internals may have moved\n' \
+    printf 'claude-session-kit: running Claude Code %s, verified against %s.\n' \
         "$running" "$CS_VERIFIED_VERSION" >&2
+    printf '  Internals may have moved. Check with: bash tests/smoke.sh (from the kit root)\n' >&2
     return 0
 }
 
