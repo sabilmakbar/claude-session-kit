@@ -134,9 +134,22 @@ command -v jq >/dev/null 2>&1 || { echo "smoke: jq not found — nothing to chec
 PROJECTS="$(_cs_projects_dir)"
 [ -d "$PROJECTS" ] || { echo "smoke: no $PROJECTS — skipping (this is fine on CI)"; exit 0; }
 
-FILES=$(find "$PROJECTS" -mindepth 2 -maxdepth 2 -name '*.jsonl' -type f 2>/dev/null)
+# A session transcript is <session-uuid>.jsonl directly inside a project dir. Keying on
+# the UUID matters: subagent transcripts live a level deeper as agent-*.jsonl, and a
+# plain depth count would read those 8-on-this-machine as misplaced sessions.
+CS_UUID_RE='/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$'
+
+FILES=$(find "$PROJECTS" -mindepth 2 -maxdepth 2 -name '*.jsonl' -type f 2>/dev/null | grep -E "$CS_UUID_RE")
 N=$(printf '%s\n' "$FILES" | grep -c .)
-[ "$N" -gt 0 ] || { echo "smoke: no transcripts under $PROJECTS — skipping"; exit 0; }
+ANYWHERE=$(find "$PROJECTS" -name '*.jsonl' -type f 2>/dev/null | grep -cE "$CS_UUID_RE")
+
+# Genuinely nothing here — a CI runner, or a fresh machine. Skipping is correct.
+#
+# Note what is NOT skipped: transcripts existing but not where we look. That is a
+# layout change, and reporting it as "nothing to check" would turn total breakage into
+# a clean exit 0. The difference between "no data" and "we can no longer find the data"
+# is the whole point of this suite, so it is asserted below rather than assumed here.
+[ "$ANYWHERE" -gt 0 ] || { echo "smoke: no transcripts under $PROJECTS — skipping (fine on CI)"; exit 0; }
 
 printf 'smoke: %d transcripts\n\n' "$N"
 
@@ -184,9 +197,33 @@ check_whole_entry() {  # <file> <id> <type> <resolved> <entries>
 
 # --- checks -----------------------------------------------------------------
 
-printf 'transcripts\n'
+printf 'layout\n'
 
-unparsed=0; noname=0; multiline=0; notanentry=0; unresolved_path=0; checked_titles=0
+# Every one of these three exists because the kit failed them SILENTLY. Each check
+# below turns a "0 failed" into a real failure, and each is a way the data can move
+# without any invariant about the data itself being violated.
+
+# 1. Transcripts must be where we look. If some are findable at another depth, the
+#    layout moved and every accessor is now blind.
+is "every transcript is at the expected depth" "$ANYWHERE" "$N"
+
+# 2. The version guard reads its version from the pid-files. If that schema moves, the
+#    guard silently reads nothing, stops warning, and the hook exits early — the entire
+#    early-warning system switches off without saying so. It cannot detect its own
+#    blindness, so this does it from outside.
+pidfiles=$(find "$(_cs_pids_dir)" -mindepth 1 -maxdepth 1 -name '*.json' -type f 2>/dev/null | grep -c .)
+if [ "$pidfiles" -gt 0 ]; then
+    [ -n "$(cs_running_version)" ] \
+        && ok "a Claude Code version is readable from the pid-files" \
+        || bad "a Claude Code version is readable from the pid-files" \
+               "a version" "none from $pidfiles pid-files — schema moved"
+else
+    skip "pid-file schema check" "no pid-files present"
+fi
+
+printf '\ntranscripts\n'
+
+unparsed=0; noname=0; multiline=0; notanentry=0; unresolved_path=0; checked_titles=0; titled=0
 while IFS= read -r file; do
     [ -n "$file" ] || continue
     id=$(basename "$file" .jsonl)
@@ -199,6 +236,7 @@ while IFS= read -r file; do
 
     tagged=$(scan "$file")
     printf '%s\n' "$tagged" | grep -qx '!' && unparsed=$((unparsed+1))
+    printf '%s\n' "$tagged" | grep -qE '^(custom-title|ai-title)	' && titled=$((titled+1))
 
     # A name is always required. Falling all the way through to the short id is a
     # legitimate answer; empty never is, because callers print it.
@@ -222,6 +260,23 @@ is "every resolved title is a whole entry in the file" 0 "$notanentry"
 [ "$checked_titles" -gt 0 ] \
     && printf '       (%d title entries cross-checked)\n' "$checked_titles" \
     || skip "title cross-check" "no title entries in the sample"
+
+# 3. If Claude Code renames the title entry types, every accessor still returns a name —
+#    it just falls through to a worse one. Nothing above fires, because "a name was
+#    produced" stays true. The only observable signal is that the types vanish
+#    everywhere at once.
+#
+#    Thresholded: a handful of title-less sessions is ordinary, so this only concludes
+#    when zero out of many is implausible rather than merely unlucky.
+TITLE_MIN=${SMOKE_TITLE_MIN:-5}
+if [ "$N" -ge "$TITLE_MIN" ]; then
+    [ "$titled" -gt 0 ] \
+        && ok "known title entry types still appear" \
+        || bad "known title entry types still appear" \
+               "at least 1 of $N" "0 — custom-title/ai-title renamed or removed"
+else
+    skip "title-type check" "$N transcripts, need $TITLE_MIN to conclude"
+fi
 
 printf '\nliveness\n'
 

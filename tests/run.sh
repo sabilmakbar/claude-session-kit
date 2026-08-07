@@ -387,6 +387,71 @@ is "a passing run records the verified version" \
    "$CS_VERIFIED_VERSION" "$(cat "$FAKE/.claude/session-kit/.verified" 2>/dev/null)"
 drop_home
 
+# --- silent-drift detection -------------------------------------------------
+#
+# Three ways Claude Code can move that break the kit WITHOUT violating any invariant
+# about the data itself. Each of these passed 0-failed before the checks existed, so
+# each is pinned here: the point is not that smoke.sh runs, but that it still fails
+# when it should.
+
+echo "silent drift"
+
+# Six sessions: enough to clear the title-type threshold, so the check concludes
+# rather than skipping.
+six() { for i in 1 2 3 4 5 6; do
+    printf '%s\n' "$2" > "$1/$(printf '%08x' "$i")-0000-0000-0000-000000000001.jsonl"; done; }
+
+# Claude Code renames the title entry types. Every accessor still returns a name — it
+# just silently degrades to a worse one — so nothing else can notice.
+new_home
+six "$PROJ" "$(jq -cn '{type:"sessionTitle",sessionTitle:"the new format"}')"
+pidfile "$$" z n
+OUT=$(bash "$ROOT/tests/smoke.sh" 2>&1); RC=$?
+is "renamed title entry types fail the suite" 1 "$RC"
+case "$OUT" in *"known title entry types still appear"*) ok "…and name the reason" ;;
+    *) bad "…and name the reason" "title-type check fires" "something else" ;; esac
+drop_home
+
+# The pid-file schema moves. cs_running_version goes empty, so the version guard stops
+# warning and the hook exits early — the early-warning system switches itself off.
+new_home
+six "$PROJ" "$(jq -cn '{type:"ai-title",aiTitle:"T"}')"
+jq -n '{pid:1,session_id:"z",name:"n",claudeVersion:"9.9.9"}' >"$PIDS/1.json"
+OUT=$(bash "$ROOT/tests/smoke.sh" 2>&1); RC=$?
+is "an unreadable pid-file version fails the suite" 1 "$RC"
+case "$OUT" in *"version is readable from the pid-files"*) ok "…and name the reason" ;;
+    *) bad "…and name the reason" "pid-schema check fires" "something else" ;; esac
+drop_home
+
+# The directory layout gains a level. Transcripts exist but not where we look, which
+# used to read as "nothing to check" and exit 0 — total breakage as a clean pass.
+new_home
+mkdir -p "$PROJ/nested"
+six "$PROJ/nested" "$(jq -cn '{type:"ai-title",aiTitle:"T"}')"
+pidfile "$$" z n
+OUT=$(bash "$ROOT/tests/smoke.sh" 2>&1); RC=$?
+is "a moved layout fails instead of skipping" 1 "$RC"
+case "$OUT" in *"expected depth"*) ok "…and name the reason" ;;
+    *) bad "…and name the reason" "depth check fires" "something else" ;; esac
+drop_home
+
+# The opposite must stay true: genuinely empty is a skip, not a failure, or CI breaks.
+new_home
+OUT=$(bash "$ROOT/tests/smoke.sh" 2>&1); RC=$?
+is "a genuinely empty home still skips cleanly" 0 "$RC"
+drop_home
+
+# Subagent transcripts (agent-*.jsonl, one level deeper) are not sessions and must not
+# be counted as misplaced ones — 8 exist on the machine this was written on.
+new_home
+six "$PROJ" "$(jq -cn '{type:"ai-title",aiTitle:"T"}')"
+mkdir -p "$PROJ/aaaaaaaa-0000-0000-0000-000000000001"
+printf '%s\n' '{"type":"user"}' >"$PROJ/aaaaaaaa-0000-0000-0000-000000000001/agent-abc123.jsonl"
+pidfile "$$" z n
+is "subagent transcripts do not trip the depth check" 0 \
+   "$(bash "$ROOT/tests/smoke.sh" >/dev/null 2>&1; echo $?)"
+drop_home
+
 # --- sourcing from other shells ---------------------------------------------
 # rename.sh locates core/ relative to itself. BASH_SOURCE is bash-only, so a
 # naive lookup breaks the moment someone sources it from an interactive zsh.
