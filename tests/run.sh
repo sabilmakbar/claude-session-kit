@@ -387,6 +387,106 @@ is "a passing run records the verified version" \
    "$CS_VERIFIED_VERSION" "$(cat "$FAKE/.claude/session-kit/.verified" 2>/dev/null)"
 drop_home
 
+# --- hostile and degenerate input -------------------------------------------
+#
+# Titles are free text a user pastes, and ids reach `find -name`, so both are
+# untrusted. Two of these were live bugs when the cases were written.
+
+echo "hostile input"
+
+# A whitespace-only title passes an emptiness check but resolves to nothing, so the
+# rename would report success and change no name.
+rename_check_title "   " 2>/dev/null \
+    && bad "rejects a whitespace-only title" reject accept || ok "rejects a whitespace-only title"
+rename_check_title "$(printf '\t \t')" 2>/dev/null \
+    && bad "rejects a tabs-only title" reject accept || ok "rejects a tabs-only title"
+
+# The cap protects append atomicity, which is a byte property. ${#t} counts characters
+# or bytes depending on locale, so measuring it that way makes the limit machine-dependent.
+rename_check_title "$(printf 'x%.0s' $(seq 1 200))" 2>/dev/null \
+    && ok "accepts exactly $RENAME_MAX_TITLE bytes" || bad "accepts exactly $RENAME_MAX_TITLE bytes" accept reject
+rename_check_title "$(printf 'x%.0s' $(seq 1 201))" 2>/dev/null \
+    && bad "rejects one byte over" reject accept || ok "rejects one byte over"
+# 150 two-byte characters = 300 bytes: over the limit however the locale counts.
+rename_check_title "$(printf 'é%.0s' $(seq 1 150))" 2>/dev/null \
+    && bad "measures multibyte titles in bytes" reject accept || ok "measures multibyte titles in bytes"
+
+new_home
+ID=11111111-0000-0000-0000-00000000000a; transcript "$ID" >/dev/null
+# find treats -name as a pattern, so an unfiltered id could match a transcript nobody
+# asked for and report it as that session.
+is "a glob metacharacter never resolves to a transcript" 1 \
+   "$(cs_transcript_path '*'   >/dev/null 2>&1; echo $?)"
+is "a bracket expression never resolves either" 1 \
+   "$(cs_transcript_path '[a]' >/dev/null 2>&1; echo $?)"
+add_custom "$ID" "a real title"
+is "cs_find does not invent a session from a glob" "" "$(cs_find '*')"
+
+# cs_list is TSV, and cs_find reads it back with IFS=tab. A tab inside a title would
+# split one row into the wrong fields; whitespace collapse is what prevents it.
+add_custom "$ID" "$(printf 'before\tafter')"
+is "a tab in a title cannot break the TSV" "before after" "$(cs_resolve_name "$ID")"
+is "and the row still parses back" "$ID" "$(cs_find after)"
+
+# printf format specifiers must survive as literal text, never be interpreted.
+add_custom "$ID" '100% done %s %d %n'
+is "printf specifiers in a title stay literal" '100% done %s %d %n' "$(cs_resolve_name "$ID")"
+drop_home
+
+echo "degenerate data"
+
+new_home
+ID=22222222-0000-0000-0000-00000000000b; transcript "$ID" >/dev/null
+is "an empty transcript falls back to the short id" "22222222" "$(cs_resolve_name "$ID")"
+printf '\n\n   \n' >"$PROJ/$ID.jsonl"
+is "a blank-line transcript falls back too" "22222222" "$(cs_resolve_name "$ID")"
+printf '{"type":"ai-title","aiTitle":"CRLF title"}\r\n' >"$PROJ/$ID.jsonl"
+is "CRLF line endings still parse" "CRLF title" "$(cs_resolve_name "$ID")"
+drop_home
+
+new_home
+ID=33333333-0000-0000-0000-00000000000c; transcript "$ID" >/dev/null
+add_ai "$ID" "Good name"
+printf 'not json at all\n' >"$PIDS/1.json"          # malformed
+printf '{}\n'              >"$PIDS/2.json"          # valid JSON, no fields
+is "a malformed pid-file does not break resolution" "Good name" "$(cs_resolve_name "$ID")"
+cs_is_live "$ID" && bad "a malformed pid-file never reads as live" dead live \
+                 || ok "a malformed pid-file never reads as live"
+is "an unreadable version reads as empty, not garbage" "" "$(cs_running_version)"
+drop_home
+
+echo "contracts"
+
+new_home
+is "cs_transcript_path refuses an empty id"  1 "$(cs_transcript_path '' >/dev/null 2>&1; echo $?)"
+is "cs_find refuses an empty ref"            1 "$(cs_find ''            >/dev/null 2>&1; echo $?)"
+is "cs_resolve_name refuses an empty id"     1 "$(cs_resolve_name ''    >/dev/null 2>&1; echo $?)"
+is "cs_is_live is false for an unknown id"   1 "$(cs_is_live nope       >/dev/null 2>&1; echo $?)"
+unset CLAUDE_CODE_SESSION_ID
+is "rename_current_title refuses with no session" 1 \
+   "$(rename_current_title >/dev/null 2>&1; echo $?)"
+drop_home
+
+echo "the SessionStart hook"
+
+# The hook runs unattended on every session start. Every failure path must exit 0:
+# breaking session start is far worse than skipping a check.
+new_home
+is "hook exits 0 when the kit root is wrong" 0 \
+   "$(CLAUDE_SESSION_KIT_ROOT=/nonexistent bash "$ROOT/hooks/version-check.sh" >/dev/null 2>&1; echo $?)"
+is "hook exits 0 when no pid-file exists" 0 \
+   "$(CLAUDE_SESSION_KIT_ROOT="$ROOT" bash "$ROOT/hooks/version-check.sh" >/dev/null 2>&1; echo $?)"
+is "hook prints nothing on the quiet path" "" \
+   "$(CLAUDE_SESSION_KIT_ROOT="$ROOT" bash "$ROOT/hooks/version-check.sh" 2>&1)"
+
+# Matching version: must not launch the suite.
+mkdir -p "$FAKE/.claude/session-kit"
+echo "7.7.7" >"$FAKE/.claude/session-kit/.verified"
+jq -n '{pid:1,sessionId:"z",name:"n",version:"7.7.7"}' >"$PIDS/1.json"
+CLAUDE_SESSION_KIT_ROOT="$ROOT" bash "$ROOT/hooks/version-check.sh" >/dev/null 2>&1
+is "hook exits 0 when the version is already verified" 0 $?
+drop_home
+
 # --- silent-drift detection -------------------------------------------------
 #
 # Three ways Claude Code can move that break the kit WITHOUT violating any invariant

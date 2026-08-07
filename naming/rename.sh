@@ -35,12 +35,23 @@ fi
 RENAME_MAX_TITLE=200
 
 # rename_check_title <title> -> non-zero with a reason on stderr if unusable.
+#
+# Whitespace-only is rejected for the same reason empty is: resolution drops entries
+# that collapse to nothing, so writing one appends a line that changes no name. The
+# rename would report success and do nothing.
+#
+# Length is measured in BYTES, not characters. The cap protects the atomicity of the
+# append, which is a byte-level property, and `${#t}` counts characters or bytes
+# depending on the locale — so the same title could be accepted on one machine and
+# rejected on another.
 rename_check_title() {
-    local t="$1"
+    local t="$1" bytes=0
     [ -n "$t" ] || { echo "rename: empty title" >&2; return 1; }
+    case "$t" in *[![:space:]]*) ;; *) echo "rename: title is only whitespace" >&2; return 1;; esac
     case "$t" in *$'\n'*) echo "rename: title must be a single line" >&2; return 1;; esac
-    [ "${#t}" -le "$RENAME_MAX_TITLE" ] || {
-        echo "rename: title longer than $RENAME_MAX_TITLE characters" >&2; return 1; }
+    bytes=$(printf '%s' "$t" | wc -c | tr -d ' ')
+    [ "$bytes" -le "$RENAME_MAX_TITLE" ] || {
+        echo "rename: title is $bytes bytes, limit is $RENAME_MAX_TITLE" >&2; return 1; }
     return 0
 }
 

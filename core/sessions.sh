@@ -86,9 +86,15 @@ cs_version_guard() {
 # --- transcript access ------------------------------------------------------
 
 # cs_transcript_path <session-id> -> path, or non-zero if not found.
+#
+# Glob metacharacters are refused because the id is handed to `find -name`, which
+# treats it as a pattern: `cs_transcript_path '*'` otherwise matches the first
+# transcript on the machine and reports it as that session. A lookup must not be able
+# to answer with a session nobody asked for.
 cs_transcript_path() {
     local id="$1" f=""
     [ -n "$id" ] || return 1
+    case "$id" in *[\*\?\[\]]*) return 1;; esac
     f=$(_cs_find_files "$(_cs_projects_dir)" 2 2 "$id.jsonl" | head -1)
     [ -n "$f" ] || return 1
     printf '%s' "$f"
