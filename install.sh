@@ -89,6 +89,14 @@ for pair in "rename-session|$DEST_SKILL" "session-note|$DEST_SKILL_NOTE"; do
         printf '  would: rewrite source paths and write %s/SKILL.md\n' "$dest"
         continue
     fi
+    # Never clobber a skill this kit did not write. Ours always source a library
+    # under .../session-kit/ (the rewrite below guarantees it); a pre-existing
+    # SKILL.md without that marker belongs to the user or another tool.
+    if [ -f "$dest/SKILL.md" ] && ! grep -q 'session-kit' "$dest/SKILL.md"; then
+        echo "install.sh: $dest/SKILL.md exists and was not written by this kit — refusing to overwrite" >&2
+        echo "  move it aside (or delete it) and re-run" >&2
+        exit 1
+    fi
     sed -e "s|^\. core/sessions\.sh|. \"$DEST_LIB/core/sessions.sh\"|" \
         -e "s|^\. naming/rename\.sh|. \"$DEST_LIB/naming/rename.sh\"|" \
         -e "s|^\. notes/note\.sh|. \"$DEST_LIB/notes/note.sh\"|" \

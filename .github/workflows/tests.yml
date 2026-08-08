@@ -76,6 +76,16 @@ jobs:
           test ! -d "$CLAUDE_SESSION_KIT_PREFIX/skills/rename-session"
           test ! -d "$CLAUDE_SESSION_KIT_PREFIX/skills/session-note"
 
+      # A skill dir the user already owned must never be clobbered — install refuses
+      # and the foreign content survives.
+      - name: Installer refuses to clobber a foreign skill
+        run: |
+          export CLAUDE_SESSION_KIT_PREFIX="$RUNNER_TEMP/claude-foreign"
+          mkdir -p "$CLAUDE_SESSION_KIT_PREFIX/skills/session-note"
+          echo "someone elses skill" > "$CLAUDE_SESSION_KIT_PREFIX/skills/session-note/SKILL.md"
+          ! ./install.sh
+          grep -q "someone elses skill" "$CLAUDE_SESSION_KIT_PREFIX/skills/session-note/SKILL.md"
+
       # Not a gate: it needs a real ~/.claude and a runner has none, so it skips here.
       # Running it proves the skip path stays healthy.
       - name: Smoke test (skips without ~/.claude)

@@ -538,6 +538,34 @@ case "$(note_render "$ID")" in *"age unknown"*) ok "render admits unknown age in
 unset CLAUDE_CODE_SESSION_ID
 drop_home
 
+# Coexistence: the notes directory is shared real estate under ~/.claude, so the kit
+# must survive whatever else turns up there — a blocking file, foreign files, notes
+# edited by hand.
+
+new_home
+ID=44444444-0000-0000-0000-000000000010; transcript "$ID" >/dev/null
+add_ai "$ID" "T"
+export CLAUDE_CODE_SESSION_ID="$ID"
+printf 'blocked' >"$FAKE/.claude/session-notes"        # a FILE where the dir should be
+printf 'body\n' | note_write 2>/dev/null
+is "a file blocking the notes dir fails the write loudly" 1 "$?"
+is "…and the hook stays silent instead of erroring" "" \
+   "$(printf '{"session_id":"%s"}' "$ID" | bash "$ROOT/hooks/session-note.sh")"
+rm -f "$FAKE/.claude/session-notes"
+
+mkdir -p "$FAKE/.claude/session-notes"
+printf 'not ours\n' >"$FAKE/.claude/session-notes/somebody-elses.md"
+printf 'our body\n' | note_write
+is "foreign files in the notes dir are never touched" "not ours" \
+   "$(cat "$FAKE/.claude/session-notes/somebody-elses.md")"
+is "…and our note still works beside them" "our body" "$(note_read "$ID")"
+
+printf 'no header, just prose\n' >"$FAKE/.claude/session-notes/$ID.md"
+is "a hand-edited note keeps its whole body" "no header, just prose" "$(note_read "$ID")"
+is "…and reports its age as unknown, not a guess" "?" "$(note_age "$ID")"
+unset CLAUDE_CODE_SESSION_ID
+drop_home
+
 # The hook. Once per opened session, never into the session that wrote it, silent on
 # every failure path.
 
@@ -654,6 +682,11 @@ if command -v zsh >/dev/null 2>&1; then
         ok "sources cleanly under zsh"
     else
         bad "sources cleanly under zsh" "sourced" "failed to find core/sessions.sh"
+    fi
+    if zsh -c ". '$ROOT/notes/note.sh' && type note_write >/dev/null" 2>/dev/null; then
+        ok "notes module sources cleanly under zsh"
+    else
+        bad "notes module sources cleanly under zsh" "sourced" "failed to find core/sessions.sh"
     fi
 else
     ok "sources cleanly under zsh (skipped, no zsh)"
