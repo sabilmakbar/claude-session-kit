@@ -15,6 +15,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 DEST_LIB="${CLAUDE_SESSION_KIT_PREFIX:-$HOME/.claude}/session-kit"
 DEST_SKILL="${CLAUDE_SESSION_KIT_PREFIX:-$HOME/.claude}/skills/rename-session"
+DEST_SKILL_NOTE="${CLAUDE_SESSION_KIT_PREFIX:-$HOME/.claude}/skills/session-note"
 
 DRY=0; UNINSTALL=0
 for arg in "$@"; do
@@ -29,8 +30,10 @@ run() { [ "$DRY" -eq 1 ] && { printf '  would: %s\n' "$*"; return 0; }; "$@"; }
 
 if [ "$UNINSTALL" -eq 1 ]; then
     echo "uninstalling"
-    run rm -rf "$DEST_LIB" "$DEST_SKILL"
-    echo "removed $DEST_LIB and $DEST_SKILL"
+    # Note DATA (~/.claude/session-notes) is deliberately left alone: it is user
+    # content, not kit code, which is also why it lives outside $DEST_LIB.
+    run rm -rf "$DEST_LIB" "$DEST_SKILL" "$DEST_SKILL_NOTE"
+    echo "removed $DEST_LIB, $DEST_SKILL and $DEST_SKILL_NOTE"
     exit 0
 fi
 
@@ -39,8 +42,9 @@ fi
 command -v jq >/dev/null 2>&1 || {
     echo "install.sh: jq is required (brew install jq)" >&2; exit 1; }
 
-for f in core/sessions.sh naming/rename.sh tests/smoke.sh hooks/version-check.sh \
-         skills/rename-session/SKILL.md; do
+for f in core/sessions.sh naming/rename.sh notes/note.sh tests/smoke.sh \
+         hooks/version-check.sh hooks/session-note.sh \
+         skills/rename-session/SKILL.md skills/session-note/SKILL.md; do
     [ -f "$ROOT/$f" ] || { echo "install.sh: missing $f — run from a full checkout" >&2; exit 1; }
 done
 
@@ -55,9 +59,10 @@ fi
 # --- libraries --------------------------------------------------------------
 
 echo "installing to $DEST_LIB"
-run mkdir -p "$DEST_LIB/core" "$DEST_LIB/naming" "$DEST_LIB/tests" "$DEST_LIB/hooks"
+run mkdir -p "$DEST_LIB/core" "$DEST_LIB/naming" "$DEST_LIB/notes" "$DEST_LIB/tests" "$DEST_LIB/hooks"
 run cp "$ROOT/core/sessions.sh"  "$DEST_LIB/core/sessions.sh"
 run cp "$ROOT/naming/rename.sh"  "$DEST_LIB/naming/rename.sh"
+run cp "$ROOT/notes/note.sh"     "$DEST_LIB/notes/note.sh"
 
 # smoke.sh ships with the libraries because the version guard tells people to run it.
 # Advice that names a file only a checkout has is advice most users cannot follow.
@@ -67,7 +72,8 @@ run cp "$ROOT/tests/smoke.sh"    "$DEST_LIB/tests/smoke.sh"
 # The SessionStart hook is installed but NOT wired up: adding it to settings.json
 # is the user's call, not an installer's. Printed at the end instead.
 run cp "$ROOT/hooks/version-check.sh" "$DEST_LIB/hooks/version-check.sh"
-run chmod +x "$DEST_LIB/hooks/version-check.sh"
+run cp "$ROOT/hooks/session-note.sh"  "$DEST_LIB/hooks/session-note.sh"
+run chmod +x "$DEST_LIB/hooks/version-check.sh" "$DEST_LIB/hooks/session-note.sh"
 
 # --- skill ------------------------------------------------------------------
 #
@@ -75,21 +81,25 @@ run chmod +x "$DEST_LIB/hooks/version-check.sh"
 # from a checkout. Installed, cwd is whatever project the user is in, so rewrite
 # those to absolute paths at copy time.
 
-echo "installing skill to $DEST_SKILL"
-run mkdir -p "$DEST_SKILL"
-if [ "$DRY" -eq 1 ]; then
-    printf '  would: rewrite source paths and write %s/SKILL.md\n' "$DEST_SKILL"
-else
+for pair in "rename-session|$DEST_SKILL" "session-note|$DEST_SKILL_NOTE"; do
+    name="${pair%%|*}"; dest="${pair##*|}"
+    echo "installing skill to $dest"
+    run mkdir -p "$dest"
+    if [ "$DRY" -eq 1 ]; then
+        printf '  would: rewrite source paths and write %s/SKILL.md\n' "$dest"
+        continue
+    fi
     sed -e "s|^\. core/sessions\.sh|. \"$DEST_LIB/core/sessions.sh\"|" \
         -e "s|^\. naming/rename\.sh|. \"$DEST_LIB/naming/rename.sh\"|" \
-        "$ROOT/skills/rename-session/SKILL.md" >"$DEST_SKILL/SKILL.md"
+        -e "s|^\. notes/note\.sh|. \"$DEST_LIB/notes/note.sh\"|" \
+        "$ROOT/skills/$name/SKILL.md" >"$dest/SKILL.md"
 
     # A missed rewrite installs a skill that silently cannot find its libraries.
-    if grep -qE '^\. (core|naming)/' "$DEST_SKILL/SKILL.md"; then
-        echo "install.sh: some source paths were not rewritten" >&2
+    if grep -qE '^\. (core|naming|notes)/' "$dest/SKILL.md"; then
+        echo "install.sh: some source paths were not rewritten in $name" >&2
         exit 1
     fi
-fi
+done
 
 # --- verify -----------------------------------------------------------------
 
@@ -97,11 +107,13 @@ if [ "$DRY" -eq 0 ]; then
     # shellcheck source=/dev/null
     ( . "$DEST_LIB/naming/rename.sh" && rename_check_title x ) >/dev/null 2>&1 || {
         echo "install.sh: installed copy failed to load" >&2; exit 1; }
+    ( . "$DEST_LIB/notes/note.sh" && type note_write ) >/dev/null 2>&1 || {
+        echo "install.sh: installed notes module failed to load" >&2; exit 1; }
     echo "verified: installed copy loads"
 fi
 
 echo
-echo "done. /rename-session is available in new sessions."
+echo "done. /rename-session and /session-note are available in new sessions."
 echo "the libraries are usable directly too:"
 echo "  . $DEST_LIB/core/sessions.sh && cs_list"
 echo "if Claude Code updates and the kit warns that internals may have moved:"
@@ -109,3 +121,5 @@ echo "  bash $DEST_LIB/tests/smoke.sh"
 echo
 echo "to re-verify automatically instead, add to SessionStart in settings.json:"
 echo "  \"$DEST_LIB/hooks/version-check.sh\" 2>/dev/null || true"
+echo "to have session notes surface on resume, add to UserPromptSubmit:"
+echo "  \"$DEST_LIB/hooks/session-note.sh\" 2>/dev/null || true"

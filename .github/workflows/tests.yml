@@ -58,6 +58,8 @@ jobs:
           ./install.sh                     # second run must be a no-op, not an error
           test -r "$CLAUDE_SESSION_KIT_PREFIX/session-kit/core/sessions.sh"
           test -r "$CLAUDE_SESSION_KIT_PREFIX/skills/rename-session/SKILL.md"
+          test -r "$CLAUDE_SESSION_KIT_PREFIX/skills/session-note/SKILL.md"
+          test -x "$CLAUDE_SESSION_KIT_PREFIX/session-kit/hooks/session-note.sh"
 
           # The version guard tells people to run this, so it has to be installed,
           # and it has to still locate core/ from its installed location.
@@ -65,12 +67,14 @@ jobs:
           bash "$CLAUDE_SESSION_KIT_PREFIX/session-kit/tests/smoke.sh"
 
           # A missed rewrite installs a skill that silently cannot find its libraries.
-          ! grep -qE '^\. (core|naming)/' \
-            "$CLAUDE_SESSION_KIT_PREFIX/skills/rename-session/SKILL.md"
+          ! grep -qE '^\. (core|naming|notes)/' \
+            "$CLAUDE_SESSION_KIT_PREFIX/skills/rename-session/SKILL.md" \
+            "$CLAUDE_SESSION_KIT_PREFIX/skills/session-note/SKILL.md"
 
           ./install.sh --uninstall
           test ! -d "$CLAUDE_SESSION_KIT_PREFIX/session-kit"
           test ! -d "$CLAUDE_SESSION_KIT_PREFIX/skills/rename-session"
+          test ! -d "$CLAUDE_SESSION_KIT_PREFIX/skills/session-note"
 
       # Not a gate: it needs a real ~/.claude and a runner has none, so it skips here.
       # Running it proves the skip path stays healthy.
