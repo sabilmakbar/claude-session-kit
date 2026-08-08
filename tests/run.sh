@@ -47,6 +47,7 @@ pidfile() {
 
 . "$ROOT/core/sessions.sh"
 . "$ROOT/naming/rename.sh"
+. "$ROOT/notes/note.sh"
 
 command -v jq >/dev/null 2>&1 || { echo "jq is required to run these tests"; exit 1; }
 
@@ -485,6 +486,96 @@ echo "7.7.7" >"$FAKE/.claude/session-kit/.verified"
 jq -n '{pid:1,sessionId:"z",name:"n",version:"7.7.7"}' >"$PIDS/1.json"
 CLAUDE_SESSION_KIT_ROOT="$ROOT" bash "$ROOT/hooks/version-check.sh" >/dev/null 2>&1
 is "hook exits 0 when the version is already verified" 0 $?
+drop_home
+
+# --- session notes -----------------------------------------------------------
+#
+# Storage is trivial; the tests aim at the feature's two real risks — a note
+# surfacing into the wrong session (or on every prompt), and prose corrupting on
+# the way through. Body chosen to be hostile: quotes, backslash, printf specifiers,
+# emoji, blank lines.
+
+echo "session notes"
+
+HOSTILE_NOTE='## Decided
+- use "custom-title", not a sidecar (path: C:\temp\x)
+- 100% done %s %d 🪨
+
+## Next
+- export first'
+
+new_home
+ID=44444444-0000-0000-0000-00000000000d; transcript "$ID" >/dev/null
+add_ai "$ID" "Some session"
+export CLAUDE_CODE_SESSION_ID="$ID"
+printf '%s\n' "$HOSTILE_NOTE" | note_write
+is "hostile prose round-trips byte-identical" "$HOSTILE_NOTE" "$(note_read "$ID")"
+printf 'replaced\n' | note_write
+is "writing replaces, never appends" "replaced" "$(note_read "$ID")"
+printf '   \n\t\n' | note_write 2>/dev/null
+is "a whitespace-only body is refused" 1 "$?"
+is "…and the previous note survives the refusal" "replaced" "$(note_read "$ID")"
+unset CLAUDE_CODE_SESSION_ID
+printf 'orphan\n' | note_write 2>/dev/null
+is "note_write refuses with no current session" 1 "$?"
+is "note_read refuses a traversal id" 1 "$(note_read '../../etc/passwd' >/dev/null 2>&1; echo $?)"
+drop_home
+
+new_home
+ID=44444444-0000-0000-0000-00000000000e; transcript "$ID" >/dev/null
+add_ai "$ID" "T"
+export CLAUDE_CODE_SESSION_ID="$ID"
+printf 'the note\n' | note_write
+is "a fresh note has age 0" 0 "$(note_age "$ID")"
+add_user "$ID" "one"; add_user "$ID" "two"; add_user "$ID" "three"
+is "age counts entries added since the write" 3 "$(note_age "$ID")"
+case "$(note_render "$ID")" in *"3 transcript entries ago"*) ok "render carries the age" ;;
+    *) bad "render carries the age" "mentions 3 entries" "$(note_render "$ID" | head -1)";; esac
+rm "$PROJ/$ID.jsonl"
+is "age is unknown when the transcript is gone" "?" "$(note_age "$ID")"
+case "$(note_render "$ID")" in *"age unknown"*) ok "render admits unknown age instead of guessing" ;;
+    *) bad "render admits unknown age instead of guessing" "age unknown" "$(note_render "$ID" | head -1)";; esac
+unset CLAUDE_CODE_SESSION_ID
+drop_home
+
+# The hook. Once per opened session, never into the session that wrote it, silent on
+# every failure path.
+
+echo "the session-note hook"
+
+hook_note() { printf '{"session_id":"%s"}' "$1" | bash "$ROOT/hooks/session-note.sh"; }
+
+new_home
+ID=55555555-0000-0000-0000-00000000000f; transcript "$ID" >/dev/null
+add_ai "$ID" "T"
+pidfile "$$" "$ID" "n"
+export CLAUDE_CODE_SESSION_ID="$ID"
+printf '%s\n' "$HOSTILE_NOTE" | note_write     # stamps .seen with this live process
+unset CLAUDE_CODE_SESSION_ID
+
+is "the writing process never gets its own note echoed" "" "$(hook_note "$ID")"
+
+# A restart: the same session now runs under a different (live) process.
+sleep 30 & NEWPID=$!
+rm -f "$PIDS/$$.json"; pidfile "$NEWPID" "$ID" "n"
+OUT=$(hook_note "$ID"); RC=$?
+case "$OUT" in *'use "custom-title"'*'🪨'*) ok "a reopened session receives the note verbatim" ;;
+    *) bad "a reopened session receives the note verbatim" "the hostile body" "${OUT:-nothing}";; esac
+is "…with exit 0" 0 "$RC"
+case "$OUT" in *"transcript entries ago"*) ok "…stamped with its age" ;;
+    *) bad "…stamped with its age" "an age line" "$(printf '%s' "$OUT" | head -1)";; esac
+is "…and only once — the next prompt is silent" "" "$(hook_note "$ID")"
+{ kill "$NEWPID" && wait "$NEWPID"; } 2>/dev/null
+
+# A dead registration must not surface the note (cannot attribute it to a process).
+rm -f "$PIDS"/*.json; pidfile 999999 "$ID" "n"; rm -f "$FAKE/.claude/session-notes/$ID.seen"
+is "no live process, no note" "" "$(hook_note "$ID")"
+
+OUT=$(printf 'not json' | bash "$ROOT/hooks/session-note.sh"); RC=$?
+is "garbage stdin prints nothing" "" "$OUT"
+is "…and exits 0" 0 "$RC"
+is "a session with no note is silent" "" "$(hook_note 99999999-0000-0000-0000-000000000001)"
+is "a traversal session_id is silent" "" "$(printf '{"session_id":"../../evil"}' | bash "$ROOT/hooks/session-note.sh")"
 drop_home
 
 # --- silent-drift detection -------------------------------------------------
