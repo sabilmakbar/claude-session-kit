@@ -606,6 +606,105 @@ is "a session with no note is silent" "" "$(hook_note 99999999-0000-0000-0000-00
 is "a traversal session_id is silent" "" "$(printf '{"session_id":"../../evil"}' | bash "$ROOT/hooks/session-note.sh")"
 drop_home
 
+# --- handoff export / import -------------------------------------------------
+#
+# The round-trip is the oracle: export from home A, import into home B, and compare
+# against the ORIGINAL files — so the test never depends on a belief about what should
+# have been copied. Atomicity is the other target: a refused import must leave the
+# target machine byte-for-byte untouched.
+
+echo "handoff export/import"
+
+HA=$(mktemp -d); HB=$(mktemp -d); CWDB=$(mktemp -d); OUT=$(mktemp -d)
+PROJA="$HA/.claude/projects/-src-cwd"; mkdir -p "$PROJA" "$HA/.claude/sessions"
+S1=aaaa9999-0000-0000-0000-000000000001
+S2=bbbb9999-0000-0000-0000-000000000002
+{ jq -cn --arg id "$S1" '{type:"user",cwd:"/src/cwd",timestamp:"2026-08-01T00:00:00Z",sessionId:$id,message:{content:"work on the parser"}}'
+  jq -cn --arg id "$S1" --arg t 'Parser: quote "handling" 🪨 100%' '{type:"custom-title",customTitle:$t,sessionId:$id}'
+} >"$PROJA/$S1.jsonl"
+{ jq -cn --arg id "$S2" '{type:"user",cwd:"/src/cwd",timestamp:"2026-08-02T09:00:00Z",sessionId:$id,message:{content:"second thing"}}'
+  jq -cn --arg id "$S2" '{type:"ai-title",aiTitle:"Second parser session",sessionId:$id}'
+} >"$PROJA/$S2.jsonl"
+printf 'diff --git a/x b/x\n' >"$OUT/held.diff"
+printf '# HANDOFF\nreal note content\n' >"$OUT/note.md"
+
+BOUT=$(CLAUDE_SESSION_KIT_HOME="$HA" bash "$ROOT/handoff/export.sh" \
+        -o "$OUT" -n "$OUT/note.md" "$S1" "$S2" -- "$OUT/held.diff" 2>/dev/null)
+BUNDLE=$(printf '%s\n' "$BOUT" | sed -n 's/^bundle: //p')
+[ -f "$BUNDLE" ] && ok "export produces a bundle" || bad "export produces a bundle" "a tar.gz" "${BUNDLE:-nothing}"
+
+# "parser" matches BOTH titles — this must exercise the ambiguity branch, not the
+# unknown-ref branch, so the assertion checks the message too.
+AMB=$(CLAUDE_SESSION_KIT_HOME="$HA" bash "$ROOT/handoff/export.sh" -o "$OUT" parser 2>&1 >/dev/null); RC=$?
+is "an ambiguous ref is refused" 1 "$RC"
+case "$AMB" in *ambiguous*) ok "…via the ambiguity branch, listing candidates" ;;
+    *) bad "…via the ambiguity branch, listing candidates" "'ambiguous' in the error" "$AMB";; esac
+is "unknown refs are refused" 1 \
+   "$(CLAUDE_SESSION_KIT_HOME="$HA" bash "$ROOT/handoff/export.sh" -o "$OUT" no-such-session >/dev/null 2>&1; echo $?)"
+
+printf 'this line is not json\n' >>"$PROJA/$S2.jsonl"
+is "a corrupt transcript refuses to export" 1 \
+   "$(CLAUDE_SESSION_KIT_HOME="$HA" bash "$ROOT/handoff/export.sh" -o "$OUT" "$S2" >/dev/null 2>&1; echo $?)"
+# restore S2 for the rest of the section
+head -2 "$PROJA/$S2.jsonl" >"$PROJA/$S2.tmp" && mv "$PROJA/$S2.tmp" "$PROJA/$S2.jsonl"
+
+IOUT=$(cd "$CWDB" && CLAUDE_SESSION_KIT_HOME="$HB" bash "$ROOT/handoff/import.sh" "$BUNDLE" 2>/dev/null)
+DESTB="$HB/.claude/projects/$(printf '%s' "$CWDB" | tr '/' '-')"
+[ -f "$DESTB/$S1.jsonl" ] && ok "import installs into the target project dir" \
+    || bad "import installs into the target project dir" "$DESTB/$S1.jsonl" "missing"
+
+# The oracle: the installed file must BE the original, plus exactly the title line.
+n1=$(wc -l <"$PROJA/$S1.jsonl" | tr -d ' ')
+head -n "$n1" "$DESTB/$S1.jsonl" | cmp -s - "$PROJA/$S1.jsonl" \
+    && ok "installed transcript is byte-identical to the source" \
+    || bad "installed transcript is byte-identical to the source" "identical prefix" "diverged"
+is "the manifest title survives as the resolved name" \
+   'Parser: quote "handling" 🪨 100%' \
+   "$(CLAUDE_SESSION_KIT_HOME="$HB" bash -c '. "'"$ROOT"'/core/sessions.sh"; cs_resolve_name '"$S1"'')"
+case "$IOUT" in *"real note content"*) ok "the note is printed on import" ;;
+    *) bad "the note is printed on import" "note text" "absent";; esac
+case "$IOUT" in *"loose files kept at:"*) ok "loose files are surfaced, not scattered" ;;
+    *) bad "loose files are surfaced, not scattered" "a kept path" "absent";; esac
+
+# Idempotency: importing the same bundle again must be a clean no-op.
+sha_before=$(cksum "$DESTB/$S1.jsonl")
+IOUT2=$(cd "$CWDB" && CLAUDE_SESSION_KIT_HOME="$HB" bash "$ROOT/handoff/import.sh" "$BUNDLE" 2>/dev/null); RC=$?
+is "re-importing the same bundle succeeds" 0 "$RC"
+case "$IOUT2" in *skipped*) ok "…and reports the sessions as skipped" ;;
+    *) bad "…and reports the sessions as skipped" "a skip line" "$IOUT2";; esac
+is "…and modifies nothing" "$sha_before" "$(cksum "$DESTB/$S1.jsonl")"
+
+# Tamper with a bundled transcript: checksum must catch it, and nothing may install.
+HB2=$(mktemp -d); TDIR=$(mktemp -d)
+tar -xzf "$BUNDLE" -C "$TDIR"
+printf '%s\n' '{"type":"user","message":{"content":"injected"}}' >>"$TDIR/sessions/$S1.jsonl"
+( cd "$TDIR" && tar -czf "$OUT/tampered.tar.gz" . )
+is "a tampered bundle is refused" 1 \
+   "$(cd "$CWDB" && CLAUDE_SESSION_KIT_HOME="$HB2" bash "$ROOT/handoff/import.sh" "$OUT/tampered.tar.gz" >/dev/null 2>&1; echo $?)"
+[ ! -e "$HB2/.claude/projects" ] || [ -z "$(find "$HB2/.claude/projects" -name '*.jsonl' 2>/dev/null)" ] \
+    && ok "…and installs nothing" || bad "…and installs nothing" "no transcripts" "something installed"
+
+# Divergent collision: refuse the WHOLE bundle, even the sessions that were fine.
+HB3=$(mktemp -d); DEST3="$HB3/.claude/projects/$(printf '%s' "$CWDB" | tr '/' '-')"
+mkdir -p "$DEST3"
+printf '%s\n' '{"type":"user","message":{"content":"a different history"}}' >"$DEST3/$S2.jsonl"
+is "a diverged session refuses the import" 1 \
+   "$(cd "$CWDB" && CLAUDE_SESSION_KIT_HOME="$HB3" bash "$ROOT/handoff/import.sh" "$BUNDLE" >/dev/null 2>&1; echo $?)"
+[ ! -e "$DEST3/$S1.jsonl" ] && ok "…and the healthy session was not installed either" \
+    || bad "…and the healthy session was not installed either" "atomic refusal" "partial install"
+
+# A hand-made manifest with a multi-line title: import must normalise it.
+HB4=$(mktemp -d); TDIR2=$(mktemp -d)
+tar -xzf "$BUNDLE" -C "$TDIR2"
+jq --arg id "$S1" '(.sessions[] | select(.id==$id) | .title) |= "line one\nline two"' \
+    "$TDIR2/manifest.json" >"$TDIR2/m.tmp" && mv "$TDIR2/m.tmp" "$TDIR2/manifest.json"
+( cd "$TDIR2" && tar -czf "$OUT/multiline.tar.gz" . )
+( cd "$CWDB" && CLAUDE_SESSION_KIT_HOME="$HB4" bash "$ROOT/handoff/import.sh" "$OUT/multiline.tar.gz" >/dev/null 2>&1 )
+is "a multi-line manifest title is normalised on import" "line one line two" \
+   "$(CLAUDE_SESSION_KIT_HOME="$HB4" bash -c '. "'"$ROOT"'/core/sessions.sh"; cs_resolve_name '"$S1"'')"
+
+rm -rf "$HA" "$HB" "$HB2" "$HB3" "$HB4" "$CWDB" "$OUT" "$TDIR" "$TDIR2"
+
 # --- silent-drift detection -------------------------------------------------
 #
 # Three ways Claude Code can move that break the kit WITHOUT violating any invariant

@@ -44,6 +44,10 @@ cs_have_deps() { command -v jq >/dev/null 2>&1; }
 # The session this script is running inside, if any.
 cs_current_id() { printf '%s' "${CLAUDE_CODE_SESSION_ID:-}"; }
 
+# cwd -> project dir name. Claude Code replaces every "/" with "-". (Removed once as
+# dead code; reinstated when handoff import became its first real caller.)
+cs_encode_cwd() { printf '%s' "${1//\//-}"; }
+
 # Listing goes through find, never shell globs: zsh treats an unmatched glob as a fatal
 # error where bash expands it to a literal, which silently broke every listing and
 # lookup for zsh users while the bash-only suite stayed green. find matches both.
