@@ -141,7 +141,13 @@ jq -n \
     '{format:1, created:$created, host:$host, kit_verified_for:$verified,
       note:"notes/HANDOFF.md", sessions:$sessions, files:$files}' >"$STAGE/manifest.json"
 
+# Never overwrite an existing bundle: two exports within the same second would
+# otherwise silently clobber each other (found by a test doing exactly that).
 BUNDLE="$OUT_DIR/session-handoff-$STAMP.tar.gz"
+n=2
+while [ -e "$BUNDLE" ]; do
+    BUNDLE="$OUT_DIR/session-handoff-$STAMP-$n.tar.gz"; n=$((n+1))
+done
 mkdir -p "$OUT_DIR"
 tar -czf "$BUNDLE" -C "$STAGE" .
 

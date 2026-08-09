@@ -78,6 +78,13 @@ add_user "$ID" "how do I center a div"
 is "falls back to first prompt" "how do I center a div" "$(cs_resolve_name "$ID")"
 drop_home
 
+# Real messages also store content as an ARRAY of blocks, not a plain string.
+new_home
+ID=aaaaaaaa-0000-0000-0000-000000000016; transcript "$ID" >/dev/null
+add_line "$ID" "$(jq -cn '{type:"user",message:{content:[{type:"text",text:"block-form prompt"}]}}')"
+is "array-form message content resolves too" "block-form prompt" "$(cs_resolve_name "$ID")"
+drop_home
+
 new_home
 ID=aaaaaaaa-0000-0000-0000-000000000004; transcript "$ID" >/dev/null
 is "falls back to short id" "aaaaaaaa" "$(cs_resolve_name "$ID")"
@@ -316,6 +323,15 @@ case "$OUT" in
     *9.9.10*9.9.9*smoke.sh*) ok "warns on a new version and names smoke.sh" ;;
     *) bad "warns on a new version and names smoke.sh" "both versions + smoke.sh" "${OUT:-silence}" ;;
 esac
+drop_home
+
+# Several sessions can run at once on different versions mid-upgrade; the guard
+# compares against the HIGHEST, and 2.1.10 must sort above 2.1.9 (version sort,
+# not string sort — string sort would call 2.1.9 the newer one).
+new_home
+jq -n '{pid:1,sessionId:"a",name:"n",version:"2.1.9"}'  >"$PIDS/1.json"
+jq -n '{pid:2,sessionId:"b",name:"n",version:"2.1.10"}' >"$PIDS/2.json"
+is "the running version is the highest, version-sorted" "2.1.10" "$(cs_running_version)"
 drop_home
 
 # --- failure reporting ------------------------------------------------------
@@ -674,6 +690,40 @@ case "$IOUT2" in *skipped*) ok "…and reports the sessions as skipped" ;;
     *) bad "…and reports the sessions as skipped" "a skip line" "$IOUT2";; esac
 is "…and modifies nothing" "$sha_before" "$(cksum "$DESTB/$S1.jsonl")"
 
+# Exporting a LIVE session is allowed but must say the bundle is a snapshot.
+# (This section builds its homes by hand, so write the pid-file into HA directly —
+# the pidfile helper writes into new_home's dirs, which are not in play here.)
+jq -n --arg p "$$" --arg i "$S1" --arg v "$CS_VERIFIED_VERSION" \
+    '{pid:($p|tonumber),sessionId:$i,name:"n",version:$v}' >"$HA/.claude/sessions/$$.json"
+LOUT=$(CLAUDE_SESSION_KIT_HOME="$HA" bash "$ROOT/handoff/export.sh" -o "$OUT" "$S1" 2>&1 >/dev/null); RC=$?
+is "a live session still exports" 0 "$RC"
+case "$LOUT" in *live*snapshot*) ok "…with a snapshot warning" ;;
+    *) bad "…with a snapshot warning" "'live … snapshot' on stderr" "${LOUT:-silence}";; esac
+rm -f "$HA/.claude/sessions/$$.json"
+
+# Two exports in the same second must produce two bundles, not one overwriting the
+# other — this exact collision silently swapped the bundle under later tests once.
+before=$(ls "$OUT"/session-handoff-*.tar.gz | wc -l | tr -d ' ')
+CLAUDE_SESSION_KIT_HOME="$HA" bash "$ROOT/handoff/export.sh" -o "$OUT" "$S1" >/dev/null 2>&1
+CLAUDE_SESSION_KIT_HOME="$HA" bash "$ROOT/handoff/export.sh" -o "$OUT" "$S1" >/dev/null 2>&1
+is "back-to-back exports never overwrite each other" "$((before+2))" \
+   "$(ls "$OUT"/session-handoff-*.tar.gz | wc -l | tr -d ' ')"
+
+# Garbage inputs to import: each refuses cleanly, before any write.
+printf 'not a tarball' >"$OUT/garbage.tar.gz"
+is "import refuses a file that is not a tar.gz" 1 \
+   "$(cd "$CWDB" && CLAUDE_SESSION_KIT_HOME="$HB" bash "$ROOT/handoff/import.sh" "$OUT/garbage.tar.gz" >/dev/null 2>&1; echo $?)"
+NODIR=$(mktemp -d); printf 'x\n' >"$NODIR/loose.txt"
+( cd "$NODIR" && tar -czf "$OUT/nomanifest.tar.gz" . )
+is "import refuses a bundle with no manifest" 1 \
+   "$(cd "$CWDB" && CLAUDE_SESSION_KIT_HOME="$HB" bash "$ROOT/handoff/import.sh" "$OUT/nomanifest.tar.gz" >/dev/null 2>&1; echo $?)"
+TDIRF=$(mktemp -d); tar -xzf "$BUNDLE" -C "$TDIRF"
+jq '.format = 2' "$TDIRF/manifest.json" >"$TDIRF/m.tmp" && mv "$TDIRF/m.tmp" "$TDIRF/manifest.json"
+( cd "$TDIRF" && tar -czf "$OUT/format2.tar.gz" . )
+is "import refuses a manifest format it does not read" 1 \
+   "$(cd "$CWDB" && CLAUDE_SESSION_KIT_HOME="$HB" bash "$ROOT/handoff/import.sh" "$OUT/format2.tar.gz" >/dev/null 2>&1; echo $?)"
+rm -rf "$NODIR" "$TDIRF"
+
 # Tamper with a bundled transcript: checksum must catch it, and nothing may install.
 HB2=$(mktemp -d); TDIR=$(mktemp -d)
 tar -xzf "$BUNDLE" -C "$TDIR"
@@ -751,6 +801,15 @@ case "$WOUT" in *Assertions*) ok "…but says the claim check will have nothing 
 CLAUDE_CODE_SESSION_ID=$OLD bash "$ROOT/handoff/split.sh" -n "$FAKE/note.md" -t "parser work" >/dev/null 2>&1
 FOLDER=$(jq -r '.folder' "$HDIR/$OLD.handed")
 
+guard() { printf '{"session_id":"%s"}' "$1" | bash "$ROOT/hooks/session-guard.sh"; }
+
+# Before any claim, the guard must still work — naming the folder, and saying the
+# destination is pending rather than inventing one.
+POUT=$(guard "$OLD")
+case "$POUT" in *"not claimed"*) ok "the guard works while the claim is pending" ;;
+    *) bad "the guard works while the claim is pending" "'not claimed' wording" "${POUT:-silence}";; esac
+rm -f "$HDIR/$OLD.guard-seen"
+
 is "claim refuses from the session that split" 1 \
    "$(CLAUDE_CODE_SESSION_ID=$OLD bash "$ROOT/handoff/claim.sh" "$FOLDER" >/dev/null 2>&1; echo $?)"
 
@@ -759,8 +818,6 @@ is "claim completes the old side of the link" "$NEW" "$(jq -r '.to' "$HDIR/$OLD.
 is "…and the new side" "$OLD" "$(jq -r '.from' "$HDIR/$NEW.claimed")"
 case "$COUT" in *"tokenizer rewrite was REJECTED"*) ok "claim prints the note as seed context" ;;
     *) bad "claim prints the note as seed context" "the note body" "absent";; esac
-
-guard() { printf '{"session_id":"%s"}' "$1" | bash "$ROOT/hooks/session-guard.sh"; }
 
 is "the guard is silent for an unrelated session" "" "$(guard "$NEW")"
 GOUT=$(guard "$OLD")
@@ -778,6 +835,13 @@ is "…and the guard goes quiet" "" "$(rm -f "$HDIR/$OLD.guard-seen"; guard "$OL
     || bad "…while the folder survives as the record" "folder kept" "deleted"
 is "releasing again refuses — nothing active" 1 \
    "$(bash "$ROOT/handoff/release.sh" "$OLD" >/dev/null 2>&1; echo $?)"
+
+# release with no argument means "this session" — the form the guard's own message
+# suggests, so it has to work.
+CLAUDE_CODE_SESSION_ID=$OLD bash "$ROOT/handoff/split.sh" -n "$FAKE/note.md" >/dev/null 2>&1
+is "release with no argument releases the current session" 0 \
+   "$(CLAUDE_CODE_SESSION_ID=$OLD bash "$ROOT/handoff/release.sh" >/dev/null 2>&1; echo $?)"
+[ ! -e "$HDIR/$OLD.handed" ] && ok "…and the marker is gone" || bad "…and the marker is gone" "removed" "present"
 drop_home
 
 # --- silent-drift detection -------------------------------------------------
