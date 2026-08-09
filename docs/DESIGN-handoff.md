@@ -129,6 +129,20 @@ Two requirements, or it becomes a trap:
 
 Same-machine only. Across machines the original session is usually not present to guard.
 
+## Interoperability (verified 2026-08-09)
+
+Format cousins exist: Codex CLI keeps JSONL session transcripts under
+`~/.codex/sessions/`, Gemini CLI keeps JSON checkpoints under `~/.gemini/tmp/`, and
+the SKILL.md format this kit's skills use is an open standard adopted across those
+tools. Two consequences, neither of which changes scope:
+
+- **Keep the seam, build no adapters.** Everything Claude-Code-specific already lives
+  behind `core/`; a `~/.codex` adapter could plug in there someday. Until a concrete
+  target exists, handoff reads and writes Claude Code sessions only.
+- **The note is the portable layer.** `HANDOFF.md` is plain markdown any agent can
+  ingest; the transcripts are the Claude-native payload. Keep that separation — never
+  let the note's usefulness depend on the transcripts beside it.
+
 ## Proposed format: one bundle, one manifest
 
 ```
