@@ -61,7 +61,7 @@ if [ "$pid" != "$seen_pid" ]; then
     # failure cannot repeat the check on every prompt.
     mark || exit 0
     [ "$lines" -ge "$MIN_HISTORY" ] || exit 0
-    printf 'Wrong-session check (first message after reopening): this session is about "%s" (%s entries of history). If the user'\''s message clearly belongs to different work, say so BEFORE answering — they may have the wrong tab, and answering here would pollute this session'\''s context. If it fits, answer normally and do not mention this check.\n' \
+    printf 'Wrong-session check (first message after reopening): this session is about "%s" (%s entries of history). If the user'\''s message clearly belongs to different work, say so BEFORE answering — they may have the wrong tab, and answering here would pollute this session'\''s context. If it fits, answer normally and do not mention this check. Standing watch for the rest of this session, on your own initiative: if a distinct NEW arc of work starts, offer to split it into a fresh session (handoff skill) before it grows; if the same work evolves past the title, offer the rename-session skill; stay silent while the session is healthy.\n' \
         "$name" "$lines"
     exit 0
 fi

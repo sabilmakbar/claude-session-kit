@@ -889,6 +889,10 @@ rm -f "$PIDS/$$.json"; pidfile "$DPID" "$ID" "documents-1" derived
 OUT=$(drift "$ID")
 case "$OUT" in *Wrong-session\ check*Fixing\ the\ tokenizer*) ok "a reopened session gets the wrong-session check first" ;;
     *) bad "a reopened session gets the wrong-session check first" "wrong-session payload" "${OUT:-silence}";; esac
+# The same payload sets the session-long standing watch — the initiative lives in
+# the kit, delivered once per opening, not in any per-user memory.
+case "$OUT" in *Standing\ watch*split*rename-session*) ok "…and sets the standing health watch" ;;
+    *) bad "…and sets the standing health watch" "standing-watch instruction" "${OUT:-silence}";; esac
 is "…exactly once — the next message is quiet" "" "$(drift "$ID")"
 { kill "$DPID" && wait "$DPID"; } 2>/dev/null
 drop_home
