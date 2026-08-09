@@ -129,6 +129,18 @@ Two requirements, or it becomes a trap:
 
 Same-machine only. Across machines the original session is usually not present to guard.
 
+**The link is recorded pending, then completed by a claim** (built 2026-08-09). The
+design above says the split records the link in both directions "when it happens" —
+but at split time the destination session does not exist yet, so there is no id to
+record. Resolution: `split.sh` writes the old session's marker with `to: null` and a
+`from` file inside the folder; the fresh session's first act is `claim.sh <folder>`,
+which fills in both directions with real ids. Until a claim happens the guard still
+works, it just says "a fresh session that has not claimed it yet" instead of naming
+one. The claim step is also where the note's self-declared assertions get checked —
+by the claiming agent, semantically, while the old session is still alive to fix an
+inadequate note. One active handoff per session: a second split overwrites the first;
+modelling multiple simultaneous outbound topics was considered and skipped.
+
 ## Interoperability (verified 2026-08-09)
 
 Format cousins exist: Codex CLI keeps JSONL session transcripts under

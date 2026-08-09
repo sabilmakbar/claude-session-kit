@@ -705,6 +705,81 @@ is "a multi-line manifest title is normalised on import" "line one line two" \
 
 rm -rf "$HA" "$HB" "$HB2" "$HB3" "$HB4" "$CWDB" "$OUT" "$TDIR" "$TDIR2"
 
+# --- same-machine split: split / claim / guard / release ----------------------
+#
+# The lifecycle under test: old session splits (link pending, no bundle) → fresh
+# session claims (link completed both ways) → old session's guard reminds once per
+# opening → release removes the guard in one step and never touches the folder.
+
+echo "same-machine split"
+
+new_home
+OLD=cccc9999-0000-0000-0000-000000000001
+NEW=dddd9999-0000-0000-0000-000000000002
+transcript "$OLD" >/dev/null; add_ai "$OLD" "The overgrown session"
+transcript "$NEW" >/dev/null
+pidfile "$$" "$OLD" "n"
+HDIR="$FAKE/.claude/session-handoffs"
+
+cat >"$FAKE/note.md" <<'EOF'
+## Context
+splitting the parser work out
+
+## Assertions
+- the tokenizer rewrite was REJECTED for cache reasons
+EOF
+
+is "split refuses without a note" 2 \
+   "$(CLAUDE_CODE_SESSION_ID=$OLD bash "$ROOT/handoff/split.sh" >/dev/null 2>&1; echo $?)"
+is "split refuses outside a session" 1 \
+   "$(bash "$ROOT/handoff/split.sh" -n "$FAKE/note.md" >/dev/null 2>&1; echo $?)"
+
+SOUT=$(CLAUDE_CODE_SESSION_ID=$OLD bash "$ROOT/handoff/split.sh" -n "$FAKE/note.md" -t "parser work" 2>/dev/null)
+FOLDER=$(printf '%s\n' "$SOUT" | sed -n 's/^split: folder written — //p')
+[ -r "$FOLDER/HANDOFF.md" ] && ok "split writes the folder with the note" \
+    || bad "split writes the folder with the note" "HANDOFF.md" "missing"
+is "…and records who split it" "$OLD" "$(cat "$FOLDER/from" 2>/dev/null)"
+is "…with the link still pending" "null" "$(jq -r '.to' "$HDIR/$OLD.handed")"
+
+# A note without assertions warns but is not refused.
+printf '## Context\nno assertions here\n' >"$FAKE/note2.md"
+WOUT=$(CLAUDE_CODE_SESSION_ID=$OLD bash "$ROOT/handoff/split.sh" -n "$FAKE/note2.md" 2>&1 >/dev/null); RC=$?
+is "a note without assertions still splits" 0 "$RC"
+case "$WOUT" in *Assertions*) ok "…but says the claim check will have nothing to check" ;;
+    *) bad "…but says the claim check will have nothing to check" "a warning naming Assertions" "${WOUT:-silence}";; esac
+# restore the first split as the active one (second overwrote the marker)
+CLAUDE_CODE_SESSION_ID=$OLD bash "$ROOT/handoff/split.sh" -n "$FAKE/note.md" -t "parser work" >/dev/null 2>&1
+FOLDER=$(jq -r '.folder' "$HDIR/$OLD.handed")
+
+is "claim refuses from the session that split" 1 \
+   "$(CLAUDE_CODE_SESSION_ID=$OLD bash "$ROOT/handoff/claim.sh" "$FOLDER" >/dev/null 2>&1; echo $?)"
+
+COUT=$(CLAUDE_CODE_SESSION_ID=$NEW bash "$ROOT/handoff/claim.sh" "$FOLDER" 2>/dev/null)
+is "claim completes the old side of the link" "$NEW" "$(jq -r '.to' "$HDIR/$OLD.handed")"
+is "…and the new side" "$OLD" "$(jq -r '.from' "$HDIR/$NEW.claimed")"
+case "$COUT" in *"tokenizer rewrite was REJECTED"*) ok "claim prints the note as seed context" ;;
+    *) bad "claim prints the note as seed context" "the note body" "absent";; esac
+
+guard() { printf '{"session_id":"%s"}' "$1" | bash "$ROOT/hooks/session-guard.sh"; }
+
+is "the guard is silent for an unrelated session" "" "$(guard "$NEW")"
+GOUT=$(guard "$OLD")
+case "$GOUT" in *"parser work"*"${NEW:0:8}"*) ok "the guard names the topic and the destination" ;;
+    *) bad "the guard names the topic and the destination" "topic + ${NEW:0:8}" "${GOUT:-silence}";; esac
+is "…once per opening — second prompt is silent" "" "$(guard "$OLD")"
+
+ROUT=$(bash "$ROOT/handoff/release.sh" "$OLD" 2>/dev/null); RC=$?
+is "release succeeds" 0 "$RC"
+[ ! -e "$HDIR/$OLD.handed" ] && [ ! -e "$HDIR/$NEW.claimed" ] \
+    && ok "release clears both sides of the link" \
+    || bad "release clears both sides of the link" "markers gone" "still present"
+is "…and the guard goes quiet" "" "$(rm -f "$HDIR/$OLD.guard-seen"; guard "$OLD")"
+[ -r "$FOLDER/HANDOFF.md" ] && ok "…while the folder survives as the record" \
+    || bad "…while the folder survives as the record" "folder kept" "deleted"
+is "releasing again refuses — nothing active" 1 \
+   "$(bash "$ROOT/handoff/release.sh" "$OLD" >/dev/null 2>&1; echo $?)"
+drop_home
+
 # --- silent-drift detection -------------------------------------------------
 #
 # Three ways Claude Code can move that break the kit WITHOUT violating any invariant
