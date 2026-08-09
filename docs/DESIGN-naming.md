@@ -54,11 +54,26 @@ detection is manual and renaming is buried in the UI.
    two layers, transcript and pid-file; `state.vscdb` is deliberately never touched (see
    the resolved questions below), so "all three layers" — as an earlier draft put it —
    was never the goal. Read-only; every write lives in `naming/`.
-2. **Drift detector** — compare a session's stored title against its recent content
-   (cheap heuristic first: does any title word appear in the last N user messages?).
-   Surfaced as a session-end or session-start ping, same `additionalContext` pattern
-   as the memory kit's hooks. Optionally a headless-Claude scorer later, only if the
-   heuristic proves too dumb. On drift the ping offers a **three-way** fork:
+2. ~~**Drift detector**~~ — **built 2026-08-09**, and the original sketch did not
+   survive the design. The keyword heuristic ("does any title word appear in the
+   last N user messages?") was dropped untried, and no headless scorer replaced it:
+   both answer a semantic question mechanically, and a mechanism that guesses wrong
+   trains the user to ignore it. The component that already holds the whole
+   conversation — the in-session agent — judges drift for free.
+
+   So `hooks/session-drift.sh` never judges; it decides WHEN to ask, and its payload
+   tells the agent to judge silently and speak only if something is off. A wasted
+   check costs one silent thought, which is what makes the one remaining mechanical
+   choice (the cadence) low-stakes. Two gates, one marker per session: a new process
+   on a session with ≥20 entries of history gets the wrong-session check on its
+   FIRST message (the latency requirement below, met by construction); every ~200
+   entries after that, the rename-or-split self-check. A session with no real title
+   gets a naming nudge instead of a drift question against a meaningless name.
+
+   The sketch as originally proposed, kept for the record — compare stored title
+   against recent content (cheap heuristic first: title words in the last N user
+   messages), with a headless-Claude scorer later if the heuristic proved too dumb.
+   On drift the ping offers a **three-way** fork:
 
    - **rename** — same work, evolved topic. Title is stale; the session is fine.
    - **split** — deliberately moved to a new topic. Handoff note into a fresh session,

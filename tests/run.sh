@@ -844,6 +844,68 @@ is "release with no argument releases the current session" 0 \
 [ ! -e "$HDIR/$OLD.handed" ] && ok "…and the marker is gone" || bad "…and the marker is gone" "removed" "present"
 drop_home
 
+# --- the drift hook ------------------------------------------------------------
+#
+# The hook never judges drift — it decides WHEN to ask, and the agent judges. So the
+# tests cover the WHEN: first message of a reopened session with real history (gate
+# A), every N entries (gate B), and silence everywhere else. Cadence and history
+# floor are shrunk via env so fixtures stay small.
+
+echo "the drift hook"
+
+drift() { printf '{"session_id":"%s"}' "$1" \
+    | CS_DRIFT_EVERY=10 CS_DRIFT_MIN_HISTORY=3 bash "$ROOT/hooks/session-drift.sh"; }
+fill() { local i=0; while [ $i -lt "$2" ]; do add_line "$1" '{"type":"filler"}'; i=$((i+1)); done; }
+
+new_home
+ID=eeee9999-0000-0000-0000-000000000001; transcript "$ID" >/dev/null
+add_ai "$ID" "Fixing the tokenizer"
+pidfile "$$" "$ID" "documents-1" derived
+
+OUT=$(printf 'garbage' | bash "$ROOT/hooks/session-drift.sh"); RC=$?
+is "garbage stdin is silent" "" "$OUT"; is "…and exits 0" 0 "$RC"
+is "a traversal session_id is silent" "" \
+   "$(printf '{"session_id":"../../x"}' | bash "$ROOT/hooks/session-drift.sh")"
+
+# One entry of history: a brand-new session has no established topic to be wrong
+# about, so the first-message check stays quiet (but the marker is laid down).
+is "a near-empty session gets no wrong-session check" "" "$(drift "$ID")"
+
+fill "$ID" 10
+OUT=$(drift "$ID")   # same pid — gate A cannot re-fire; gate B: 11-1=10 >= 10
+case "$OUT" in *Drift\ check*Fixing\ the\ tokenizer*rename-session*handoff*) ok "the cadence check names the title and both remedies" ;;
+    *) bad "the cadence check names the title and both remedies" "drift payload" "${OUT:-silence}";; esac
+is "…and immediately after, it is quiet again" "" "$(drift "$ID")"
+
+fill "$ID" 4
+is "below the cadence, still quiet" "" "$(drift "$ID")"
+fill "$ID" 6
+case "$(drift "$ID")" in *Drift\ check*) ok "at the cadence, it asks again" ;;
+    *) bad "at the cadence, it asks again" "drift payload" "silence";; esac
+
+# A new process on a session with real history: the wrong-session check, exactly once.
+sleep 30 & DPID=$!
+rm -f "$PIDS/$$.json"; pidfile "$DPID" "$ID" "documents-1" derived
+OUT=$(drift "$ID")
+case "$OUT" in *Wrong-session\ check*Fixing\ the\ tokenizer*) ok "a reopened session gets the wrong-session check first" ;;
+    *) bad "a reopened session gets the wrong-session check first" "wrong-session payload" "${OUT:-silence}";; esac
+is "…exactly once — the next message is quiet" "" "$(drift "$ID")"
+{ kill "$DPID" && wait "$DPID"; } 2>/dev/null
+drop_home
+
+# A session that resolves to nothing better than its short id: the cadence check
+# becomes a naming nudge instead of a drift question against a meaningless title.
+new_home
+ID=eeee9999-0000-0000-0000-000000000002; transcript "$ID" >/dev/null
+fill "$ID" 2
+jq -n --arg p "$$" --arg i "$ID" --arg v "$CS_VERIFIED_VERSION" \
+    '{pid:($p|tonumber),sessionId:$i,version:$v}' >"$PIDS/$$.json"
+drift "$ID" >/dev/null                      # lay the marker (near-empty: silent)
+fill "$ID" 10
+case "$(drift "$ID")" in *Naming\ check*rename-session*) ok "an untitled session is nudged toward a name" ;;
+    *) bad "an untitled session is nudged toward a name" "naming payload" "silence";; esac
+drop_home
+
 # --- silent-drift detection -------------------------------------------------
 #
 # Three ways Claude Code can move that break the kit WITHOUT violating any invariant

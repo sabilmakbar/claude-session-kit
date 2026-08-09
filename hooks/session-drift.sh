@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# hooks/session-drift.sh — UserPromptSubmit hook: get the drift question asked at the
+# right moments. It never judges drift itself.
+#
+# Whether a conversation still matches its title is a semantic question, and every
+# mechanical heuristic for it (the original sketch tried keyword overlap) is a guess
+# that trains the user to ignore alarms. The agent already holds the whole
+# conversation in context and judges it for free — so this hook only decides WHEN to
+# ask, and the payload tells the agent to stay silent unless something is actually
+# off. A wasted check costs one silent thought, not an interruption.
+#
+# Two gates, one marker file ("<pid> <lines>"):
+#
+#   A. New process on a session with real history → wrong-session check on the FIRST
+#      message, which is the only moment it helps: the mistake is caught before the
+#      context is polluted. Suppressed for near-empty sessions, where there is no
+#      established topic to be wrong about.
+#   B. ~CS_DRIFT_EVERY transcript entries since the last check (default 200) →
+#      rename-or-split self-check. Gradual drift accumulates with volume, so the
+#      cadence is volume, not time.
+#
+# Same proven plumbing as the other hooks: session id from stdin, plain stdout,
+# every failure path exits 0 and prints nothing.
+
+set -u
+
+ROOT="${CLAUDE_SESSION_KIT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd)}"
+[ -r "${ROOT:-}/core/sessions.sh" ] || exit 0
+command -v jq >/dev/null 2>&1 || exit 0
+. "$ROOT/core/sessions.sh" 2>/dev/null || exit 0
+
+EVERY="${CS_DRIFT_EVERY:-200}"
+MIN_HISTORY="${CS_DRIFT_MIN_HISTORY:-20}"
+
+input=$(cat 2>/dev/null) || exit 0
+sid=$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null | tr -cd 'A-Za-z0-9-')
+[ -n "$sid" ] || exit 0
+
+tr_path=$(cs_transcript_path "$sid") || exit 0
+lines=$(wc -l <"$tr_path" | tr -d ' ')
+
+pf=$(cs_pid_file "$sid") || exit 0
+pid=$(jq -r '.pid // empty' "$pf" 2>/dev/null)
+{ [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; } || exit 0
+
+DRIFT="$(_cs_state_dir)/drift"
+seen_pid=""; seen_lines=0
+if [ -r "$DRIFT/$sid" ]; then
+    read -r seen_pid seen_lines <"$DRIFT/$sid" 2>/dev/null || true
+    seen_pid=$(printf '%s' "$seen_pid" | tr -cd '0-9')
+    seen_lines=$(printf '%s' "$seen_lines" | tr -cd '0-9'); : "${seen_lines:=0}"
+fi
+
+mark() { mkdir -p "$DRIFT" 2>/dev/null && printf '%s %s\n' "$pid" "$lines" >"$DRIFT/$sid" 2>/dev/null; }
+
+name=$(cs_resolve_name "$sid" 2>/dev/null)
+[ -n "$name" ] || exit 0
+
+if [ "$pid" != "$seen_pid" ]; then
+    # Gate A: first message to a newly opened process. Mark BEFORE printing so a
+    # failure cannot repeat the check on every prompt.
+    mark || exit 0
+    [ "$lines" -ge "$MIN_HISTORY" ] || exit 0
+    printf 'Wrong-session check (first message after reopening): this session is about "%s" (%s entries of history). If the user'\''s message clearly belongs to different work, say so BEFORE answering — they may have the wrong tab, and answering here would pollute this session'\''s context. If it fits, answer normally and do not mention this check.\n' \
+        "$name" "$lines"
+    exit 0
+fi
+
+if [ $((lines - seen_lines)) -ge "$EVERY" ]; then
+    # Gate B: enough has happened since the last look.
+    mark || exit 0
+    case "$name" in
+        "${sid:0:8}")
+            printf 'Naming check: this session has no real title (only its id, %s entries in). If the work has taken a clear shape, offer to name it via the rename-session skill; otherwise say nothing.\n' "$lines" ;;
+        *)
+            printf 'Drift check (runs every ~%s entries — judge silently, mention it ONLY if something is off): this session is titled "%s". If the recent conversation still matches, say nothing. If it is the same work evolved past that title, offer the rename-session skill. If a distinct second topic has grown here, offer to split it into a fresh session via the handoff skill.\n' \
+                "$EVERY" "$name" ;;
+    esac
+fi
+exit 0

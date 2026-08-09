@@ -62,6 +62,7 @@ jobs:
           test -r "$CLAUDE_SESSION_KIT_PREFIX/skills/handoff/SKILL.md"
           test -x "$CLAUDE_SESSION_KIT_PREFIX/session-kit/hooks/session-note.sh"
           test -x "$CLAUDE_SESSION_KIT_PREFIX/session-kit/hooks/session-guard.sh"
+          test -x "$CLAUDE_SESSION_KIT_PREFIX/session-kit/hooks/session-drift.sh"
           test -x "$CLAUDE_SESSION_KIT_PREFIX/session-kit/handoff/import.sh"
           test -x "$CLAUDE_SESSION_KIT_PREFIX/session-kit/handoff/release.sh"
 

@@ -44,7 +44,7 @@ command -v jq >/dev/null 2>&1 || {
     echo "install.sh: jq is required (brew install jq)" >&2; exit 1; }
 
 for f in core/sessions.sh naming/rename.sh notes/note.sh tests/smoke.sh \
-         hooks/version-check.sh hooks/session-note.sh hooks/session-guard.sh \
+         hooks/version-check.sh hooks/session-note.sh hooks/session-guard.sh hooks/session-drift.sh \
          handoff/export.sh handoff/import.sh handoff/split.sh handoff/claim.sh handoff/release.sh \
          skills/rename-session/SKILL.md skills/session-note/SKILL.md skills/handoff/SKILL.md; do
     [ -f "$ROOT/$f" ] || { echo "install.sh: missing $f — run from a full checkout" >&2; exit 1; }
@@ -76,7 +76,9 @@ run cp "$ROOT/tests/smoke.sh"    "$DEST_LIB/tests/smoke.sh"
 run cp "$ROOT/hooks/version-check.sh" "$DEST_LIB/hooks/version-check.sh"
 run cp "$ROOT/hooks/session-note.sh"  "$DEST_LIB/hooks/session-note.sh"
 run cp "$ROOT/hooks/session-guard.sh" "$DEST_LIB/hooks/session-guard.sh"
-run chmod +x "$DEST_LIB/hooks/version-check.sh" "$DEST_LIB/hooks/session-note.sh" "$DEST_LIB/hooks/session-guard.sh"
+run cp "$ROOT/hooks/session-drift.sh" "$DEST_LIB/hooks/session-drift.sh"
+run chmod +x "$DEST_LIB/hooks/version-check.sh" "$DEST_LIB/hooks/session-note.sh" \
+             "$DEST_LIB/hooks/session-guard.sh" "$DEST_LIB/hooks/session-drift.sh"
 
 # The handoff commands install whole: export/import for cross-machine, then
 # split/claim/release for same-machine. The skill's code blocks point here.
@@ -144,3 +146,5 @@ echo "to have session notes surface on resume, add to UserPromptSubmit:"
 echo "  \"$DEST_LIB/hooks/session-note.sh\" 2>/dev/null || true"
 echo "to have split sessions remind you where the topic went, also add:"
 echo "  \"$DEST_LIB/hooks/session-guard.sh\" 2>/dev/null || true"
+echo "to get drift checks (rename / split / wrong tab), also add:"
+echo "  \"$DEST_LIB/hooks/session-drift.sh\" 2>/dev/null || true"
