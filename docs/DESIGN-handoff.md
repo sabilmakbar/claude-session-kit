@@ -159,18 +159,22 @@ tools. Two consequences, neither of which changes scope:
   ingest; the transcripts are the Claude-native payload. Keep that separation: never
   let the note's usefulness depend on the transcripts beside it.
 
-## Proposed format: one bundle, one manifest
+## Bundle format: one bundle, one manifest
+
+**Shipped.** `handoff/export.sh` writes this layout; `handoff/import.sh` reads it.
 
 ```
 session-handoff-<date>.tar.gz
-├── manifest.json      # the part tonight was missing
+├── manifest.json      # the piece the first sketch lacked
 ├── sessions/<session-id>.jsonl   # original UUID filenames, no rename dance
 ├── notes/HANDOFF.md   # freeform WIP/backlog note (template provided, never generated)
 └── files/…            # optional loose artifacts (diffs, patches)
 ```
 
-`manifest.json` per session: id, **title**, source machine, source cwd, time range,
-line count, sha256. Plus: bundle date, source hostname, kit version.
+`manifest.json` per session: `id`, **`title`**, `cwd`, `first_ts`, `last_ts`, `lines`,
+`sha256`. Per bundle: `format`, `created`, `host`, `kit_verified_for`, the note path, and
+the session and file lists. One difference from the original sketch: the source machine is
+recorded once per bundle rather than on every session entry.
 
 ### Checksums are guarded twice (added 2026-08-10)
 
@@ -192,7 +196,9 @@ survived. Tests pin all of it: a missing tool (empty PATH), a misbehaving tool (
 stub that prints nothing), and the error messages, so a different failure cannot
 pass them for the wrong reason.
 
-## Proposed pieces
+## Pieces
+
+**Shipped**, all three: `handoff/export.sh`, `handoff/import.sh`, and the `/handoff` skill.
 
 1. **`handoff/export.sh <session-ref>… [files…]`**: resolve refs via `core/` (title
    substring or id), validate each transcript (valid JSON tail), write manifest,

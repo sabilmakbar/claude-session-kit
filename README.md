@@ -1,5 +1,7 @@
 # Claude Session Kit
 
+[![tests](https://github.com/sabilmakbar/claude-session-kit/actions/workflows/tests.yml/badge.svg)](https://github.com/sabilmakbar/claude-session-kit/actions/workflows/tests.yml)
+
 Claude Code keeps every conversation as a session, and sessions pile up. Tabs named
 "documents-41" that could be anything. A session you reopen after a week that
 remembers nothing about where you left off. Half-finished work stranded on the
@@ -32,10 +34,24 @@ them fails, they do nothing. They cannot break a session.
 ## Install
 
 ```bash
-./install.sh     # --dry-run to preview, --uninstall to remove
+git clone https://github.com/sabilmakbar/claude-session-kit.git ~/claude-session-kit
+~/claude-session-kit/install.sh     # --dry-run to preview, --uninstall to remove
 ```
 
-The installer runs the test suite first and refuses to install if anything fails.
+The installer runs the test suite first and refuses to install if anything fails, then
+checks that the copy it just installed loads. Re-running it is safe.
+
+To confirm it works, ask it to list your sessions:
+
+```bash
+. ~/.claude/session-kit/core/sessions.sh && cs_list
+```
+
+You should get one line per session: its id, whether it is live or dead, and the best name
+the kit can find for it. If nothing prints, or the name column comes back empty, the usual
+cause is a missing `jq` (see [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)). The three
+skills are available in any new session; `/rename-session` is the quickest one to try.
+
 It never touches `settings.json`. To turn the hooks on, merge this in yourself:
 
 ```json
@@ -89,6 +105,9 @@ numbers and check names only. Never your titles, paths, or username.
 - Your notes live in their own folder. Uninstalling the kit never deletes them.
 - Claude Code's internals are undocumented and can change. The kit is built to
   fail loudly and safely when they do, and to tell you what to run next.
+- Verified against Claude Code 2.1.222. The real-data suite also passes over
+  transcripts written by 20 versions, 2.1.177 through 2.1.222. Older versions are
+  untested.
 
 ## FAQ
 
@@ -129,3 +148,16 @@ Removes the installed libraries and the three skills. It leaves your notes
 and every transcript exactly where they are. The kit never owned those. If you
 wired the hooks into `settings.json`, remove those lines too; until you do they
 point at nothing and silently do nothing.
+
+## Related projects
+
+- **[claude-setup-template](https://github.com/sabilmakbar/claude-setup-template)**: one
+  manifest for a whole Claude Code setup. You declare the kits, CLI tools, plugins, and
+  hooks a machine should have, and its `setup.sh` converges the machine onto it. Its
+  example manifest installs this kit and takes care of the `settings.json` hook wiring
+  above, so start there if you are setting up a machine rather than adding one piece.
+- **[claude-memory-kit](https://github.com/sabilmakbar/claude-memory-kit)**: the sibling
+  kit. It keeps the preferences you teach Claude across sessions and machines, where this
+  kit looks after the sessions themselves.
+
+MIT licensed, see [LICENSE](LICENSE).
