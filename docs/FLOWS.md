@@ -34,7 +34,7 @@ flowchart TD
 flowchart TD
     M["message arrives"] --> P{"new process for<br/>this session?"}
     P -- yes --> H{"≥ 20 entries<br/>of history?"}
-    H -- yes --> W["wrong-session check, FIRST message:<br/>if clearly unrelated work, stop —<br/>no preliminary tool calls, route via cs_find<br/>+ set the standing watch for this sitting"]
+    H -- yes --> W["wrong-session check, FIRST message:<br/>if clearly unrelated work, stop.<br/>no preliminary tool calls, route via cs_find<br/>+ set the standing watch for this sitting"]
     H -- no --> Q["silent (nothing established<br/>to be wrong about)"]
     P -- no --> C{"≥ 200 entries since<br/>last check?"}
     C -- yes --> T{"session has a<br/>real title?"}
@@ -89,7 +89,7 @@ flowchart LR
     B1 -- "you carry it<br/>(scp, drive, anything)" --> I
     subgraph B["machine B"]
         I["import.sh phase 1:<br/>verify EVERYTHING,<br/>write NOTHING"] --> OK{"all checks<br/>pass?"}
-        OK -- no --> R["refuse whole bundle —<br/>machine untouched"]
+        OK -- no --> R["refuse whole bundle;<br/>machine untouched"]
         OK -- yes --> W["install sessions,<br/>append titles,<br/>print the note"]
     end
 ```
@@ -104,7 +104,7 @@ the new machine's session picker.
 
 ```mermaid
 flowchart LR
-    W["agent writes the note<br/>at a milestone<br/>(/session-note)"] --> S["stored per session,<br/>outside the code tree —<br/>uninstall never touches it"]
+    W["agent writes the note<br/>at a milestone<br/>(/session-note)"] --> S["stored per session,<br/>outside the code tree;<br/>uninstall never touches it"]
     S --> R["on reopen, first message:<br/>injected once, age-stamped"]
     R --> J{"agent: does the note<br/>still match reality?"}
     J -- yes --> U["use it as seed context"]
