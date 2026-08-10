@@ -1,5 +1,7 @@
 # Claude Session Kit
 
+[![tests](https://github.com/sabilmakbar/claude-session-kit/actions/workflows/tests.yml/badge.svg)](https://github.com/sabilmakbar/claude-session-kit/actions/workflows/tests.yml)
+
 Claude Code keeps every conversation as a session, and sessions pile up. Tabs named
 "documents-41" that could be anything. A session you reopen after a week that
 remembers nothing about where you left off. Half-finished work stranded on the
@@ -103,6 +105,9 @@ numbers and check names only. Never your titles, paths, or username.
 - Your notes live in their own folder. Uninstalling the kit never deletes them.
 - Claude Code's internals are undocumented and can change. The kit is built to
   fail loudly and safely when they do, and to tell you what to run next.
+- Verified against Claude Code 2.1.222. The real-data suite also passes over
+  transcripts written by 20 versions, 2.1.177 through 2.1.222. Older versions are
+  untested.
 
 ## FAQ
 
