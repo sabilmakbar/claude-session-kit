@@ -1,5 +1,9 @@
 # Session notes — design
 
+> **This is a decision record, not a user guide.** It is dense on purpose: it
+> exists so that future changes know what they would be overturning. For how the
+> kit behaves day to day, read [FLOWS.md](FLOWS.md). For setup, the README.
+
 A per-session working note: what was decided, what is done, what comes next. The
 agent writes it near milestones; when the session is later reopened, a hook hands the
 note back so the conversation resumes with its own state instead of a cold start.

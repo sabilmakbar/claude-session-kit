@@ -1,5 +1,9 @@
 # Design: session handoff (between machines, and between sessions)
 
+> **This is a decision record, not a user guide.** It is dense on purpose: it
+> exists so that future changes know what they would be overturning. For how the
+> kit behaves day to day, read [FLOWS.md](FLOWS.md). For setup, the README.
+
 ## The problem
 
 Moving work between machines is manual today. The 2026-07-26 Linux→Mac move (the

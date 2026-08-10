@@ -1,23 +1,19 @@
-# How the kit behaves — flows and lifecycles
+# How the kit behaves
 
-This is the behaviour reference: what runs when, and what state moves where. The
-*reasons* live in the design docs — [DESIGN-naming.md](DESIGN-naming.md),
-[DESIGN-handoff.md](DESIGN-handoff.md), [DESIGN-notes.md](DESIGN-notes.md) — each
-decision recorded with what it overturned. Nothing here duplicates those; when a
-box below seems arbitrary, the why is in a design doc.
+Diagrams of what runs when. The reasons behind each choice live in the design
+docs: [DESIGN-naming.md](DESIGN-naming.md), [DESIGN-handoff.md](DESIGN-handoff.md),
+[DESIGN-notes.md](DESIGN-notes.md).
 
-One rule governs everything on this page: **hooks decide WHEN, the agent judges
-WHAT.** Every semantic call — does this match the title, is this the wrong tab, is
-the note stale — is made by the in-session agent, which already holds the whole
-conversation. The hooks only schedule the questions, and every hook exits 0 and
-prints nothing on every failure path: breaking a user's prompt is never worth a
-feature.
+One idea explains most of this page. **The hooks never judge anything themselves.
+They only decide when to ask a question.** The agent inside your session answers
+it, because it is the only thing that has read the whole conversation. And every
+hook goes silent if anything inside it fails. A broken hook does nothing. It never
+breaks your prompt.
 
 ## What runs on every message
 
-Three `UserPromptSubmit` hooks, each gated so it speaks rarely and at most once per
-opened session. (A fourth hook, `version-check`, runs at `SessionStart` — see the
-last section.)
+Three hooks look at each message you send. Each speaks at most once per opened
+session, and usually not at all.
 
 ```mermaid
 flowchart TD
@@ -47,14 +43,15 @@ flowchart TD
     C -- no --> S["silent"]
 ```
 
-The agent receiving these instructions stays silent while the session is healthy —
-a wasted check costs one silent thought, never an interruption. That is what makes
-the cadence numbers (20, 200, both env-tunable) low-stakes choices.
+The numbers (20 entries of history, a check every 200 entries) are deliberately
+low-stakes. A check that finds nothing costs one silent thought, not an
+interruption. Both can be changed with environment variables.
 
-## Same-machine split — the lifecycle
+## Splitting a session on the same machine
 
-A split writes a plain folder (no bundle: nothing crosses a machine gap) and moves
-through these states:
+A split writes a plain folder holding a handoff note. Nothing is bundled or
+copied, because nothing leaves the machine. The split then moves through these
+states:
 
 ```mermaid
 stateDiagram-v2
@@ -69,7 +66,7 @@ stateDiagram-v2
     Released --> [*]
 ```
 
-What each side hears, per state:
+Who hears what, in each state:
 
 | State | The old session (once per opening) | Fresh sessions (first message, once) |
 |---|---|---|
@@ -78,11 +75,11 @@ What each side hears, per state:
 | Claimed | "topic lives in session X" | nothing |
 | Released | nothing | nothing |
 
-Constants: the folder and its note are **never deleted** by any transition — they
-are the record of why the split happened. History questions to the old session are
-never guarded; the old transcript is the only place the full argument survives.
+Two things never change. The folder and its note are never deleted; they are the
+record of why the split happened. And history questions to the old session are
+never blocked, because the old transcript is the only place the full story lives.
 
-## Cross-machine handoff
+## Moving sessions to another machine
 
 ```mermaid
 flowchart LR
@@ -97,11 +94,11 @@ flowchart LR
     end
 ```
 
-Import is atomic by construction: a tampered file or a diverged session refuses the
-entire bundle, including its healthy sessions. Re-importing the same bundle is a
-clean no-op (prefix comparison — the installed copy may have grown a title line or
-new turns). Titles travel inside the manifest and are appended as `custom-title`
-entries, so imported sessions show their real names in the target's session picker.
+The import checks everything before it writes anything. A damaged bundle, or a
+session that diverged between the two machines, refuses the whole import and
+leaves the machine untouched. Importing the same bundle twice is safe and does
+nothing. Titles travel inside the bundle, so a moved session keeps its name in
+the new machine's session picker.
 
 ## Session notes
 
@@ -114,16 +111,17 @@ flowchart LR
     J -- no --> F["say so briefly,<br/>write a corrected note"]
 ```
 
-Writing replaces the previous note (the transcript keeps every old version). The
-age stamp is the safety mechanism: a stale note presented as current is the one way
-this feature can do harm, so every render carries "written N entries ago".
+Writing a note replaces the previous one. The transcript keeps every old version
+anyway. Every time a note is shown, it says how old it is. A stale note that
+looks current is the one way this feature could mislead you, so the age is always
+stated.
 
 ## Version safety
 
-At `SessionStart`, `version-check.sh` compares the running Claude Code version with
-the last version the kit was verified against on this machine. Unchanged → exit in
-~10ms. Changed → run the real-data suite (`tests/smoke.sh`) in the background: pass
-→ record the new version, warning gone; fail → record nothing, so the warning keeps
-appearing (and a redacted, shareable failure report is written) until a human looks.
-The failure mode of the automation is falling back to the manual process, loudly —
-nothing silent.
+Claude Code's internals are undocumented, so any update might move something. At
+session start, a hook compares the running version with the last one the kit was
+verified against on this machine. Same version: it exits in about ten
+milliseconds. New version: it runs the real-data test suite once, in the
+background, at most once per day. If the tests pass, the warning clears itself.
+If they fail, the kit keeps warning you until someone looks, and a redacted
+failure report sits ready to paste into an issue. Nothing about this is silent.

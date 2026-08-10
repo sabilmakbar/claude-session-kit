@@ -1,23 +1,44 @@
-# claude-session-kit
+# Claude Session Kit
 
-Tools for managing Claude Code **sessions** across machines — a sibling to
-[claude-memory-kit](https://github.com/sabilmakbar/claude-memory-kit), which does the
-same for memory.
+Claude Code keeps every conversation as a session, and sessions pile up. Tabs named
+"documents-41" that could be anything. A session you reopen after a week that
+remembers nothing about where you left off. Half-finished work stranded on the
+other laptop. This kit fixes those: it gives sessions real names, leaves you a note
+for next time, and moves or splits sessions cleanly.
 
-**Status: built, tested, and in daily use.** Naming, per-session notes, cross-machine
-handoff, same-machine splits, and a drift detector — all live. Start with
-[docs/FLOWS.md](docs/FLOWS.md) for how everything behaves (flowcharts included); the
-three design docs record every decision and what it overturned.
+It is plain bash plus `jq`. No server, no telemetry, nothing to build. It pairs
+with [Claude Memory Kit](https://github.com/sabilmakbar/claude-memory-kit), which
+does the same job for memory.
+
+## What you get
+
+Three skills to use inside any session:
+
+| Skill | What it does |
+|---|---|
+| `/rename-session` | Writes a proper title for the current session. Shows up in the tab and the session picker. |
+| `/session-note` | Saves a short "decided / done / next" note. It greets you when you reopen the session. |
+| `/handoff` | Moves sessions to another machine, or splits an overgrown session into a fresh one. |
+
+And four optional background hooks:
+
+- **session-note** hands a reopened session its own note back.
+- **session-guard** reminds a session where a split-off topic went.
+- **session-drift** notices when a session no longer matches its title, or when a
+  message landed in the wrong tab.
+- **version-check** re-tests the kit after Claude Code updates.
+
+The hooks stay quiet unless they have something useful to say. If anything inside
+them fails, they do nothing. They cannot break a session.
+
+## Install
 
 ```bash
-./install.sh            # idempotent; --dry-run to preview, --uninstall to remove
+./install.sh     # --dry-run to preview, --uninstall to remove
 ```
 
-Installs the libraries to `~/.claude/session-kit/` and three skills —
-`/rename-session`, `/session-note`, `/handoff` — to `~/.claude/skills/`. It runs the
-test suite first and refuses to install if it fails, and it never edits
-`settings.json`: wiring the four optional hooks is your call. Merge this into
-`~/.claude/settings.json` to enable all of them:
+The installer runs the test suite first and refuses to install if anything fails.
+It never touches `settings.json`. To turn the hooks on, merge this in yourself:
 
 ```json
 {
@@ -38,78 +59,33 @@ test suite first and refuses to install if it fails, and it never edits
 }
 ```
 
-Each hook degrades to silence on any failure — none of them can break a session.
-(If you converge machines from a manifest, declare these four lines there instead
-and skip the paste.) From a checkout, the scripts also work in place:
+## Try it from a checkout
 
 ```bash
 . core/sessions.sh
-cs_list                                  # every session, live flag, best-known name
-cs_resolve_name "$CLAUDE_CODE_SESSION_ID"
-cs_find "memory review"                  # UUID, short-id prefix, or name substring
+cs_list                    # every session, with its best-known name
+cs_find "memory review"    # find a session by name or id
 
-. naming/rename.sh
-rename_apply "A new title"               # the session you are in, and only that one
-
-bash tests/run.sh                        # fixtures, runs anywhere
-bash tests/smoke.sh                      # real ~/.claude, invariants only, skips on CI
-bash tests/smoke.sh --report             # last failure, redacted and safe to paste
+bash tests/run.sh          # the test suite, runs on any machine
+bash tests/smoke.sh        # checks the kit against your real ~/.claude
 ```
 
-`smoke.sh` is what you run when Claude Code updates and the kit warns that internals
-may have moved. A `SessionStart` hook can do it for you; `install.sh` prints the line
-to add. On failure it writes a report built from safe fields only — versions, check
-names, and 8-character session ids, never titles or paths — so it can be pasted into
-an issue without carrying your work into it.
+If a Claude Code update changes something the kit depends on, `smoke.sh` fails and
+writes a report you can paste straight into an issue. The report contains version
+numbers and check names only. Never your titles, paths, or username.
 
-## The three problems it solves
+## Reading more
 
-1. **Session identity** ([docs/DESIGN-naming.md](docs/DESIGN-naming.md)) — a session has
-   three names in three places (VS Code tab title, CLI registration name, transcript
-   UUID), none of them synced. Titles drift from what the session is actually about,
-   and generic derived names ("documents-2d") make past work unfindable. The drift
-   detector closes the loop: it schedules the "does this still match?" question and
-   the in-session agent judges it, silently unless something is off.
-2. **Session continuity** ([docs/DESIGN-notes.md](docs/DESIGN-notes.md)) — a reopened
-   session starts cold. A per-session note (decided / done / next) written at
-   milestones is handed back on the first message after reopening, age-stamped so a
-   stale note can never masquerade as current.
-3. **Session handoff** ([docs/DESIGN-handoff.md](docs/DESIGN-handoff.md)) — moving work
-   is manual: tar the transcripts, carry a WIP note, rename files by hand, lose the
-   titles on the way. Now: a checksummed bundle with atomic import across machines,
-   or a note-only split into a fresh session on the same machine, with a soft guard
-   on the old one.
+- [docs/FLOWS.md](docs/FLOWS.md) shows how everything behaves, with diagrams.
+- The three `docs/DESIGN-*.md` files are decision records. Read them before
+  changing the kit; every rule in the code has its reason written down there.
 
-## Layout
+## Good to know
 
-```
-core/       read-only resolver over the transcript and pid-file layers
-naming/     rename helpers — every write the kit makes to a live session lives here
-notes/      per-session working notes (decided / done / next)
-handoff/    export, import, split, claim, release
-hooks/      version-check, session-note, session-guard, session-drift
-skills/     rename-session, session-note, handoff
-tests/      run.sh (fixtures, runs anywhere) + smoke.sh (real ~/.claude)
-install.sh  idempotent installer, refuses to install if the tests fail
-```
-
-`core/` reads two layers, the transcript and the pid-file. VS Code's `state.vscdb` is
-deliberately excluded: it only caches the rendered tab, and the tab resolves from the
-transcript anyway. See [docs/DESIGN-naming.md](docs/DESIGN-naming.md).
-
-## Shells
-
-**bash and zsh.** Both are tested by running the *whole* suite under each, not by
-checking that the library loads. An earlier version only checked loading, and passed
-while `cs_find`, `cs_list` and `cs_pid_file` were all broken under zsh — the two shells
-differ both in how a sourced file learns its own path (`BASH_SOURCE` vs `$0`) and in
-what an unmatched glob does (literal vs fatal).
-
-Other shells fail at parse time (`dash: Syntax error: redirection unexpected`), which is
-a deliberate, loud failure rather than a silent misbehaviour. If you need to source the
-library from somewhere that cannot report the sourced file's path, set
-`CLAUDE_SESSION_KIT_ROOT` to the kit root; a wrong or missing root produces an error
-naming that variable rather than a confusing path.
-
-Design rule carried over from the memory kit: plain files, plain bash, no server, no
-telemetry; every behavior covered by the test suite; installers idempotent.
+- Works with bash and zsh. The full test suite runs under both, on macOS and Linux.
+- Needs `jq`. Everything else is stock unix.
+- The kit reads Claude Code's own files but only ever appends to them. It never
+  rewrites a transcript and never touches VS Code's database.
+- Your notes live in their own folder. Uninstalling the kit never deletes them.
+- Claude Code's internals are undocumented and can change. The kit is built to
+  fail loudly and safely when they do, and to tell you what to run next.

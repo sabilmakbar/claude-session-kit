@@ -1,5 +1,9 @@
 # Design: session identity & naming
 
+> **This is a decision record, not a user guide.** It is dense on purpose: it
+> exists so that future changes know what they would be overturning. For how the
+> kit behaves day to day, read [FLOWS.md](FLOWS.md). For setup, the README.
+
 ## The problem
 
 One session has three identities, stored in three places that never talk to each other:
