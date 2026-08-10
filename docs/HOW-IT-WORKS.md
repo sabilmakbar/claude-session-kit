@@ -31,6 +31,10 @@ still matches its title. Three outcomes:
 
 A session that never got a real name gets a gentler nudge: want to name this?
 
+Both of those numbers, how much history a session needs before the checks start and
+how often they run, are settings rather than constants. [FLOWS.md](FLOWS.md) gives the
+values and the environment variables that change them.
+
 ## When a session outgrows itself
 
 A split moves a topic to a fresh session without moving any files:
@@ -47,6 +51,9 @@ If nobody claims the handoff within two days, the nudging stops and the old sess
 signpost changes to say so, with three ways out: claim it manually (that never
 expires), re-split with a fresh note, or release the topic back. The note's folder is
 never deleted either way; it is the record of why the split happened.
+
+A split passes through four states, and which sessions hear about it differs in each.
+[FLOWS.md](FLOWS.md) has both as a diagram and a table if you want the full picture.
 
 ## When you change machines
 
