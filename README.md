@@ -93,8 +93,10 @@ numbers and check names only. Never your titles, paths, or username.
 
 ## Reading more
 
-- [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) tells the whole story in plain words.
-- [docs/FLOWS.md](docs/FLOWS.md) shows the same behaviour as diagrams.
+- [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) tells the whole story in plain words,
+  and it is the only one you need in order to use the kit.
+- [docs/FLOWS.md](docs/FLOWS.md) is the next step down: diagrams of what runs when,
+  with the specifics the plain-language version leaves out.
 - [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) lists what the kit needs. Short
   version: `jq`.
 - The three `docs/DESIGN-*.md` files are decision records. Read them before
