@@ -113,7 +113,8 @@ verified against Claude Code 2.1.222
 the kit has been checked against on this machine. A skip is fine; it means a check had no
 data to run against.
 
-If something fails, paste the report rather than your terminal:
+If something fails, [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) works through it by
+symptom. To report it, paste the report rather than your terminal:
 
 ```bash
 bash ~/.claude/session-kit/tests/smoke.sh --report
@@ -130,6 +131,8 @@ machine.
   and it is the only one you need in order to use the kit.
 - [docs/FLOWS.md](docs/FLOWS.md) is the next step down: diagrams of what runs when,
   with the specifics the plain-language version leaves out.
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) is symptom, check, fix. Start
+  there when something is actually broken.
 - [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) lists what the kit needs. Short
   version: `jq`.
 - The three `docs/DESIGN-*.md` files are decision records. Read them before
