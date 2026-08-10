@@ -886,6 +886,32 @@ transcript "$FRESH3" >/dev/null; add_ai "$FRESH3" "x"
 is "a released handoff nudges nobody" "" "$(guard "$FRESH3")"
 drop_home
 
+# Stale: unclaimed past the pickup window. The old session's guard must say so and
+# name all three exits; fresh sessions must no longer be nudged at all.
+new_home
+OLD4=ffff9999-0000-0000-0000-000000000006
+FRESH5=ffff9999-0000-0000-0000-000000000007
+transcript "$OLD4" >/dev/null; add_ai "$OLD4" "Stale source"
+transcript "$FRESH5" >/dev/null; add_ai "$FRESH5" "x"
+pidfile "$$" "$OLD4" "documents-4" derived
+printf '## Context\nx\n## Assertions\n- x\n' >"$FAKE/note4.md"
+CLAUDE_CODE_SESSION_ID=$OLD4 bash "$ROOT/handoff/split.sh" -n "$FAKE/note4.md" -t "old topic" >/dev/null 2>&1
+touch -t 202001010000 "$FAKE/.claude/session-handoffs/$OLD4.handed"
+
+is "an aged handoff no longer nudges fresh sessions" "" "$(guard "$FRESH5")"
+SOUT=$(guard "$OLD4")
+case "$SOUT" in *NEVER\ CLAIMED*stale*claim.sh*re-split*release*) ok "the stale guard names the three exits" ;;
+    *) bad "the stale guard names the three exits" "stale wording + claim/re-split/release" "${SOUT:-silence}";; esac
+# Re-splitting re-arms: fresh marker → normal (non-stale) guard and pickup again.
+CLAUDE_CODE_SESSION_ID=$OLD4 bash "$ROOT/handoff/split.sh" -n "$FAKE/note4.md" -t "old topic" >/dev/null 2>&1
+rm -f "$FAKE/.claude/session-handoffs/$OLD4.guard-seen" "$FAKE/.claude/session-handoffs/$FRESH5.pickup-seen"
+case "$(guard "$OLD4")" in *NEVER\ CLAIMED*) bad "re-splitting re-arms the flow" "normal guard" "still stale";;
+    *split\ off*) ok "re-splitting re-arms the flow" ;;
+    *) bad "re-splitting re-arms the flow" "normal guard" "silence";; esac
+case "$(guard "$FRESH5")" in *pending*claim.sh*) ok "…and fresh sessions are nudged again" ;;
+    *) bad "…and fresh sessions are nudged again" "pickup payload" "silence";; esac
+drop_home
+
 # --- the drift hook ------------------------------------------------------------
 #
 # The hook never judges drift — it decides WHEN to ask, and the agent judges. So the

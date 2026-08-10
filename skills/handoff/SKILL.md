@@ -65,6 +65,12 @@ the user, exactly:
    agent claims it and receives the note as seed context. Manual fallback if the
    hook is not wired there: run `handoff/claim.sh <folder>` in the fresh session.
 
+**Finding a pending handoff** (after the automatic pickup window has passed, or when
+the user says "claim the stale/pending handoff"): every `*.handed` file in
+`~/.claude/session-handoffs/` whose `to` is null is unclaimed — read its `topic` and
+`folder` with jq, list them for the user if there is more than one, then claim with
+`handoff/claim.sh <folder>`. Claiming never expires; only the automatic nudge does.
+
 **Claiming side (if you are the fresh session):** after `claim.sh` prints the note,
 check each `## Assertions` entry — can you restate it from the note alone? If any
 fails, say so NOW: the old session is still alive and can fix the note this minute.
