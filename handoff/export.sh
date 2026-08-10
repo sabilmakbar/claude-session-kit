@@ -15,6 +15,11 @@
 
 set -euo pipefail
 
+# Refuse up front with no sha tool: the fallback chain in _ho_sha256 cannot report
+# absence, so continuing would emit a manifest full of empty digests instead of failing.
+command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 \
+    || { echo "export: sha256sum or shasum is required (bundle checksums)" >&2; exit 1; }
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 . "$ROOT/core/sessions.sh"
 

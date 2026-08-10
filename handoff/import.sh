@@ -17,6 +17,11 @@
 
 set -euo pipefail
 
+# Same guard as export.sh: with no sha tool, verification would compare empty digest
+# to empty digest and wave a damaged bundle through. Refuse instead.
+command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 \
+    || { echo "import: sha256sum or shasum is required (checksum verification)" >&2; exit 1; }
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 . "$ROOT/core/sessions.sh"
 . "$ROOT/naming/rename.sh"   # for RENAME_MAX_TITLE — rename_apply itself stays unused

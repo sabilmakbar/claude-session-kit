@@ -746,6 +746,20 @@ case "$AMB" in *ambiguous*) ok "…via the ambiguity branch, listing candidates"
 is "unknown refs are refused" 1 \
    "$(CLAUDE_SESSION_KIT_HOME="$HA" bash "$ROOT/handoff/export.sh" -o "$OUT" no-such-session >/dev/null 2>&1; echo $?)"
 
+# No sha tool on the machine: refuse before touching anything, never emit a bundle
+# with empty digests. Simulated with an empty PATH — the guard is the first line
+# after set -e, so nothing else can run first. The message is asserted too, so a
+# different command-not-found dying under set -e cannot pass this for the wrong reason.
+BASHBIN=$(command -v bash)
+NOSHA=$(PATH='' "$BASHBIN" "$ROOT/handoff/export.sh" whatever 2>&1 >/dev/null); RC=$?
+is "export with no sha tool refuses" 1 "$RC"
+case "$NOSHA" in *shasum*) ok "…naming the missing tool" ;;
+    *) bad "…naming the missing tool" "'shasum' in the error" "$NOSHA";; esac
+NOSHA=$(PATH='' "$BASHBIN" "$ROOT/handoff/import.sh" whatever.tar.gz 2>&1 >/dev/null); RC=$?
+is "import with no sha tool refuses" 1 "$RC"
+case "$NOSHA" in *shasum*) ok "…naming the missing tool" ;;
+    *) bad "…naming the missing tool" "'shasum' in the error" "$NOSHA";; esac
+
 printf 'this line is not json\n' >>"$PROJA/$S2.jsonl"
 is "a corrupt transcript refuses to export" 1 \
    "$(CLAUDE_SESSION_KIT_HOME="$HA" bash "$ROOT/handoff/export.sh" -o "$OUT" "$S2" >/dev/null 2>&1; echo $?)"
