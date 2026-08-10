@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Commit guardrail: block staged content that leaks machine paths, emails, or private
+# terms. This repo once shipped a home path in a doc and paid with a history rewrite
+# and a force-push; this hook makes that class of accident loud at commit time.
+#
+# Built-in patterns are GENERIC (any home path, any email) so this tracked file
+# carries no identifying info. Private terms (employers, clients, internal names) go
+# in, same convention as claude-memory-kit so one habit serves both kits:
+#   - env var:  export CLAUDE_CONFIG_DENYLIST="term1|term2"   (regex, |-separated)
+#   - and/or:   guardrail/denylist.local (untracked; one term/regex per line)
+#
+# Wired by install.sh when run from a git checkout: git config core.hooksPath guardrail
+# Override for a genuinely intended commit (discouraged): git commit --no-verify
+set -u
+
+hookdir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Generic leak signals: an absolute home path, or an email address.
+generic='(/home/|/Users/)[a-z][a-z0-9._/-]*|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+
+priv="${CLAUDE_CONFIG_DENYLIST:-}"
+if [ -f "$hookdir/denylist.local" ]; then
+    extra="$(grep -vE '^[[:space:]]*(#|$)' "$hookdir/denylist.local" | paste -sd'|' -)"
+    [ -n "$extra" ] && priv="${priv:+$priv|}$extra"
+fi
+pattern="$generic${priv:+|$priv}"
+
+files=()
+while IFS= read -r f; do files+=("$f"); done \
+    < <(git diff --cached --name-only --diff-filter=ACM)
+[ "${#files[@]}" -eq 0 ] && exit 0
+
+added="$(git diff --cached -U0 --no-color -- "${files[@]}" | grep -E '^\+' | grep -vE '^\+\+\+')"
+# SSH remote URLs (git@github.com:…) are not emails; drop them before judging.
+leaks="$(printf '%s\n' "$added" | grep -nEi "$pattern" | grep -vEi 'git@(github|gitlab|bitbucket)\.')"
+
+if [ -n "$leaks" ]; then
+    { echo "x commit blocked — staged content looks like a private/machine leak:"
+      printf '%s\n' "$leaks" | sed 's/^/   /'
+      echo ""
+      echo "Genericize (~ instead of a home path) or unstage. Override (discouraged): git commit --no-verify"
+    } >&2
+    exit 1
+fi
+exit 0

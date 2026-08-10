@@ -58,6 +58,17 @@ if [ "$DRY" -eq 0 ] && [ -f "$ROOT/tests/run.sh" ]; then
         exit 1; }
 fi
 
+# --- commit guardrail (checkout only) ----------------------------------------
+#
+# Wired via hooksPath so the TRACKED hook file stays the live one — updates arrive
+# with git pull, nothing to re-copy. Blocks staged home paths / emails / denylisted
+# terms; this repo once needed a history rewrite for exactly that leak. No-op when
+# this is not a git checkout (an installed copy has no commits to guard).
+if [ -d "$ROOT/.git" ] && [ -f "$ROOT/guardrail/pre-commit" ]; then
+    run git -C "$ROOT" config core.hooksPath guardrail
+    [ -f "$ROOT/guardrail/denylist.local" ] || run cp "$ROOT/guardrail/denylist.local.example" "$ROOT/guardrail/denylist.local"
+fi
+
 # --- libraries --------------------------------------------------------------
 
 echo "installing to $DEST_LIB"
