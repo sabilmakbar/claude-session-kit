@@ -16,7 +16,7 @@ from that run:
    the import had to rename files to raw UUIDs (required for resume), so the titles
    survived only in a hand-written table inside the WIP note.
 2. **A handoff is more than transcripts.** The useful bundle was transcripts + a WIP
-   backlog + a held diff — state that belongs to no repo. The WIP note turned out to be
+   backlog + a held diff: state that belongs to no repo. The WIP note turned out to be
    the most valuable file in the bundle.
 
 ## Second use case: same-machine session split (drift guardrail)
@@ -31,7 +31,7 @@ inheriting an overgrown one. Same-machine splits are handoff-lite: no transcript
 bundle, just the note (the old transcript stays put and resumable).
 
 The naming feature's drift detector (DESIGN-naming.md) is the trigger: on drift it
-offers a three-way fork — *rename* (work evolved), *split* (topic changed), or *wrong
+offers a three-way fork: *rename* (work evolved), *split* (topic changed), or *wrong
 session* (the user opened the wrong tab and asked something unrelated). Only **split**
 reaches this doc. The wrong-session case produces no bundle at all: nothing has evolved
 and nothing needs carrying over, so the remedy is an early warning, not a handoff.
@@ -44,7 +44,7 @@ fresh session, and no tarball is involved.
 
 Ask what the bundle format actually buys: checksums, collision detection, a source
 hostname. Every one of those exists because files crossed a gap between machines. On one
-machine nothing crosses a gap — the old transcript never moves and stays resumable — so
+machine nothing crosses a gap (the old transcript never moves and stays resumable), so
 the packaging is ceremony around a file that stays put.
 
 That splits the feature along a real seam rather than an arbitrary one:
@@ -58,13 +58,13 @@ That splits the feature along a real seam rather than an arbitrary one:
 handoff (lesson 2 above), and it is the only written record of *why* the split happened.
 Deleting it buys a few kilobytes and cannot be undone; moving it out of the way gets the
 same tidiness while keeping the evidence. Whatever performs the move must run **after**
-the session that wrote it has finished — a session tidying up its own working files
+the session that wrote it has finished; a session tidying up its own working files
 mid-flight is how you lose them.
 
 ### Verifying the handoff: the note declares its own assertions
 
-The tempting design — have a verifier quiz the fresh session and compare against the
-original — fails whichever ground truth you pick:
+The tempting design (have a verifier quiz the fresh session and compare against the
+original) fails whichever ground truth you pick:
 
 - **Against the note**: the note is in the new session's context, so it passes always.
   That is a receipt, not verification.
@@ -87,7 +87,7 @@ states once and briefly. The session that did the work is also far better placed
 grader to know which three facts are load-bearing.
 
 **Point it at the note, not at the new session, and run it early.** On one machine the
-original session is still sitting there, resumable — so a failed check does not mean
+original session is still sitting there, resumable, so a failed check does not mean
 "keep the folder", it means "the note is inadequate and you can fix it right now". That
 signal is only available in the same-machine case, precisely because nothing was torn
 down. Used as a deletion gate it is a lot of machinery for a question whose safe default
@@ -95,13 +95,13 @@ is "keep the file"; used as a note-quality check it runs while the fix is still 
 
 ### After a split, the old session becomes a record, not a workspace
 
-A split that leaves the old session still working the same topic is not a split — it is a
+A split that leaves the old session still working the same topic is not a split; it is a
 fork, and you end up with two divergent contexts on one piece of work.
 
 But two different things can be asked of the old session, and only one should be guarded:
 
-- **Continuing the handed-over work** — redirect. That is what moved.
-- **Recalling what happened before the split** — answer normally. The old session is the
+- **Continuing the handed-over work**: redirect. That is what moved.
+- **Recalling what happened before the split**: answer normally. The old session is the
   only place the *argument* survives; the note carries the conclusion.
 
 A guard that blocked both would destroy the reason to keep the old session at all.
@@ -116,7 +116,7 @@ Mechanism: a `UserPromptSubmit` / `SessionStart` hook injecting `additionalConte
 same pattern the memory kit uses (both events confirmed present in the extension's
 settings schema).
 
-**This is where a kit-owned state file is justified** — the opposite of the naming
+**This is where a kit-owned state file is justified**: the opposite of the naming
 decision, for a specific reason. The name sidecar was dropped because Claude Code already
 stores names and reads them, so ours would have been a second source of truth. "This
 session handed topic X to session Y on this date" is something Claude Code has no concept
@@ -134,13 +134,13 @@ Two requirements, or it becomes a trap:
 Same-machine only. Across machines the original session is usually not present to guard.
 
 **The link is recorded pending, then completed by a claim** (built 2026-08-09). The
-design above says the split records the link in both directions "when it happens" —
+design above says the split records the link in both directions "when it happens",
 but at split time the destination session does not exist yet, so there is no id to
 record. Resolution: `split.sh` writes the old session's marker with `to: null` and a
 `from` file inside the folder; the fresh session's first act is `claim.sh <folder>`,
 which fills in both directions with real ids. Until a claim happens the guard still
 works, it just says "a fresh session that has not claimed it yet" instead of naming
-one. The claim step is also where the note's self-declared assertions get checked —
+one. The claim step is also where the note's self-declared assertions get checked:
 by the claiming agent, semantically, while the old session is still alive to fix an
 inadequate note. One active handoff per session: a second split overwrites the first;
 modelling multiple simultaneous outbound topics was considered and skipped.
@@ -156,7 +156,7 @@ tools. Two consequences, neither of which changes scope:
   behind `core/`; a `~/.codex` adapter could plug in there someday. Until a concrete
   target exists, handoff reads and writes Claude Code sessions only.
 - **The note is the portable layer.** `HANDOFF.md` is plain markdown any agent can
-  ingest; the transcripts are the Claude-native payload. Keep that separation — never
+  ingest; the transcripts are the Claude-native payload. Keep that separation: never
   let the note's usefulness depend on the transcripts beside it.
 
 ## Proposed format: one bundle, one manifest
@@ -164,7 +164,7 @@ tools. Two consequences, neither of which changes scope:
 ```
 session-handoff-<date>.tar.gz
 ├── manifest.json      # the part tonight was missing
-├── sessions/<session-id>.jsonl   # original UUID filenames — no rename dance
+├── sessions/<session-id>.jsonl   # original UUID filenames, no rename dance
 ├── notes/HANDOFF.md   # freeform WIP/backlog note (template provided, never generated)
 └── files/…            # optional loose artifacts (diffs, patches)
 ```
@@ -174,15 +174,15 @@ line count, sha256. Plus: bundle date, source hostname, kit version.
 
 ## Proposed pieces
 
-1. **`handoff/export.sh <session-ref>… [files…]`** — resolve refs via `core/` (title
+1. **`handoff/export.sh <session-ref>… [files…]`**: resolve refs via `core/` (title
    substring or id), validate each transcript (valid JSON tail), write manifest,
    bundle. Refuses to run if a ref is ambiguous.
-2. **`handoff/import.sh <bundle>`** — verify checksums; refuse on session-id collision
+2. **`handoff/import.sh <bundle>`**: verify checksums; refuse on session-id collision
    with a *different* file (byte-identical = skip silently); install under the current
    machine's project dir; append each session's manifest `title` as a `custom-title`
    line in its transcript (DESIGN-naming.md) so the name survives the move and appears
    in the target machine's session picker; print the HANDOFF.md note.
-3. **Skill `/handoff`** — interactive wrapper: pick sessions, draft the HANDOFF.md from
+3. **Skill `/handoff`**, an interactive wrapper: pick sessions, draft the HANDOFF.md from
    the current session's state, run export, tell the user where the bundle is.
 
 ## Non-goals
@@ -211,10 +211,10 @@ line count, sha256. Plus: bundle date, source hostname, kit version.
   filenames or a hand-written table.
 
   This is strictly better than the sidecar it replaces, because Claude Code reads
-  `custom-title` itself — an imported session shows its real name in the normal session
+  `custom-title` itself: an imported session shows its real name in the normal session
   picker, not only in this kit's tooling. Imported sessions are also the safe case for
   writing it: no process is attached, so there is no concurrent writer to interleave
-  with. The VS Code *tab* picks it up too, the next time that session is opened —
+  with. The VS Code *tab* picks it up too, the next time that session is opened;
   verified 2026-08-05, see DESIGN-naming.md.
 
   **Import is also the right place to normalise titles**, which a live session is not. A
@@ -225,5 +225,5 @@ line count, sha256. Plus: bundle date, source hostname, kit version.
 
   Import is likewise the concrete caller that brings back the other-session write path
   deferred in DESIGN-naming.md's decision record: it knows exactly which sessions it just
-  installed and can assert against its own manifest — an independent source, unlike a
+  installed and can assert against its own manifest: an independent source, unlike a
   caller that satisfies a check from the same lookup it just performed.
