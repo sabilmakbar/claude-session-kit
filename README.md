@@ -8,7 +8,10 @@ remembers nothing about where you left off. Half-finished work stranded on the
 other laptop. This kit fixes those: it gives sessions real names, leaves you a note
 for next time, and moves or splits sessions cleanly.
 
-It is plain bash plus `jq`. No server, no telemetry, nothing to build.
+It is plain bash plus `jq`. Moving sessions between machines also needs `shasum` or
+`sha256sum`, one of which is stock on macOS and Linux; without one, export and import
+refuse rather than write a bundle nothing can verify. No server, no telemetry, nothing
+to build.
 
 ## What you get
 
