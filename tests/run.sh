@@ -893,6 +893,14 @@ case "$OUT" in *Wrong-session\ check*Fixing\ the\ tokenizer*) ok "a reopened ses
 # the kit, delivered once per opening, not in any per-user memory.
 case "$OUT" in *Standing\ watch*split*rename-session*) ok "…and sets the standing health watch" ;;
     *) bad "…and sets the standing health watch" "standing-watch instruction" "${OUT:-silence}";; esac
+# A live trial showed an agent flagging the mismatch and then running a locate
+# anyway, dumping unrelated directory listings into the session. The payload must
+# forbid preliminary work outright, allow cs_find as the one routing lookup, and
+# gate "do it here" on an explicit user override.
+case "$OUT" in *NO\ tool\ calls*nothing\ preliminary*) ok "…and forbids preliminary work on an off-topic ask" ;;
+    *) bad "…and forbids preliminary work on an off-topic ask" "a no-preliminary clause" "${OUT:-silence}";; esac
+case "$OUT" in *cs_find*explicitly*) ok "…and routes via cs_find with override gated on explicit consent" ;;
+    *) bad "…and routes via cs_find with override gated on explicit consent" "cs_find + explicit override" "${OUT:-silence}";; esac
 is "…exactly once — the next message is quiet" "" "$(drift "$ID")"
 { kill "$DPID" && wait "$DPID"; } 2>/dev/null
 drop_home

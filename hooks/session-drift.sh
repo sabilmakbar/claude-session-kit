@@ -61,8 +61,8 @@ if [ "$pid" != "$seen_pid" ]; then
     # failure cannot repeat the check on every prompt.
     mark || exit 0
     [ "$lines" -ge "$MIN_HISTORY" ] || exit 0
-    printf 'Wrong-session check (first message after reopening): this session is about "%s" (%s entries of history). If the user'\''s message clearly belongs to different work, say so BEFORE answering — they may have the wrong tab, and answering here would pollute this session'\''s context. If it fits, answer normally and do not mention this check. Standing watch for the rest of this session, on your own initiative: if a distinct NEW arc of work starts, offer to split it into a fresh session (handoff skill) before it grows; if the same work evolves past the title, offer the rename-session skill; stay silent while the session is healthy.\n' \
-        "$name" "$lines"
+    printf 'Wrong-session check (first message after reopening): this session is about "%s" (%s entries of history). If the user'\''s message clearly belongs to different work, STOP before answering: run NO tool calls toward that question — no locating, no scanning, nothing preliminary; even a directory listing pollutes this session. The only permitted lookup is routing: `. %s/core/sessions.sh && cs_find "<topic words>"` to find an existing session for it. Then offer, in order: (1) the existing session, by title, if cs_find found one; (2) a fresh session, offering to carry the question over via the handoff skill; (3) doing it here — only if the user explicitly says so after seeing 1 and 2. If the message fits this session, answer normally and do not mention this check. Standing watch for the rest of this session, on your own initiative: if a distinct NEW arc of work starts, offer to split it into a fresh session (handoff skill) before it grows; if the same work evolves past the title, offer the rename-session skill; stay silent while the session is healthy.\n' \
+        "$name" "$lines" "$ROOT"
     exit 0
 fi
 
