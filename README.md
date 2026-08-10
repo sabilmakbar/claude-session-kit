@@ -32,10 +32,24 @@ them fails, they do nothing. They cannot break a session.
 ## Install
 
 ```bash
-./install.sh     # --dry-run to preview, --uninstall to remove
+git clone https://github.com/sabilmakbar/claude-session-kit.git ~/claude-session-kit
+~/claude-session-kit/install.sh     # --dry-run to preview, --uninstall to remove
 ```
 
-The installer runs the test suite first and refuses to install if anything fails.
+The installer runs the test suite first and refuses to install if anything fails, then
+checks that the copy it just installed loads. Re-running it is safe.
+
+To confirm it works, ask it to list your sessions:
+
+```bash
+. ~/.claude/session-kit/core/sessions.sh && cs_list
+```
+
+You should get one line per session: its id, whether it is live or dead, and the best name
+the kit can find for it. If nothing prints, or the name column comes back empty, the usual
+cause is a missing `jq` (see [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)). The three
+skills are available in any new session; `/rename-session` is the quickest one to try.
+
 It never touches `settings.json`. To turn the hooks on, merge this in yourself:
 
 ```json
