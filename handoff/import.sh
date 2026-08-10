@@ -32,9 +32,14 @@ BUNDLE="$1"
 cs_have_deps || { echo "import: jq not found" >&2; exit 1; }
 cs_version_guard
 
-_ho_sha256() {
-    if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
-    else shasum -a 256 "$1" | cut -d' ' -f1; fi
+_ho_sha256() {  # <file> -> 64-hex digest, or hard stop (mirrors export.sh: a blank
+    # computed digest must never reach the comparison — blank == blank would verify).
+    local d
+    if command -v sha256sum >/dev/null 2>&1; then d=$(sha256sum "$1" | cut -d' ' -f1)
+    else d=$(shasum -a 256 "$1" | cut -d' ' -f1); fi
+    case "$d" in *[!0-9a-f]*|"") d=bad; esac
+    [ "${#d}" -eq 64 ] || { echo "import: checksum of ${1##*/} failed — cannot verify bundle" >&2; exit 1; }
+    printf '%s\n' "$d"
 }
 
 WORK=$(mktemp -d)

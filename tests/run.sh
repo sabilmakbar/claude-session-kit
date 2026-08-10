@@ -760,6 +760,23 @@ is "import with no sha tool refuses" 1 "$RC"
 case "$NOSHA" in *shasum*) ok "…naming the missing tool" ;;
     *) bad "…naming the missing tool" "'shasum' in the error" "$NOSHA";; esac
 
+# A sha tool that EXISTS but misbehaves (prints nothing) is the deeper version of the
+# same hole: presence passes the guard, so the digest VALUE must be validated at each
+# use — otherwise a blank lands in the manifest, and blank == blank verifies on import.
+STUB=$(mktemp -d)
+printf '#!/bin/sh\nexit 0\n' >"$STUB/sha256sum" && chmod +x "$STUB/sha256sum"
+BROKE=$(PATH="$STUB:$PATH" CLAUDE_SESSION_KIT_HOME="$HA" \
+        bash "$ROOT/handoff/export.sh" -o "$OUT" "$S1" 2>&1 >/dev/null); RC=$?
+is "a sha tool that outputs nothing refuses export" 1 "$RC"
+case "$BROKE" in *checksum*) ok "…blaming the checksum, not something else" ;;
+    *) bad "…blaming the checksum, not something else" "'checksum' in the error" "$BROKE";; esac
+BROKE=$(PATH="$STUB:$PATH" CLAUDE_SESSION_KIT_HOME="$HB" \
+        bash "$ROOT/handoff/import.sh" "$BUNDLE" 2>&1 >/dev/null); RC=$?
+is "a sha tool that outputs nothing refuses import" 1 "$RC"
+case "$BROKE" in *checksum*) ok "…blaming the checksum, not something else" ;;
+    *) bad "…blaming the checksum, not something else" "'checksum' in the error" "$BROKE";; esac
+rm -rf "$STUB"
+
 printf 'this line is not json\n' >>"$PROJA/$S2.jsonl"
 is "a corrupt transcript refuses to export" 1 \
    "$(CLAUDE_SESSION_KIT_HOME="$HA" bash "$ROOT/handoff/export.sh" -o "$OUT" "$S2" >/dev/null 2>&1; echo $?)"

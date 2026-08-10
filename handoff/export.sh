@@ -25,9 +25,16 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 
 usage() { echo "usage: export.sh [-o <dir>] [-n <note.md>] <session-ref>... [-- <file>...]" >&2; exit 2; }
 
-_ho_sha256() {  # <file> -> hex digest, whichever tool this OS has
-    if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
-    else shasum -a 256 "$1" | cut -d' ' -f1; fi
+_ho_sha256() {  # <file> -> 64-hex digest, or hard stop. The VALUE is validated, not
+    # just the tool's presence: a tool that fails mid-run yields a blank digest, and a
+    # blank in the manifest verifies against a blank on import. Callers must use a
+    # plain assignment (sha=$(_ho_sha256 f)) — in argument position the exit is swallowed.
+    local d
+    if command -v sha256sum >/dev/null 2>&1; then d=$(sha256sum "$1" | cut -d' ' -f1)
+    else d=$(shasum -a 256 "$1" | cut -d' ' -f1); fi
+    case "$d" in *[!0-9a-f]*|"") d=bad; esac
+    [ "${#d}" -eq 64 ] || { echo "export: checksum of $1 failed — refusing to bundle" >&2; exit 1; }
+    printf '%s\n' "$d"
 }
 
 OUT_DIR="$PWD"; NOTE=""
@@ -97,6 +104,7 @@ for id in "${IDS[@]}"; do
     # Manifest fields come from the COPY: the original may be live and still growing,
     # and the hash must describe the bytes actually in the bundle.
     c="$STAGE/sessions/$id.jsonl"
+    sha=$(_ho_sha256 "$c")
     entry=$(jq -n \
         --arg id "$id" \
         --arg title "$(cs_resolve_name "$id")" \
@@ -104,7 +112,7 @@ for id in "${IDS[@]}"; do
         --arg first "$(jq -rs 'map(select(.timestamp)) | .[0].timestamp // ""' "$c" 2>/dev/null)" \
         --arg last "$(jq -rs 'map(select(.timestamp)) | .[-1].timestamp // ""' "$c" 2>/dev/null)" \
         --argjson lines "$(wc -l <"$c" | tr -d ' ')" \
-        --arg sha "$(_ho_sha256 "$c")" \
+        --arg sha "$sha" \
         '{id:$id, title:$title, cwd:$cwd, first_ts:$first, last_ts:$last, lines:$lines, sha256:$sha}')
     entries=$(jq -n --argjson a "$entries" --argjson e "$entry" '$a + [$e]')
 done
