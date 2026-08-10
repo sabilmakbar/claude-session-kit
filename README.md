@@ -91,6 +91,28 @@ If a Claude Code update changes something the kit depends on, `smoke.sh` fails a
 writes a report you can paste straight into an issue. The report contains version
 numbers and check names only. Never your titles, paths, or username.
 
+## Is it working?
+
+If something seems off, or Claude Code has just updated itself, run the smoke suite. It
+checks the installed kit against your real `~/.claude` rather than against fixtures, and
+it only reads:
+
+```
+$ bash ~/.claude/session-kit/tests/smoke.sh
+smoke: 23 transcripts
+
+layout
+  ok   every transcript is at the expected depth
+  ok   a Claude Code version is readable from the pid-files
+...
+13 passed, 0 failed, 0 skipped
+verified against Claude Code 2.1.222
+```
+
+`0 failed` is the answer you want, and the last line tells you which Claude Code version
+the kit has been checked against on this machine. A skip is fine; it means a check had no
+data to run against. A failure names the check and writes a report.
+
 ## Reading more
 
 - [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) tells the whole story in plain words,
