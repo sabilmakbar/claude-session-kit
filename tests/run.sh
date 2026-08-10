@@ -504,6 +504,73 @@ CLAUDE_SESSION_KIT_ROOT="$ROOT" bash "$ROOT/hooks/version-check.sh" >/dev/null 2
 is "hook exits 0 when the version is already verified" 0 $?
 drop_home
 
+# The attempt throttle (design borrowed back from claude-memory-kit): a mismatch
+# launches the suite ONCE per version per day, not on every session start — a
+# persistently failing suite gives the same answer however often it is re-asked.
+# A stub kit root with a counting smoke.sh makes the launches observable.
+new_home
+mkdir -p "$FAKE/kit/core" "$FAKE/kit/tests" "$FAKE/kit/hooks"
+cp "$ROOT/core/sessions.sh" "$FAKE/kit/core/sessions.sh"
+printf '#!/bin/bash\necho x >>"%s/kit/.count"\n' "$FAKE" >"$FAKE/kit/tests/smoke.sh"
+jq -n '{pid:1,sessionId:"z",name:"n",version:"9.9.9"}' >"$PIDS/1.json"
+CLAUDE_SESSION_KIT_ROOT="$FAKE/kit" bash "$ROOT/hooks/version-check.sh"
+CLAUDE_SESSION_KIT_ROOT="$FAKE/kit" bash "$ROOT/hooks/version-check.sh"
+CLAUDE_SESSION_KIT_ROOT="$FAKE/kit" bash "$ROOT/hooks/version-check.sh"
+for i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$FAKE/kit/.count" ] && break; sleep 0.3; done
+is "three session starts on one bad version launch the suite once" 1 \
+   "$(grep -c x "$FAKE/kit/.count" 2>/dev/null)"
+is "…and the attempt is stamped" "9.9.9 $(date +%F)" \
+   "$(cat "$FAKE/.claude/session-kit/.smoke-attempt" 2>/dev/null)"
+jq -n '{pid:1,sessionId:"z",name:"n",version:"9.9.10"}' >"$PIDS/1.json"
+CLAUDE_SESSION_KIT_ROOT="$FAKE/kit" bash "$ROOT/hooks/version-check.sh"
+for i in 1 2 3 4 5 6 7 8 9 10; do [ "$(grep -c x "$FAKE/kit/.count" 2>/dev/null)" = "2" ] && break; sleep 0.3; done
+is "a NEW version bypasses the day throttle" 2 "$(grep -c x "$FAKE/kit/.count" 2>/dev/null)"
+drop_home
+
+# --- the commit guardrail ------------------------------------------------------
+#
+# Leak fixtures are built by string concatenation so THIS file never contains a
+# literal home path or email — once the guardrail is wired, it scans every commit
+# to this repo, including commits that edit this very suite.
+
+echo "the commit guardrail"
+
+# (No committer identity configured: the scratch repo only ever stages, and the
+# guardrail itself blocked an email-shaped config value here when it was inline.)
+GR=$(mktemp -d)
+git -C "$GR" init -q
+
+printf 'a clean line, ~ instead of a real path\n' >"$GR/ok.md"
+git -C "$GR" add ok.md
+is "clean staged content passes" 0 \
+   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+
+leak_path="/Use""rs/janedoe/secret-project"
+printf 'data at %s today\n' "$leak_path" >"$GR/leak.md"
+git -C "$GR" add leak.md
+is "a staged home path is blocked" 1 \
+   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+git -C "$GR" rm -q --cached leak.md
+
+leak_mail="someone@""example.com"
+printf 'contact: %s\n' "$leak_mail" >"$GR/mail.md"
+git -C "$GR" add mail.md
+is "a staged email is blocked" 1 \
+   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+git -C "$GR" rm -q --cached mail.md
+
+printf 'remote: git@github.com:someone/repo.git\n' >"$GR/rem.md"
+git -C "$GR" add rem.md
+is "an SSH remote URL is not treated as an email" 0 \
+   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+git -C "$GR" rm -q --cached rem.md
+
+printf 'the contoso engagement notes\n' >"$GR/dl.md"
+git -C "$GR" add dl.md
+is "a denylisted term via env is blocked" 1 \
+   "$(cd "$GR" && CLAUDE_CONFIG_DENYLIST=contoso bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+rm -rf "$GR"
+
 # --- session notes -----------------------------------------------------------
 #
 # Storage is trivial; the tests aim at the feature's two real risks — a note

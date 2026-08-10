@@ -39,5 +39,15 @@ running=$(cs_running_version 2>/dev/null) || exit 0
 
 [ "$running" = "$(cs_verified_version)" ] && exit 0
 
+# One attempt per version per day — borrowed back from claude-memory-kit, which
+# adopted this hook's design and fixed its flaw: a persistently failing suite used
+# to re-run on every session start, and the answer does not change by re-asking.
+# smoke.sh already leaves the redacted failure report as the receipt. Stamp BEFORE
+# spawning, so a crashing suite cannot re-trigger itself either.
+mark="$running $(date +%F)"
+stamp="$(_cs_state_dir)/.smoke-attempt"
+[ -r "$stamp" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$mark" ] && exit 0
+{ mkdir -p "$(_cs_state_dir)" && printf '%s\n' "$mark" >"$stamp"; } 2>/dev/null || exit 0
+
 ( bash "$ROOT/tests/smoke.sh" >/dev/null 2>&1 & ) 2>/dev/null
 exit 0
