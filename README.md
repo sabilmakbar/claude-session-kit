@@ -143,3 +143,16 @@ Removes the installed libraries and the three skills. It leaves your notes
 and every transcript exactly where they are. The kit never owned those. If you
 wired the hooks into `settings.json`, remove those lines too; until you do they
 point at nothing and silently do nothing.
+
+## Related projects
+
+- **[claude-setup-template](https://github.com/sabilmakbar/claude-setup-template)**: one
+  manifest for a whole Claude Code setup. You declare the kits, CLI tools, plugins, and
+  hooks a machine should have, and its `setup.sh` converges the machine onto it. Its
+  example manifest installs this kit and takes care of the `settings.json` hook wiring
+  above, so start there if you are setting up a machine rather than adding one piece.
+- **[claude-memory-kit](https://github.com/sabilmakbar/claude-memory-kit)**: the sibling
+  kit. It keeps the preferences you teach Claude across sessions and machines, where this
+  kit looks after the sessions themselves.
+
+MIT licensed, see [LICENSE](LICENSE).
