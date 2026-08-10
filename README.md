@@ -111,7 +111,18 @@ verified against Claude Code 2.1.222
 
 `0 failed` is the answer you want, and the last line tells you which Claude Code version
 the kit has been checked against on this machine. A skip is fine; it means a check had no
-data to run against. A failure names the check and writes a report.
+data to run against.
+
+If something fails, paste the report rather than your terminal:
+
+```bash
+bash ~/.claude/session-kit/tests/smoke.sh --report
+```
+
+That report is built to be published. It carries versions, check names, and the first eight
+characters of a session id, never a title or a path. The terminal output is deliberately not
+redacted, because seeing the offending title is what makes a failure debuggable on your own
+machine.
 
 ## Reading more
 
