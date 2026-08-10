@@ -16,9 +16,31 @@ three design docs record every decision and what it overturned.
 Installs the libraries to `~/.claude/session-kit/` and three skills —
 `/rename-session`, `/session-note`, `/handoff` — to `~/.claude/skills/`. It runs the
 test suite first and refuses to install if it fails, and it never edits
-`settings.json`: the four optional hooks (version check on `SessionStart`; note,
-guard, and drift on `UserPromptSubmit`) are printed at the end for you to wire
-yourself. From a checkout, the scripts also work in place:
+`settings.json`: wiring the four optional hooks is your call. Merge this into
+`~/.claude/settings.json` to enable all of them:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [
+        { "type": "command", "command": "\"$HOME/.claude/session-kit/hooks/version-check.sh\" 2>/dev/null || true" }
+      ]}
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [
+        { "type": "command", "command": "\"$HOME/.claude/session-kit/hooks/session-note.sh\" 2>/dev/null || true" },
+        { "type": "command", "command": "\"$HOME/.claude/session-kit/hooks/session-guard.sh\" 2>/dev/null || true" },
+        { "type": "command", "command": "\"$HOME/.claude/session-kit/hooks/session-drift.sh\" 2>/dev/null || true" }
+      ]}
+    ]
+  }
+}
+```
+
+Each hook degrades to silence on any failure — none of them can break a session.
+(If you converge machines from a manifest, declare these four lines there instead
+and skip the paste.) From a checkout, the scripts also work in place:
 
 ```bash
 . core/sessions.sh
