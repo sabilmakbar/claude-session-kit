@@ -58,5 +58,7 @@ jq -n --arg dir "$DIR" --arg topic "$TOPIC" --arg date "$(date -u +%Y-%m-%dT%H:%
     '{folder:$dir, topic:$topic, date:$date, to:null}' >"$HANDOFFS/$ID.handed"
 
 echo "split: folder written — $DIR"
-echo "next: open a FRESH session and have it run:"
+echo "next: open a FRESH session — its first message will surface this handoff and"
+echo "the agent claims it automatically (the session-guard hook watches for it)."
+echo "manual fallback, from the fresh session:"
 echo "  bash '$ROOT/handoff/claim.sh' '$DIR'"

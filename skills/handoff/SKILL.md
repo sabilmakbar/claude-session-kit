@@ -60,9 +60,10 @@ This writes the folder and puts a pending guard on the CURRENT session. Then tel
 the user, exactly:
 
 1. Open a **fresh** session for the split-off topic.
-2. Its first message should be: *claim the handoff at `<folder>`* — the fresh
-   session runs `handoff/claim.sh <folder>`, which links the two sessions and
-   prints the note as its seed context.
+2. Type anything — their first message surfaces the pending handoff automatically
+   (the session-guard hook watches for unclaimed handoffs), and that session's
+   agent claims it and receives the note as seed context. Manual fallback if the
+   hook is not wired there: run `handoff/claim.sh <folder>` in the fresh session.
 
 **Claiming side (if you are the fresh session):** after `claim.sh` prints the note,
 check each `## Assertions` entry — can you restate it from the note alone? If any

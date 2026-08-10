@@ -23,7 +23,40 @@ sid=$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null | tr -cd '
 
 HANDOFFS="$(_cs_home)/.claude/session-handoffs"
 M="$HANDOFFS/$sid.handed"
-[ -r "$M" ] || exit 0
+
+# --- pickup side: a BRAND-NEW session meets a pending handoff -------------------
+#
+# The one step that cannot be automated is opening the fresh tab (no receipted way
+# to drive the VS Code UI — same discipline as never touching state.vscdb). This
+# removes every step after it: the new session's first message surfaces the pending
+# handoff and the agent claims it, the user's own message serving as confirmation.
+# Scoped hard so it cannot nag: only sessions with almost no history, only handoffs
+# from the last 48h, only while unclaimed, and mentioned exactly once per session.
+if [ ! -r "$M" ]; then
+    lines=0
+    tp=$(cs_transcript_path "$sid") && lines=$(wc -l <"$tp" | tr -d ' ')
+    [ "$lines" -lt "${CS_PICKUP_MAX_HISTORY:-20}" ] || exit 0
+    [ ! -e "$HANDOFFS/$sid.pickup-seen" ] || exit 0
+    [ ! -e "$HANDOFFS/$sid.claimed" ] || exit 0
+
+    pending=""
+    while IFS= read -r m; do
+        [ -n "$m" ] || continue
+        [ "$(basename "$m" .handed)" = "$sid" ] && continue
+        [ "$(jq -r '.to // empty' "$m" 2>/dev/null)" = "" ] && pending="$m"
+    done < <(find "$HANDOFFS" -maxdepth 1 -name '*.handed' -mmin -"${CS_PICKUP_WINDOW_MIN:-2880}" 2>/dev/null | sort)
+    [ -n "$pending" ] || exit 0
+
+    OLD=$(basename "$pending" .handed)
+    topic=$(jq -r '.topic // empty' "$pending" 2>/dev/null)
+    folder=$(jq -r '.folder // empty' "$pending" 2>/dev/null)
+    from=$(cs_resolve_name "$OLD" 2>/dev/null)
+
+    mkdir -p "$HANDOFFS" 2>/dev/null && : >"$HANDOFFS/$sid.pickup-seen" 2>/dev/null || exit 0
+    printf 'A pending same-machine handoff is waiting to be claimed: topic%s, split from session "%s". If the user'\''s message is about continuing that work (or they say to claim it), claim it NOW — run: bash %s/handoff/claim.sh %s — it links the sessions and prints the handoff note as this session'\''s seed context; treat the user'\''s message itself as the confirmation, do not ask again. If their message is about something unrelated, mention the pending handoff in one sentence and answer their actual question; do not bring it up again.\n' \
+        "${topic:+ \"$topic\"}" "${from:-$OLD}" "$ROOT" "'$folder'"
+    exit 0
+fi
 
 pf=$(cs_pid_file "$sid") || exit 0
 pid=$(jq -r '.pid // empty' "$pf" 2>/dev/null)

@@ -844,6 +844,48 @@ is "release with no argument releases the current session" 0 \
 [ ! -e "$HDIR/$OLD.handed" ] && ok "…and the marker is gone" || bad "…and the marker is gone" "removed" "present"
 drop_home
 
+# --- handoff pickup --------------------------------------------------------------
+#
+# The new-session side of the split: a brand-new session's first message surfaces a
+# pending handoff so the agent can claim it — the one manual step left is opening
+# the tab. Scoped hard: near-empty sessions only, unclaimed only, once per session.
+
+echo "handoff pickup"
+
+new_home
+OLD2=ffff9999-0000-0000-0000-000000000001
+FRESH=ffff9999-0000-0000-0000-000000000002
+BUSY=ffff9999-0000-0000-0000-000000000003
+transcript "$OLD2" >/dev/null; add_ai "$OLD2" "The source session"
+transcript "$FRESH" >/dev/null; add_ai "$FRESH" "x"
+transcript "$BUSY" >/dev/null; for i in $(seq 1 25); do add_line "$BUSY" '{"type":"filler"}'; done
+pidfile "$$" "$OLD2" "documents-2" derived    # derived, so the ai-title resolves
+printf '## Context\nrelease pass\n## Assertions\n- x\n' >"$FAKE/note3.md"
+CLAUDE_CODE_SESSION_ID=$OLD2 bash "$ROOT/handoff/split.sh" -n "$FAKE/note3.md" -t "release pass" >/dev/null 2>&1
+
+guard() { printf '{"session_id":"%s"}' "$1" | bash "$ROOT/hooks/session-guard.sh"; }
+
+OUT=$(guard "$FRESH")
+case "$OUT" in *pending*"release pass"*"The source session"*claim.sh*) ok "a fresh session is told about the pending handoff" ;;
+    *) bad "a fresh session is told about the pending handoff" "pickup payload" "${OUT:-silence}";; esac
+is "…once — the next message is quiet" "" "$(guard "$FRESH")"
+is "a session with real history is never nudged" "" "$(guard "$BUSY")"
+
+# After the claim, other fresh sessions stay quiet.
+FRESH2=ffff9999-0000-0000-0000-000000000004
+transcript "$FRESH2" >/dev/null; add_ai "$FRESH2" "x"
+CLAUDE_CODE_SESSION_ID=$FRESH bash "$ROOT/handoff/claim.sh" \
+    "$(jq -r '.folder' "$FAKE/.claude/session-handoffs/$OLD2.handed")" >/dev/null 2>&1
+is "a claimed handoff nudges nobody else" "" "$(guard "$FRESH2")"
+
+# Release also stops the nudge (fresh marker, then release before any claim).
+CLAUDE_CODE_SESSION_ID=$OLD2 bash "$ROOT/handoff/split.sh" -n "$FAKE/note3.md" >/dev/null 2>&1
+bash "$ROOT/handoff/release.sh" "$OLD2" >/dev/null 2>&1
+FRESH3=ffff9999-0000-0000-0000-000000000005
+transcript "$FRESH3" >/dev/null; add_ai "$FRESH3" "x"
+is "a released handoff nudges nobody" "" "$(guard "$FRESH3")"
+drop_home
+
 # --- the drift hook ------------------------------------------------------------
 #
 # The hook never judges drift — it decides WHEN to ask, and the agent judges. So the
