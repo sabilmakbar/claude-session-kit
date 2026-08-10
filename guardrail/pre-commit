@@ -42,4 +42,23 @@ if [ -n "$leaks" ]; then
     } >&2
     exit 1
 fi
+
+# House style: no em-dashes in the reader-facing docs (README.md, docs/*.md).
+# Same rule, same scope, as claude-memory-kit: one habit serves both kits. Code
+# and this hook keep theirs; only published prose is checked.
+docfiles=()
+for f in "${files[@]}"; do
+    case "$f" in README.md|docs/*.md) docfiles+=("$f");; esac
+done
+if [ "${#docfiles[@]}" -gt 0 ]; then
+    dashes="$(git diff --cached -U0 --no-color -- "${docfiles[@]}" | grep -E '^\+' | grep -vE '^\+\+\+' | grep -- '—')" || true
+    if [ -n "$dashes" ]; then
+        { echo "x commit blocked — added doc lines use an em-dash; house style is none in README/docs:"
+          printf '%s\n' "$dashes" | sed 's/^/   /'
+          echo ""
+          echo "Use a period, comma, semicolon, colon, or parentheses instead. Override (discouraged): git commit --no-verify"
+        } >&2
+        exit 1
+    fi
+fi
 exit 0

@@ -569,6 +569,27 @@ printf 'the contoso engagement notes\n' >"$GR/dl.md"
 git -C "$GR" add dl.md
 is "a denylisted term via env is blocked" 1 \
    "$(cd "$GR" && CLAUDE_CONFIG_DENYLIST=contoso bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+git -C "$GR" rm -q --cached dl.md
+
+# The style rule scopes to reader-facing docs only (README.md, docs/*.md), so this
+# suite may hold the literal em-dash safely — run.sh is never inside that scope.
+mkdir -p "$GR/docs"
+printf 'a clause — set off wrong\n' >"$GR/docs/style.md"
+git -C "$GR" add docs/style.md
+is "an em-dash staged in docs/*.md is blocked" 1 \
+   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+git -C "$GR" rm -q --cached docs/style.md
+
+printf 'a clause — set off wrong\n' >"$GR/README.md"
+git -C "$GR" add README.md
+is "an em-dash staged in README.md is blocked" 1 \
+   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+git -C "$GR" rm -q --cached README.md
+
+printf 'a scratch note — em-dash allowed here\n' >"$GR/scratch.md"
+git -C "$GR" add scratch.md
+is "an em-dash outside README/docs passes (scope is the path, not the extension)" 0 \
+   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
 rm -rf "$GR"
 
 # --- session notes -----------------------------------------------------------
