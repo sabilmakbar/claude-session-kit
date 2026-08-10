@@ -4,16 +4,21 @@ Tools for managing Claude Code **sessions** across machines — a sibling to
 [claude-memory-kit](https://github.com/sabilmakbar/claude-memory-kit), which does the
 same for memory.
 
-**Status: naming works, handoff is still design.** Start with [BACKLOG.md](BACKLOG.md),
-then the two design docs.
+**Status: built, tested, and in daily use.** Naming, per-session notes, cross-machine
+handoff, same-machine splits, and a drift detector — all live. Start with
+[docs/FLOWS.md](docs/FLOWS.md) for how everything behaves (flowcharts included); the
+three design docs record every decision and what it overturned.
 
 ```bash
 ./install.sh            # idempotent; --dry-run to preview, --uninstall to remove
 ```
 
-Installs the libraries to `~/.claude/session-kit/` and the `/rename-session` skill to
-`~/.claude/skills/`. It runs the test suite first and refuses to install if it fails.
-From a checkout, the scripts also work in place:
+Installs the libraries to `~/.claude/session-kit/` and three skills —
+`/rename-session`, `/session-note`, `/handoff` — to `~/.claude/skills/`. It runs the
+test suite first and refuses to install if it fails, and it never edits
+`settings.json`: the four optional hooks (version check on `SessionStart`; note,
+guard, and drift on `UserPromptSubmit`) are printed at the end for you to wire
+yourself. From a checkout, the scripts also work in place:
 
 ```bash
 . core/sessions.sh
@@ -35,25 +40,35 @@ to add. On failure it writes a report built from safe fields only — versions, 
 names, and 8-character session ids, never titles or paths — so it can be pasted into
 an issue without carrying your work into it.
 
-## The two problems it solves
+## The three problems it solves
 
 1. **Session identity** ([docs/DESIGN-naming.md](docs/DESIGN-naming.md)) — a session has
    three names in three places (VS Code tab title, CLI registration name, transcript
    UUID), none of them synced. Titles drift from what the session is actually about,
-   and generic derived names ("documents-2d") make past work unfindable.
-2. **Session handoff** ([docs/DESIGN-handoff.md](docs/DESIGN-handoff.md)) — moving
-   sessions between machines is manual today: tar the transcripts, carry a WIP note,
-   rename files to UUIDs by hand on the other side, and lose the titles on the way.
+   and generic derived names ("documents-2d") make past work unfindable. The drift
+   detector closes the loop: it schedules the "does this still match?" question and
+   the in-session agent judges it, silently unless something is off.
+2. **Session continuity** ([docs/DESIGN-notes.md](docs/DESIGN-notes.md)) — a reopened
+   session starts cold. A per-session note (decided / done / next) written at
+   milestones is handed back on the first message after reopening, age-stamped so a
+   stale note can never masquerade as current.
+3. **Session handoff** ([docs/DESIGN-handoff.md](docs/DESIGN-handoff.md)) — moving work
+   is manual: tar the transcripts, carry a WIP note, rename files by hand, lose the
+   titles on the way. Now: a checksummed bundle with atomic import across machines,
+   or a note-only split into a fresh session on the same machine, with a soft guard
+   on the old one.
 
 ## Layout
 
 ```
-core/       built    read-only resolver over the transcript and pid-file layers
-naming/     built    rename helpers (drift detection still to come)
-skills/     built    rename-session
-tests/      built    self-contained suite, same style as claude-memory-kit
-install.sh  built    idempotent installer, same contract as claude-memory-kit
-handoff/    planned  export / import scripts + manifest format
+core/       read-only resolver over the transcript and pid-file layers
+naming/     rename helpers — every write the kit makes to a live session lives here
+notes/      per-session working notes (decided / done / next)
+handoff/    export, import, split, claim, release
+hooks/      version-check, session-note, session-guard, session-drift
+skills/     rename-session, session-note, handoff
+tests/      run.sh (fixtures, runs anywhere) + smoke.sh (real ~/.claude)
+install.sh  idempotent installer, refuses to install if the tests fail
 ```
 
 `core/` reads two layers, the transcript and the pid-file. VS Code's `state.vscdb` is
