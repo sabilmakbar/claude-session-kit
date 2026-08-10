@@ -6,9 +6,7 @@ remembers nothing about where you left off. Half-finished work stranded on the
 other laptop. This kit fixes those: it gives sessions real names, leaves you a note
 for next time, and moves or splits sessions cleanly.
 
-It is plain bash plus `jq`. No server, no telemetry, nothing to build. It pairs
-with [Claude Memory Kit](https://github.com/sabilmakbar/claude-memory-kit), which
-does the same job for memory.
+It is plain bash plus `jq`. No server, no telemetry, nothing to build.
 
 ## What you get
 
@@ -76,16 +74,58 @@ numbers and check names only. Never your titles, paths, or username.
 
 ## Reading more
 
-- [docs/FLOWS.md](docs/FLOWS.md) shows how everything behaves, with diagrams.
+- [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) tells the whole story in plain words.
+- [docs/FLOWS.md](docs/FLOWS.md) shows the same behaviour as diagrams.
+- [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) lists what the kit needs. Short
+  version: `jq`.
 - The three `docs/DESIGN-*.md` files are decision records. Read them before
   changing the kit; every rule in the code has its reason written down there.
 
 ## Good to know
 
 - Works with bash and zsh. The full test suite runs under both, on macOS and Linux.
-- Needs `jq`. Everything else is stock unix.
 - The kit reads Claude Code's own files but only ever appends to them. It never
   rewrites a transcript and never touches VS Code's database.
 - Your notes live in their own folder. Uninstalling the kit never deletes them.
 - Claude Code's internals are undocumented and can change. The kit is built to
   fail loudly and safely when they do, and to tell you what to run next.
+
+## FAQ
+
+**Why doesn't the tab title change right after a rename?**
+The tab reads its title when it opens. Close and reopen the tab to see the new
+name; the session picker shows it immediately.
+
+**Can it rename a session other than the one I'm in?**
+No, on purpose. A title should be written by the session that can actually see the
+conversation. The one exception is import, which titles the sessions it just
+installed from a bundle. The reasoning lives in the naming design doc.
+
+**Does it fight Claude Code's built-in `/rename`?**
+No. The kit writes the same kind of title entry `/rename` writes, one appended
+line. The newest title wins, cleanly, whichever tool wrote it.
+
+**Do I need all four hooks?**
+No. Each one works alone; wire the ones you want. The skills work with no hooks at
+all; you just lose the automatic reminders.
+
+**Does anything leave my machine?**
+No. There is no network code. Even the failure report is written locally and
+redacted, for you to paste somewhere only if you choose to.
+
+**What happens when Claude Code updates?**
+A startup hook notices and re-tests the kit against your real data, once, in the
+background. Silence means everything still works. If something moved, the kit
+warns you until it is looked at.
+
+## Uninstall
+
+```bash
+./install.sh --uninstall
+```
+
+Removes the installed libraries and the three skills. It leaves your notes
+(`~/.claude/session-notes/`), your handoff folders (`~/.claude/session-handoffs/`),
+and every transcript exactly where they are. The kit never owned those. If you
+wired the hooks into `settings.json`, remove those lines too; until you do they
+point at nothing and silently do nothing.

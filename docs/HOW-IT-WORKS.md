@@ -1,0 +1,76 @@
+# How it works
+
+The idea in one sentence: sessions have seams. You open them, reopen them, outgrow
+them, move them. This kit puts the right information into your hands at each
+seam, staying silent the rest of the time.
+
+Everything below happens through ordinary Claude Code hooks and plain files. The
+hooks never judge anything by themselves; they hand a question to the Claude
+instance inside your session, which answers it silently because it has actually
+read the conversation. If a hook hits any problem, it does nothing at all.
+
+## When you reopen a session
+
+**Your last note greets you.** If the session ever saved a note (decided / done /
+next), your first message brings it back, stamped with how old it is: "written 340
+entries ago". Claude treats an old note with suspicion instead of confidence, which
+is the point of the stamp.
+
+**A wrong-tab check runs once.** If your first message clearly belongs to different
+work than this session is about, Claude says so before answering, because answering
+would pollute a clean session. If the message fits, you never hear about the check.
+
+## While you work
+
+Every two hundred entries or so, Claude silently asks itself whether the session
+still matches its title. Three outcomes:
+
+- It matches. You hear nothing.
+- The same work evolved past the title. Claude offers a rename.
+- A second topic is growing. Claude offers to split it into a fresh session.
+
+A session that never got a real name gets a gentler nudge: want to name this?
+
+## When a session outgrows itself
+
+A split moves a topic to a fresh session without moving any files:
+
+1. Claude drafts a handoff note from the conversation: context, decisions, open
+   threads, what to pick up first. You review it.
+2. The note lands in a folder, and the old session is marked "handed off, pending".
+3. You open a fresh session and type anything. It notices the pending handoff,
+   claims it, and starts from the note.
+4. The old session keeps a small signpost: this topic now lives over there. History
+   questions still work; the old transcript is the only place the full story lives.
+
+If nobody claims the handoff within two days, the nudging stops and the old session's
+signpost changes to say so, with three ways out: claim it manually (that never
+expires), re-split with a fresh note, or release the topic back. The note's folder is
+never deleted either way; it is the record of why the split happened.
+
+## When you change machines
+
+`export.sh` packs chosen sessions, your note, and any loose files into one archive
+with checksums. You carry it however you like. On the other machine, `import.sh`
+verifies everything before writing anything: a damaged archive or a session that
+diverged between machines refuses the whole import and leaves the machine untouched.
+Session titles travel inside the archive, so moved sessions keep their names in the
+new machine's picker.
+
+## When Claude Code updates
+
+The kit reads Claude Code's undocumented internals, so any update might move
+something. A startup hook notices the version change and runs the kit's real-data
+test suite once, in the background. If everything still works, you never hear about
+it. If something moved, the kit warns you every time you use it until a human looks,
+and a redacted failure report sits ready to paste into an issue: version numbers
+and check names only, never your titles or paths.
+
+## What it never does
+
+- Never rewrites a transcript. Every write is a single appended line, and undo is
+  another append.
+- Never touches VS Code's own database.
+- Never edits `settings.json`; you wire the hooks yourself.
+- Never deletes your notes or handoff folders, not even on uninstall.
+- Never sends anything anywhere. There is no network code in the kit.

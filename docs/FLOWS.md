@@ -70,7 +70,7 @@ Who hears what, in each state:
 
 | State | The old session (once per opening) | Fresh sessions (first message, once) |
 |---|---|---|
-| Pending | "topic moved; not claimed yet" | "a handoff is pending — claim it if this session is for it" |
+| Pending | "topic moved; not claimed yet" | "a handoff is pending; claim it if this session is for it" |
 | Stale | "never claimed, window passed" + the three exits | nothing (the window gates the nudge, never the claim) |
 | Claimed | "topic lives in session X" | nothing |
 | Released | nothing | nothing |
