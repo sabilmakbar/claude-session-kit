@@ -93,7 +93,7 @@ write_report() {
         echo
         printf '%s' "$FAILED" | while IFS='|' read -r nm exp act; do
             [ -n "$nm" ] || continue
-            printf -- '- **%s** — expected `%s`, got `%s`\n' "$nm" "$exp" "$act"
+            printf -- '- **%s**: expected `%s`, got `%s`\n' "$nm" "$exp" "$act"
         done
         if [ -n "$SUSPECT" ]; then
             echo
@@ -216,7 +216,7 @@ if [ "$pidfiles" -gt 0 ]; then
     [ -n "$(cs_running_version)" ] \
         && ok "a Claude Code version is readable from the pid-files" \
         || bad "a Claude Code version is readable from the pid-files" \
-               "a version" "none from $pidfiles pid-files — schema moved"
+               "a version" "none from $pidfiles pid-files; schema moved"
 else
     skip "pid-file schema check" "no pid-files present"
 fi
@@ -273,7 +273,7 @@ if [ "$N" -ge "$TITLE_MIN" ]; then
     [ "$titled" -gt 0 ] \
         && ok "known title entry types still appear" \
         || bad "known title entry types still appear" \
-               "at least 1 of $N" "0 — custom-title/ai-title renamed or removed"
+               "at least 1 of $N" "0; custom-title/ai-title renamed or removed"
 else
     skip "title-type check" "$N transcripts, need $TITLE_MIN to conclude"
 fi

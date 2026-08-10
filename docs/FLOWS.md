@@ -1,14 +1,13 @@
 # How the kit behaves
 
-Diagrams of what runs when. The reasons behind each choice live in the design
-docs: [DESIGN-naming.md](DESIGN-naming.md), [DESIGN-handoff.md](DESIGN-handoff.md),
-[DESIGN-notes.md](DESIGN-notes.md).
+Diagrams of what runs when, plus the specifics
+[HOW-IT-WORKS.md](HOW-IT-WORKS.md) deliberately leaves out. The reasons behind each
+choice live in the design docs: [DESIGN-naming.md](DESIGN-naming.md),
+[DESIGN-handoff.md](DESIGN-handoff.md), [DESIGN-notes.md](DESIGN-notes.md).
 
-One idea explains most of this page. **The hooks never judge anything themselves.
-They only decide when to ask a question.** The agent inside your session answers
-it, because it is the only thing that has read the whole conversation. And every
-hook goes silent if anything inside it fails. A broken hook does nothing. It never
-breaks your prompt.
+One rule keeps this file from growing into a second copy of the plain-language
+version: a sentence that also belongs in HOW-IT-WORKS goes there, not here. What
+lives here is the diagrams, and the detail a reader has to have asked for.
 
 ## What runs on every message
 
@@ -49,9 +48,8 @@ interruption. Both can be changed with environment variables.
 
 ## Splitting a session on the same machine
 
-A split writes a plain folder holding a handoff note. Nothing is bundled or
-copied, because nothing leaves the machine. The split then moves through these
-states:
+Nothing is bundled or copied, because nothing leaves the machine. The split moves
+through these states:
 
 ```mermaid
 stateDiagram-v2
@@ -75,10 +73,6 @@ Who hears what, in each state:
 | Claimed | "topic lives in session X" | nothing |
 | Released | nothing | nothing |
 
-Two things never change. The folder and its note are never deleted; they are the
-record of why the split happened. And history questions to the old session are
-never blocked, because the old transcript is the only place the full story lives.
-
 ## Moving sessions to another machine
 
 ```mermaid
@@ -94,11 +88,7 @@ flowchart LR
     end
 ```
 
-The import checks everything before it writes anything. A damaged bundle, or a
-session that diverged between the two machines, refuses the whole import and
-leaves the machine untouched. Importing the same bundle twice is safe and does
-nothing. Titles travel inside the bundle, so a moved session keeps its name in
-the new machine's session picker.
+Importing the same bundle twice is safe and does nothing.
 
 ## Session notes
 
@@ -112,16 +102,11 @@ flowchart LR
 ```
 
 Writing a note replaces the previous one. The transcript keeps every old version
-anyway. Every time a note is shown, it says how old it is. A stale note that
-looks current is the one way this feature could mislead you, so the age is always
-stated.
+anyway, so nothing is lost by overwriting.
 
 ## Version safety
 
-Claude Code's internals are undocumented, so any update might move something. At
-session start, a hook compares the running version with the last one the kit was
-verified against on this machine. Same version: it exits in about ten
-milliseconds. New version: it runs the real-data test suite once, in the
-background, at most once per day. If the tests pass, the warning clears itself.
-If they fail, the kit keeps warning you until someone looks, and a redacted
-failure report sits ready to paste into an issue. Nothing about this is silent.
+A session-start hook compares the running Claude Code version with the last one the
+kit was verified against on this machine. On a match it exits in about ten
+milliseconds. On a new version it runs the real-data suite in the background, at
+most once per day, and a pass clears the warning by itself.

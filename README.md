@@ -8,7 +8,10 @@ remembers nothing about where you left off. Half-finished work stranded on the
 other laptop. This kit fixes those: it gives sessions real names, leaves you a note
 for next time, and moves or splits sessions cleanly.
 
-It is plain bash plus `jq`. No server, no telemetry, nothing to build.
+It is plain bash plus `jq`. Moving sessions between machines also needs `shasum` or
+`sha256sum`, one of which is stock on macOS and Linux; without one, export and import
+refuse rather than write a bundle nothing can verify. No server, no telemetry, nothing
+to build.
 
 ## What you get
 
@@ -88,10 +91,48 @@ If a Claude Code update changes something the kit depends on, `smoke.sh` fails a
 writes a report you can paste straight into an issue. The report contains version
 numbers and check names only. Never your titles, paths, or username.
 
+## Is it working?
+
+If something seems off, or Claude Code has just updated itself, run the smoke suite. It
+checks the installed kit against your real `~/.claude` rather than against fixtures, and
+it only reads:
+
+```
+$ bash ~/.claude/session-kit/tests/smoke.sh
+smoke: 23 transcripts
+
+layout
+  ok   every transcript is at the expected depth
+  ok   a Claude Code version is readable from the pid-files
+...
+13 passed, 0 failed, 0 skipped
+verified against Claude Code 2.1.222
+```
+
+`0 failed` is the answer you want, and the last line tells you which Claude Code version
+the kit has been checked against on this machine. A skip is fine; it means a check had no
+data to run against.
+
+If something fails, [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) works through it by
+symptom. To report it, paste the report rather than your terminal:
+
+```bash
+bash ~/.claude/session-kit/tests/smoke.sh --report
+```
+
+That report is built to be published. It carries versions, check names, and the first eight
+characters of a session id, never a title or a path. The terminal output is deliberately not
+redacted, because seeing the offending title is what makes a failure debuggable on your own
+machine.
+
 ## Reading more
 
-- [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) tells the whole story in plain words.
-- [docs/FLOWS.md](docs/FLOWS.md) shows the same behaviour as diagrams.
+- [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) tells the whole story in plain words,
+  and it is the only one you need in order to use the kit.
+- [docs/FLOWS.md](docs/FLOWS.md) is the next step down: diagrams of what runs when,
+  with the specifics the plain-language version leaves out.
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) is symptom, check, fix. Start
+  there when something is actually broken.
 - [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) lists what the kit needs. Short
   version: `jq`.
 - The three `docs/DESIGN-*.md` files are decision records. Read them before
