@@ -10,7 +10,8 @@ when it is missing; everything else degrades to a clear error at the point of us
 
 ## Used when you use the feature
 - **tar**, and **shasum** or **sha256sum** (one of the two, both stock on macOS and
-  Linux). Only for cross-machine handoff bundles.
+  Linux). Only for cross-machine handoff bundles. Export and import refuse up front
+  when no sha tool is present, rather than producing a bundle nothing can verify.
 - **git**. Only for the commit guardrail in a development checkout. An installed
   copy never calls it.
 

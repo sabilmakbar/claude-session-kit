@@ -172,6 +172,26 @@ session-handoff-<date>.tar.gz
 `manifest.json` per session: id, **title**, source machine, source cwd, time range,
 line count, sha256. Plus: bundle date, source hostname, kit version.
 
+### Checksums are guarded twice (added 2026-08-10)
+
+The original helper fell back from `sha256sum` to `shasum` and could not report
+absence: on a machine with neither tool it emitted blank digests, and a similarly
+bare importer would verify blank against blank and accept a damaged bundle. Two
+guards close this, and both are needed:
+
+- **Presence**: export and import refuse up front when neither tool exists.
+- **Value**: every computed digest must be 64 hex characters or the script stops.
+  This also catches a tool that exists but fails mid-run, which the presence check
+  cannot see.
+
+One trap is load-bearing: the digest must be computed in a plain assignment
+(`sha=$(_ho_sha256 f)`), never inline in another command's arguments. In argument
+position bash discards the substitution's exit status even under `set -e`, so a
+failing helper would be silently ignored; that is precisely how the original bug
+survived. Tests pin all of it: a missing tool (empty PATH), a misbehaving tool (a
+stub that prints nothing), and the error messages, so a different failure cannot
+pass them for the wrong reason.
+
 ## Proposed pieces
 
 1. **`handoff/export.sh <session-ref>… [files…]`**: resolve refs via `core/` (title
