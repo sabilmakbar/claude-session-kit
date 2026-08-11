@@ -35,6 +35,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
     # content, not kit code, which is also why it lives outside $DEST_LIB.
     run rm -rf "$DEST_LIB" "$DEST_SKILL" "$DEST_SKILL_NOTE" "$DEST_SKILL_HANDOFF"
     echo "removed $DEST_LIB and the three skills"
+    echo "(the knobs config went with it — it configures nothing once the kit is gone)"
     exit 0
 fi
 
@@ -43,15 +44,16 @@ fi
 command -v jq >/dev/null 2>&1 || {
     echo "install.sh: jq is required (brew install jq)" >&2; exit 1; }
 
-for f in core/sessions.sh naming/rename.sh notes/note.sh tests/smoke.sh \
+for f in core/sessions.sh naming/rename.sh notes/note.sh tests/smoke.sh config.example \
          hooks/version-check.sh hooks/session-note.sh hooks/session-guard.sh hooks/session-drift.sh \
          handoff/export.sh handoff/import.sh handoff/split.sh handoff/claim.sh handoff/release.sh \
          skills/rename-session/SKILL.md skills/session-note/SKILL.md skills/handoff/SKILL.md; do
     [ -f "$ROOT/$f" ] || { echo "install.sh: missing $f — run from a full checkout" >&2; exit 1; }
 done
 
-# Refuse to install something the tests reject.
-if [ "$DRY" -eq 0 ] && [ -f "$ROOT/tests/run.sh" ]; then
+# Refuse to install something the tests reject. CS_INSTALL_NO_GATE exists for the
+# suite itself, whose install fixtures call this installer — gating would recurse.
+if [ "$DRY" -eq 0 ] && [ -z "${CS_INSTALL_NO_GATE:-}" ] && [ -f "$ROOT/tests/run.sh" ]; then
     bash "$ROOT/tests/run.sh" >/dev/null 2>&1 || {
         echo "install.sh: tests fail, refusing to install" >&2
         echo "  run: bash tests/run.sh" >&2
@@ -81,6 +83,12 @@ run cp "$ROOT/notes/note.sh"     "$DEST_LIB/notes/note.sh"
 # Advice that names a file only a checkout has is advice most users cannot follow.
 # It locates core/ as ../core relative to itself, so this layout works unchanged.
 run cp "$ROOT/tests/smoke.sh"    "$DEST_LIB/tests/smoke.sh"
+
+# Knobs: the example ships (and updates) every install; the LIVE config is seeded
+# once and never overwritten, so user-edited values survive upgrades — same shape
+# as the guardrail's denylist.local. Removed by --uninstall along with the kit.
+run cp "$ROOT/config.example" "$DEST_LIB/config.example"
+[ -f "$DEST_LIB/config" ] || run cp "$ROOT/config.example" "$DEST_LIB/config"
 
 # The SessionStart hook is installed but NOT wired up: adding it to settings.json
 # is the user's call, not an installer's. Printed at the end instead.

@@ -1,0 +1,20 @@
+# claude-session-kit knobs. Copied to ~/.claude/session-kit/config on install if no
+# config exists yet; upgrades never overwrite it. Uncomment a line to change a value.
+#
+# Rules: KEY=value, whole numbers only. A malformed value is ignored and the built-in
+# default applies. An environment variable with the same name overrides this file.
+# This file is read, never executed, so nothing here can run code.
+
+# Transcript entries a session needs before drift checks start.
+#CS_DRIFT_MIN_HISTORY=20
+
+# New transcript entries between periodic drift self-checks.
+#CS_DRIFT_EVERY=200
+
+# Minutes a pending handoff stays fresh: gates the automatic pickup offer and the
+# stale warning. Manual claims never expire.
+#CS_PICKUP_WINDOW_MIN=2880
+
+# Maximum transcript entries for a session to still count as brand-new and be
+# offered pending handoffs on its first message.
+#CS_PICKUP_MAX_HISTORY=20

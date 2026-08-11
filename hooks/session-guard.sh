@@ -21,6 +21,9 @@ input=$(cat 2>/dev/null) || exit 0
 sid=$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null | tr -cd 'A-Za-z0-9-')
 [ -n "$sid" ] || exit 0
 
+PICKUP_WINDOW="${CS_PICKUP_WINDOW_MIN:-$(cs_conf CS_PICKUP_WINDOW_MIN 2880)}"
+PICKUP_MAX="${CS_PICKUP_MAX_HISTORY:-$(cs_conf CS_PICKUP_MAX_HISTORY 20)}"
+
 HANDOFFS="$(_cs_home)/.claude/session-handoffs"
 M="$HANDOFFS/$sid.handed"
 
@@ -35,7 +38,7 @@ M="$HANDOFFS/$sid.handed"
 if [ ! -r "$M" ]; then
     lines=0
     tp=$(cs_transcript_path "$sid") && lines=$(wc -l <"$tp" | tr -d ' ')
-    [ "$lines" -lt "${CS_PICKUP_MAX_HISTORY:-20}" ] || exit 0
+    [ "$lines" -lt "$PICKUP_MAX" ] || exit 0
     [ ! -e "$HANDOFFS/$sid.pickup-seen" ] || exit 0
     [ ! -e "$HANDOFFS/$sid.claimed" ] || exit 0
 
@@ -44,7 +47,7 @@ if [ ! -r "$M" ]; then
         [ -n "$m" ] || continue
         [ "$(basename "$m" .handed)" = "$sid" ] && continue
         [ "$(jq -r '.to // empty' "$m" 2>/dev/null)" = "" ] && pending="$m"
-    done < <(find "$HANDOFFS" -maxdepth 1 -name '*.handed' -mmin -"${CS_PICKUP_WINDOW_MIN:-2880}" 2>/dev/null | sort)
+    done < <(find "$HANDOFFS" -maxdepth 1 -name '*.handed' -mmin -"$PICKUP_WINDOW" 2>/dev/null | sort)
     [ -n "$pending" ] || exit 0
 
     OLD=$(basename "$pending" .handed)
@@ -78,7 +81,7 @@ printf '%s\n' "$pid" >"$HANDOFFS/$sid.guard-seen" 2>/dev/null || exit 0
 # Unclaimed past the pickup window: the split has gone stale, and the message must
 # say so — the mechanisms (manual claim, re-split, release) all exist, but a user
 # reading "not claimed yet" forever has no way to know them.
-if [ -z "$to" ] && [ -n "$(find "$M" -mmin +"${CS_PICKUP_WINDOW_MIN:-2880}" 2>/dev/null)" ]; then
+if [ -z "$to" ] && [ -n "$(find "$M" -mmin +"$PICKUP_WINDOW" 2>/dev/null)" ]; then
     printf 'This session split off a topic%s on %s, but it was NEVER CLAIMED and the automatic pickup window has passed — the split has gone stale. Tell the user, and offer the three exits: (1) claim it manually from any fresh session: bash %s/handoff/claim.sh %s (claiming never expires, only the automatic nudge did); (2) re-split via the handoff skill — a fresh note re-arms automatic pickup, and is the right move if the old note no longer matches reality; (3) release, if the work belongs back here: bash %s/handoff/release.sh. The folder and its note are kept whichever way this goes.\n' \
         "${topic:+ (\"$topic\")}" "${date:-an earlier date}" "$ROOT" "'$folder'" "$ROOT"
     exit 0

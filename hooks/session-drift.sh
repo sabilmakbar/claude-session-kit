@@ -29,8 +29,8 @@ ROOT="${CLAUDE_SESSION_KIT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>
 command -v jq >/dev/null 2>&1 || exit 0
 . "$ROOT/core/sessions.sh" 2>/dev/null || exit 0
 
-EVERY="${CS_DRIFT_EVERY:-200}"
-MIN_HISTORY="${CS_DRIFT_MIN_HISTORY:-20}"
+EVERY="${CS_DRIFT_EVERY:-$(cs_conf CS_DRIFT_EVERY 200)}"
+MIN_HISTORY="${CS_DRIFT_MIN_HISTORY:-$(cs_conf CS_DRIFT_MIN_HISTORY 20)}"
 
 input=$(cat 2>/dev/null) || exit 0
 sid=$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null | tr -cd 'A-Za-z0-9-')
