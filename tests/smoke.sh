@@ -354,12 +354,25 @@ printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 # every update forever, including ones already checked. On failure nothing is
 # written, so the warning keeps appearing until someone looks — the absent write
 # IS the failure report, which is why no marker file is needed.
+#
+# The write ADDS to the record and never replaces it, so a pass can only ever widen
+# what this machine has cleared. Replacing it was a real bug: on a machine with
+# several sessions open at once, a run started while only older ones were live wrote
+# the older version over a newer pass, and the suite then re-ran for a version it had
+# already cleared. Staged through a temp file because the new contents are built by
+# reading the file being written, and a redirect would truncate it first; the rename
+# is same-directory, so it is atomic.
 if [ "$FAIL" -eq 0 ]; then
     running=$(cs_running_version)
     if [ -n "$running" ]; then
+        vfile="$(_cs_state_dir)/.verified"
+        vtmp="$vfile.$$"
         mkdir -p "$(_cs_state_dir)" 2>/dev/null \
-            && printf '%s\n' "$running" >"$(_cs_state_dir)/.verified" 2>/dev/null \
-            && printf 'verified against Claude Code %s\n' "$running"
+            && { _cs_verified_list; printf '%s\n' "$running"; } \
+                 | sort -V -u >"$vtmp" 2>/dev/null \
+            && mv -f "$vtmp" "$vfile" 2>/dev/null \
+            && printf 'verified against Claude Code %s\n' "$(cs_verified_span)"
+        rm -f "$vtmp" 2>/dev/null
     fi
     # A stale failure report sitting next to a passing run reads as a live problem.
     rm -f "$REPORT" 2>/dev/null

@@ -138,9 +138,15 @@ layout
 verified against Claude Code 2.1.222
 ```
 
-`0 failed` is the answer you want, and the last line tells you which Claude Code version
-the kit has been checked against on this machine. A skip is fine; it means a check had no
+`0 failed` is the answer you want, and the last line tells you which Claude Code versions
+the kit has passed against on this machine. A skip is fine; it means a check had no
 data to run against.
+
+Every passing run adds that version to the record, so once you have been through a few
+updates the line grows into a span, `verified against Claude Code 2.1.222 to 2.1.231
+(6 versions)`. The count is there because the ends were tested and the middle was not.
+The kit only speaks up on a version that is not in the record, so keeping several
+sessions open on different versions costs you nothing.
 
 If something fails, [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) works through it by
 symptom. To report it, paste the report rather than your terminal:
@@ -182,7 +188,9 @@ machine.
   fail loudly and safely when they do, and to tell you what to run next.
 - Verified against Claude Code 2.1.222. The real-data suite also passes over
   transcripts written by 20 versions, 2.1.177 through 2.1.222. Older versions are
-  untested.
+  untested. That is the author's floor; from the first smoke run onwards your machine
+  keeps its own record of the versions it has passed against, and that is what the
+  warning compares you with.
 
 ## FAQ
 

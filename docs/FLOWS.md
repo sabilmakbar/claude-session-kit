@@ -111,7 +111,11 @@ anyway, so nothing is lost by overwriting.
 
 ## Version safety
 
-A session-start hook compares the running Claude Code version with the last one the
-kit was verified against on this machine. On a match it exits in about ten
-milliseconds. On a new version it runs the real-data suite in the background, at
-most once per day, and a pass clears the warning by itself.
+A session-start hook checks whether the running Claude Code version is one the kit
+has already passed against on this machine. If it is, the hook exits in about ten
+milliseconds. On a version it has not cleared before, it runs the real-data suite in
+the background, at most once per day, and a pass clears the warning by itself.
+
+The record is a list of every version that passed here, not only the newest, because
+a machine often has several sessions open on different versions at once. Reopening an
+older one is not news, and a pass on an older version never erases a newer one.

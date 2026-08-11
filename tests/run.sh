@@ -306,6 +306,27 @@ is "surrounding whitespace is ignored" "2.5.0" "$(cs_verified_version)"
 : >"$FAKE/.claude/session-kit/.verified"
 is "an empty state file falls back, never resolves empty" \
    "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" "$(cs_verified_version)"
+
+# The record is a LIST of versions that passed here, and the single-line file older
+# installs wrote is a one-element list, so no migration is needed.
+printf '2.1.222\n2.1.226\n2.1.9\n' >"$FAKE/.claude/session-kit/.verified"
+is "several recorded versions resolve to the newest" "2.1.226" "$(cs_verified_version)"
+is "version order is numeric, not lexical" "2.1.9" "$(_cs_verified_list | head -1)"
+
+cs_version_verified 2.1.222 && ok "an older recorded version is still verified" \
+    || bad "an older recorded version is still verified" "verified" "not verified"
+cs_version_verified 2.1.224 && bad "an untested version between two passes is NOT verified" \
+    "not verified" "verified" \
+    || ok "an untested version between two passes is NOT verified"
+
+is "the span names both ends and how many were tested" \
+   "2.1.9 to 2.1.226 (3 versions)" "$(cs_verified_span)"
+echo "2.1.222" >"$FAKE/.claude/session-kit/.verified"
+is "a single recorded version reads as itself, not a span" "2.1.222" "$(cs_verified_span)"
+
+# The file is user-visible state, so a hand-edited line must not become a version.
+printf 'not-a-version\n2.1.222\n$(touch /tmp/pwned)\n' >"$FAKE/.claude/session-kit/.verified"
+is "junk lines are dropped rather than treated as versions" "2.1.222" "$(_cs_verified_list)"
 drop_home
 
 # The guard must stay quiet once the running version has been verified here, and
@@ -322,6 +343,21 @@ OUT=$(unset _CS_VERSION_WARNED; cs_version_guard 2>&1)
 case "$OUT" in
     *9.9.10*9.9.9*smoke.sh*) ok "warns on a new version and names smoke.sh" ;;
     *) bad "warns on a new version and names smoke.sh" "both versions + smoke.sh" "${OUT:-silence}" ;;
+esac
+
+# Reopening an older session must not reawaken the warning: that version passed here
+# too. Equality against the newest recorded version got this wrong.
+printf '9.9.9\n9.9.10\n' >"$FAKE/.claude/session-kit/.verified"
+jq -n '{pid:1,sessionId:"z",name:"n",version:"9.9.9"}' >"$PIDS/1.json"
+OUT=$(unset _CS_VERSION_WARNED; cs_version_guard 2>&1)
+is "silent on an older version that also passed here" "" "$OUT"
+
+# ...but the warning must still name the whole span when the version is genuinely new.
+jq -n '{pid:1,sessionId:"z",name:"n",version:"9.9.11"}' >"$PIDS/1.json"
+OUT=$(unset _CS_VERSION_WARNED; cs_version_guard 2>&1)
+case "$OUT" in
+    *9.9.11*"9.9.9 to 9.9.10 (2 versions)"*) ok "the warning reports the span, not just the newest" ;;
+    *) bad "the warning reports the span, not just the newest" "span" "${OUT:-silence}" ;;
 esac
 drop_home
 
@@ -402,6 +438,32 @@ bash "$ROOT/tests/smoke.sh" >/dev/null 2>&1
     || ok "a passing run clears a stale report"
 is "a passing run records the verified version" \
    "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" "$(cat "$FAKE/.claude/session-kit/.verified" 2>/dev/null)"
+drop_home
+
+# The record only ever widens. This was a live bug on a machine running several
+# sessions at once: a pass while only OLDER sessions were live overwrote a newer
+# recorded pass, so the record went backwards and the suite re-ran for a version it
+# had already cleared. The pid-file here is deliberately the OLDER version.
+new_home
+ID=77777777-0000-0000-0000-000000000003; transcript "$ID" >/dev/null
+add_ai "$ID" "Perfectly fine"
+jq -n --arg v "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" '{pid:1,sessionId:"z",name:"n",version:$v}' >"$PIDS/1.json"
+mkdir -p "$FAKE/.claude/session-kit"
+printf '99.0.0\n' >"$FAKE/.claude/session-kit/.verified"
+bash "$ROOT/tests/smoke.sh" >/dev/null 2>&1
+is "a pass on an older version does not erase a newer one" "99.0.0" "$(cs_verified_version)"
+is "...and the older version is added alongside it" \
+   "$CLAUDE_SESSION_KIT_VERIFIED_VERSION
+99.0.0" "$(_cs_verified_list)"
+
+# Re-running on a version already recorded must leave the record exactly as it is.
+BEFORE=$(cat "$FAKE/.claude/session-kit/.verified")
+bash "$ROOT/tests/smoke.sh" >/dev/null 2>&1
+is "re-recording a known version changes nothing" "$BEFORE" \
+   "$(cat "$FAKE/.claude/session-kit/.verified")"
+[ -z "$(find "$FAKE/.claude/session-kit" -name '.verified.*' 2>/dev/null)" ] \
+    && ok "the staged write leaves no temp file behind" \
+    || bad "the staged write leaves no temp file behind" "none" "present"
 drop_home
 
 # --- hostile and degenerate input -------------------------------------------
@@ -525,6 +587,15 @@ jq -n '{pid:1,sessionId:"z",name:"n",version:"9.9.10"}' >"$PIDS/1.json"
 CLAUDE_SESSION_KIT_ROOT="$FAKE/kit" bash "$ROOT/hooks/version-check.sh"
 for i in 1 2 3 4 5 6 7 8 9 10; do [ "$(grep -c x "$FAKE/kit/.count" 2>/dev/null)" = "2" ] && break; sleep 0.3; done
 is "a NEW version bypasses the day throttle" 2 "$(grep -c x "$FAKE/kit/.count" 2>/dev/null)"
+
+# Switching back to an older session must not launch anything: that version is in the
+# record. Under the old equality check it did, on every switch, forever.
+printf '9.9.8\n9.9.9\n' >"$FAKE/.claude/session-kit/.verified"
+jq -n '{pid:1,sessionId:"z",name:"n",version:"9.9.8"}' >"$PIDS/1.json"
+CLAUDE_SESSION_KIT_ROOT="$FAKE/kit" bash "$ROOT/hooks/version-check.sh"
+sleep 0.5
+is "switching back to an older recorded version launches nothing" 2 \
+   "$(grep -c x "$FAKE/kit/.count" 2>/dev/null)"
 drop_home
 
 # --- the commit guardrail ------------------------------------------------------

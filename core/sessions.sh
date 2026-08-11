@@ -25,19 +25,64 @@ _cs_projects_dir() { printf '%s/.claude/projects' "$(_cs_home)"; }
 _cs_pids_dir()     { printf '%s/.claude/sessions' "$(_cs_home)"; }
 _cs_state_dir()    { printf '%s/.claude/session-kit' "$(_cs_home)"; }
 
-# The newest Claude Code version smoke.sh has PASSED against on THIS machine, falling
-# back to the author's. Written by smoke.sh, never by this library: core/ stays
-# read-only, which is the invariant everything else leans on.
+# Every Claude Code version smoke.sh has PASSED against on THIS machine, one per
+# line, oldest first. Written by smoke.sh, never by this library: core/ stays
+# read-only, which is the invariant everything else leans on. Empty output means
+# nothing has been recorded yet, and every caller falls back to the author's
+# constant.
 #
 # This is what makes the warning mean something. Comparing against a constant baked
 # into the source warns forever after any update, even one already checked, and a
 # warning that never clears is one people stop reading.
-cs_verified_version() {
-    local f="" v=""
+#
+# A LIST, not one value. It held a single version until a machine running several
+# sessions at once showed why that fails: a smoke run started while only OLDER
+# sessions were open overwrote a newer recorded pass with an older version, so the
+# record went backwards and the suite re-ran for a version it had already cleared.
+# A list cannot go backwards. It is also honest in a way a bare low-to-high range is
+# not, because passing on 2.1.222 and 2.1.226 says nothing about 2.1.224: membership
+# is exact, and only the display collapses to a span.
+#
+# The parse is deliberately forgiving about layout and strict about content. It
+# accepts the single-line file older installs left behind, and it drops anything
+# that is not dotted digits rather than letting a stray line become a version.
+_cs_verified_list() {
+    local f=""
     f="$(_cs_state_dir)/.verified"
-    [ -r "$f" ] && v=$(head -1 "$f" 2>/dev/null | tr -d '[:space:]')
+    [ -r "$f" ] || return 0
+    tr '[:space:]' '\n' <"$f" 2>/dev/null \
+        | grep -E '^[0-9]+(\.[0-9]+)*$' | sort -V -u
+}
+
+# The newest version recorded here, falling back to the author's.
+cs_verified_version() {
+    local v=""
+    v=$(_cs_verified_list | tail -1)
     [ -n "$v" ] || v="$CLAUDE_SESSION_KIT_VERIFIED_VERSION"
     printf '%s' "$v"
+}
+
+# Has this exact version passed here? With nothing recorded, the author's constant
+# stands in, so a fresh checkout behaves as it always did.
+cs_version_verified() {  # <version> -> 0 if recorded
+    local list=""
+    list=$(_cs_verified_list)
+    [ -n "$list" ] || list="$CLAUDE_SESSION_KIT_VERIFIED_VERSION"
+    printf '%s\n' "$list" | grep -qxF "$1"
+}
+
+# Human-facing summary of what has passed here: one version, or the span and how
+# many points inside it were actually tested. The count is what keeps the span from
+# reading as a claim about every version between the ends.
+cs_verified_span() {
+    local list="" lo="" hi="" n=""
+    list=$(_cs_verified_list)
+    [ -n "$list" ] || { printf '%s' "$CLAUDE_SESSION_KIT_VERIFIED_VERSION"; return; }
+    lo=$(printf '%s\n' "$list" | head -1)
+    hi=$(printf '%s\n' "$list" | tail -1)
+    n=$(printf '%s\n' "$list" | wc -l | tr -d '[:space:]')
+    if [ "$lo" = "$hi" ]; then printf '%s' "$hi"
+    else printf '%s to %s (%s versions)' "$lo" "$hi" "$n"; fi
 }
 
 cs_have_deps() { command -v jq >/dev/null 2>&1; }
@@ -94,13 +139,12 @@ cs_running_version() {
 cs_version_guard() {
     [ -n "${_CS_VERSION_WARNED:-}" ] && return 0
     _CS_VERSION_WARNED=1
-    local running="" verified=""
+    local running=""
     running=$(cs_running_version)
     [ -z "$running" ] && return 0
-    verified=$(cs_verified_version)
-    [ "$running" = "$verified" ] && return 0
-    printf 'claude-session-kit: running Claude Code %s, last verified against %s.\n' \
-        "$running" "$verified" >&2
+    cs_version_verified "$running" && return 0
+    printf 'claude-session-kit: running Claude Code %s, verified here against %s.\n' \
+        "$running" "$(cs_verified_span)" >&2
     printf '  Internals may have moved. Check with: bash tests/smoke.sh (from the kit root)\n' >&2
     return 0
 }

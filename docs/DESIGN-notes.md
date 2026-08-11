@@ -73,8 +73,11 @@ Code: `~/.claude/session-kit/…` like the rest of the kit.
 
 They must be separate trees because `install.sh --uninstall` removes the code tree
 wholesale. Notes are user content; an uninstall or reinstall must never delete them.
-(`.verified` may live in the code tree; it is regenerable by one smoke run. Notes
-are not regenerable.)
+(`.verified` may live in the code tree. An uninstall takes it along, and the next
+smoke run re-records whatever is running, so the kit is never left unverified. What
+an uninstall does lose is the other versions it had already cleared, costing one
+background run apiece if you go back to them. Notes are not regenerable at all, which
+is the difference that matters here.)
 
 ### 8. Three sections, overwrite semantics
 
