@@ -1493,6 +1493,52 @@ inst --dry-run
     || ok "--dry-run writes no settings.json"
 drop_home
 
+# settings.json is the user's global config, so a broken run must never leave it
+# altered. Three guarantees: the .bak holds exactly what was there before, a run
+# that fails before the wiring step leaves the file byte-identical, and a failure
+# after the write rolls it back.
+new_home
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"; mkdir -p "$IPREFIX"
+printf '{"model":"opus","hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"~/bin/mine.sh"}]}]}}' >"$SETT"
+cp "$SETT" "$FAKE/original.json"
+inst
+is "the backup holds exactly the pre-install file" "" "$(diff "$FAKE/original.json" "$SETT.bak")"
+is "…and unrelated settings survive the merge" '"opus"' "$(jq -c .model "$SETT")"
+is "…as does the user's own hook" 1 \
+   "$(jq '[.hooks[]?[]?.hooks[]?.command | select(test("bin/mine"))] | length' "$SETT")"
+drop_home
+
+# A run that fails partway must not touch settings.json at all. An incomplete
+# checkout forces that honestly: it refuses in preflight, long before the wiring
+# step, which is the ordering this asserts.
+new_home
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"; mkdir -p "$IPREFIX"
+printf '{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"~/bin/mine.sh"}]}]}}' >"$SETT"
+cp "$SETT" "$FAKE/original.json"
+PARTIAL="$FAKE/partial"; mkdir -p "$PARTIAL"
+( cd "$ROOT" && tar cf - --exclude .git . ) | ( cd "$PARTIAL" && tar xf - )
+rm -f "$PARTIAL/core/sessions.sh"
+CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" \
+    bash "$PARTIAL/install.sh" >/dev/null 2>&1
+is "a failed install leaves settings.json byte-identical" "" "$(diff "$FAKE/original.json" "$SETT")"
+
+# The rollback itself: a failure AFTER the write must restore the previous file.
+# Forced with a copy whose wiring step is followed by a guaranteed failure, which
+# is the ordering the real installer deliberately avoids.
+BROKEN="$FAKE/broken"; mkdir -p "$BROKEN"
+( cd "$ROOT" && tar cf - --exclude .git . ) | ( cd "$BROKEN" && tar xf - )
+python3 - "$BROKEN/install.sh" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+old = 'echo "wiring hooks"\nhooks_wire'
+assert s.count(old) == 1
+open(p, "w").write(s.replace(old, old + '\nfalse'))
+PY
+CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" \
+    bash "$BROKEN/install.sh" >/dev/null 2>&1
+is "a failure after the write rolls settings.json back" "" "$(diff "$FAKE/original.json" "$SETT")"
+drop_home
+
 # An incomplete checkout must refuse BEFORE copying, or a re-run (the upgrade path)
 # would half-overwrite a working install.
 new_home

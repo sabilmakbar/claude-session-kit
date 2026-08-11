@@ -53,6 +53,26 @@ SETTINGS="${CLAUDE_SESSION_KIT_PREFIX:-$HOME/.claude}/settings.json"
 SNIPPET="$ROOT/settings.snippet.json"
 [ -f "$SNIPPET" ] || SNIPPET="$DEST_LIB/settings.snippet.json"
 
+# settings.json is the user's global config, shared with every other tool, so it
+# gets three layers of protection rather than one:
+#   1. it is written LAST, after everything else has installed and verified, so a
+#      run that breaks earlier never reaches it at all;
+#   2. the merged result is checked before it replaces the live file, so a bad
+#      merge is discarded instead of saved;
+#   3. if the script still dies after the write, this trap puts the previous
+#      contents back from the .bak taken moments earlier.
+SETTINGS_TOUCHED=0
+rollback_settings() {
+    local rc=$?
+    [ "$rc" -eq 0 ] && return 0
+    [ "$SETTINGS_TOUCHED" -eq 1 ] || return 0
+    [ -f "$SETTINGS.bak" ] || return 0
+    cp "$SETTINGS.bak" "$SETTINGS" 2>/dev/null \
+        && echo "install.sh: run failed, so settings.json was rolled back to its previous contents" >&2
+    return 0
+}
+trap rollback_settings EXIT
+
 # Tokens of a command: split on whitespace, then drop characters a path cannot
 # contain, which strips the quotes it was written with instead of parsing them. A
 # non-string command yields nothing, which is what makes malformed read as "not
@@ -119,8 +139,23 @@ hooks_wire() {
                  ([refs($managed; true)[] | select(. as $b | $have | index($b))] | length) == 0)))
              | map(select((.hooks | length) > 0))) as $new
           | .[$ev] = ($existing + $new)))
-    ' "$SETTINGS" "$SNIPPET" >"$tmp" && mv "$tmp" "$SETTINGS"
-    echo "  hooks wired into $SETTINGS (backup: $SETTINGS.bak)"
+    ' "$SETTINGS" "$SNIPPET" >"$tmp"
+
+    # Check before replacing. Wiring only ever ADDS, so a result that is not valid
+    # JSON, or that holds fewer hooks than we started with, means the merge went
+    # wrong and the live file is better off untouched.
+    local before after
+    before=$(jq '[.hooks[]?[]?.hooks[]?] | length' "$SETTINGS" 2>/dev/null || echo 0)
+    after=$(jq '[.hooks[]?[]?.hooks[]?] | length' "$tmp" 2>/dev/null || echo -1)
+    if ! jq -e . "$tmp" >/dev/null 2>&1 || [ "$after" -lt "$before" ]; then
+        rm -f "$tmp"
+        echo "install.sh: the settings.json merge did not look right, so your file was left alone" >&2
+        echo "  it is unchanged, and a copy is at $SETTINGS.bak" >&2
+        return 1
+    fi
+    SETTINGS_TOUCHED=1
+    mv "$tmp" "$SETTINGS"
+    echo "  hooks wired into $SETTINGS (previous contents: $SETTINGS.bak)"
 }
 
 hooks_unwire() {
@@ -149,8 +184,26 @@ hooks_unwire() {
             | with_entries(select((.value | type) != "array" or (.value | length) > 0)))
           | if (.hooks | type) == "object" and (.hooks | length) == 0 then del(.hooks) else . end
         end
-    ' "$SETTINGS" "$SNIPPET" >"$tmp" && mv "$tmp" "$SETTINGS"
-    echo "  hooks removed from $SETTINGS (backup: $SETTINGS.bak)"
+    ' "$SETTINGS" "$SNIPPET" >"$tmp"
+
+    # Check before replacing. Removal is expected to shrink the file, so counting
+    # totals proves nothing; what must hold is that every hook that was NOT ours
+    # survived. Anything else means we were about to delete someone else's config.
+    local keep_before keep_after
+    keep_before=$(jq -s "$JQ_LIB"'
+        .[0] as $live | .[1] as $snip | ($snip | managed_names) as $managed
+        | [$live.hooks[]?[]?.hooks[]? | select((refs($managed; true) | length) == 0)] | length' \
+        "$SETTINGS" "$SNIPPET" 2>/dev/null || echo -1)
+    keep_after=$(jq '[.hooks[]?[]?.hooks[]?] | length' "$tmp" 2>/dev/null || echo -2)
+    if ! jq -e . "$tmp" >/dev/null 2>&1 || [ "$keep_after" != "$keep_before" ]; then
+        rm -f "$tmp"
+        echo "install.sh: removing the hooks would have changed something else, so your file was left alone" >&2
+        echo "  it is unchanged, and a copy is at $SETTINGS.bak" >&2
+        return 1
+    fi
+    SETTINGS_TOUCHED=1
+    mv "$tmp" "$SETTINGS"
+    echo "  hooks removed from $SETTINGS (previous contents: $SETTINGS.bak)"
 }
 
 if [ "$UNINSTALL" -eq 1 ]; then
@@ -274,11 +327,6 @@ for pair in "rename-session|$DEST_SKILL" "session-note|$DEST_SKILL_NOTE" "handof
     fi
 done
 
-# --- hooks -------------------------------------------------------------------
-
-echo "wiring hooks"
-hooks_wire
-
 # --- verify -----------------------------------------------------------------
 
 if [ "$DRY" -eq 0 ]; then
@@ -289,6 +337,17 @@ if [ "$DRY" -eq 0 ]; then
         echo "install.sh: installed notes module failed to load" >&2; exit 1; }
     echo "verified: installed copy loads"
 fi
+
+# --- hooks -------------------------------------------------------------------
+#
+# Deliberately the LAST thing the installer does. Everything above writes only
+# inside the kit's own directories; this step is the one that edits a file the
+# user shares with every other tool, so it happens only once the tree is fully
+# installed and has been shown to load. A run that breaks earlier leaves
+# settings.json exactly as it found it.
+
+echo "wiring hooks"
+hooks_wire
 
 echo
 echo "done. /rename-session, /session-note and /handoff are available in new sessions."

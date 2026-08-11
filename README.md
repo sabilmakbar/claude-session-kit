@@ -85,10 +85,16 @@ session. It only ever writes or removes hooks under `session-kit/hooks/`, so hoo
 wrote yourself and other tools' hooks are left alone, and if another tool happens to use
 one of the same filenames the installer says so instead of guessing.
 
-If you want to see exactly what will be added before running an installer that edits your
-global config, it is all in [settings.snippet.json](settings.snippet.json). To drop a
-single hook afterwards, delete its line; to remove all four, run
-`./install.sh --uninstall`.
+Editing a file you share with every other tool deserves care, so that step is the last
+thing the installer does, after everything else is installed and checked. A run that
+breaks earlier leaves `settings.json` untouched, a merge that does not look right is
+discarded rather than saved, and a failure after the write puts the previous contents
+back. Your file as it was before the run is always kept at `settings.json.bak`, so you
+can restore it yourself at any time.
+
+If you want to see exactly what will be added, it is all in
+[settings.snippet.json](settings.snippet.json). To drop a single hook afterwards, delete
+its line; to remove all four, run `./install.sh --uninstall`.
 
 ## Upgrading
 
