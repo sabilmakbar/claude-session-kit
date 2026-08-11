@@ -184,8 +184,11 @@ machine.
   every default shown. To change one, uncomment its line and edit the number;
   upgrades never overwrite your edits. If you work from a checkout without
   installing, copy `config.example` to that path yourself.
-- Claude Code's internals are undocumented and can change. The kit is built to
-  fail loudly and safely when they do, and to tell you what to run next.
+- Claude Code's internals are undocumented and can change. The kit degrades safely
+  when they do: the hooks go quiet instead of erroring, and any command you run
+  yourself warns that internals may have moved and names the check to run. The
+  background re-test after an update is silent by design, so if you only ever use
+  the hooks, a failure waits until you next run a command.
 - Verified against Claude Code 2.1.222. The real-data suite also passes over
   transcripts written by 20 versions, 2.1.177 through 2.1.222. Older versions are
   untested. That is the author's floor; from the first smoke run onwards your machine
