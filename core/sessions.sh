@@ -16,7 +16,8 @@
 # sourced file runs under the caller's shell. bash and zsh both work; keep it that way.
 
 # The version the AUTHOR tested against. A floor, not the whole answer — see
-# cs_verified_version.
+# cs_verified_version. A namespaced CONSTANT, not a knob: this file is sourced into
+# arbitrary shells (hence the prefix), and smoke.sh/export.sh read it as core's API.
 CS_VERIFIED_VERSION="2.1.222"
 
 _cs_home()         { printf '%s' "${CLAUDE_SESSION_KIT_HOME:-$HOME}"; }

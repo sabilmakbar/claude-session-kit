@@ -1279,7 +1279,7 @@ drop_home
 
 # --- install seeds the config once --------------------------------------------
 #
-# First suite section to invoke install.sh itself (CS_INSTALL_NO_GATE skips its
+# First suite section to invoke install.sh itself (CLAUDE_SESSION_KIT_NO_GATE skips its
 # run.sh gate — gating would recurse). The property under test: a fresh install
 # seeds config from the example, an upgrade never overwrites a user's edits.
 
@@ -1287,12 +1287,12 @@ echo "install seeds the config once"
 
 new_home
 IPREFIX="$FAKE/.claude"
-( CS_INSTALL_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" bash "$ROOT/install.sh" >/dev/null 2>&1 )
+( CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" bash "$ROOT/install.sh" >/dev/null 2>&1 )
 is "install from the checkout exits 0" 0 $?
 [ -f "$IPREFIX/session-kit/config" ] && ok "a fresh install seeds the config" \
     || bad "a fresh install seeds the config" "config present" "missing"
 printf 'CS_DRIFT_EVERY=42\n' >"$IPREFIX/session-kit/config"
-( CS_INSTALL_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" bash "$ROOT/install.sh" >/dev/null 2>&1 )
+( CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" bash "$ROOT/install.sh" >/dev/null 2>&1 )
 is "a re-run (the upgrade path) preserves the edited config" "CS_DRIFT_EVERY=42" \
    "$(cat "$IPREFIX/session-kit/config")"
 [ -f "$IPREFIX/session-kit/config.example" ] && ok "…while the example ships regardless" \

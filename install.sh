@@ -51,9 +51,9 @@ for f in core/sessions.sh naming/rename.sh notes/note.sh tests/smoke.sh config.e
     [ -f "$ROOT/$f" ] || { echo "install.sh: missing $f — run from a full checkout" >&2; exit 1; }
 done
 
-# Refuse to install something the tests reject. CS_INSTALL_NO_GATE exists for the
+# Refuse to install something the tests reject. CLAUDE_SESSION_KIT_NO_GATE exists for the
 # suite itself, whose install fixtures call this installer — gating would recurse.
-if [ "$DRY" -eq 0 ] && [ -z "${CS_INSTALL_NO_GATE:-}" ] && [ -f "$ROOT/tests/run.sh" ]; then
+if [ "$DRY" -eq 0 ] && [ -z "${CLAUDE_SESSION_KIT_NO_GATE:-}" ] && [ -f "$ROOT/tests/run.sh" ]; then
     bash "$ROOT/tests/run.sh" >/dev/null 2>&1 || {
         echo "install.sh: tests fail, refusing to install" >&2
         echo "  run: bash tests/run.sh" >&2
