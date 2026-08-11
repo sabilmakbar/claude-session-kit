@@ -150,7 +150,7 @@ jq -n \
     --argjson files "$fl" \
     --arg created "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --arg host "$(uname -n)" \
-    --arg verified "$CS_VERIFIED_VERSION" \
+    --arg verified "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" \
     '{format:1, created:$created, host:$host, kit_verified_for:$verified,
       note:"notes/HANDOFF.md", sessions:$sessions, files:$files}' >"$STAGE/manifest.json"
 
