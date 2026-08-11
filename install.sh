@@ -141,6 +141,11 @@ hooks_wire() {
     # atomic, while moving across filesystems is a copy that can be interrupted
     # partway and leave the config truncated.
     local tmp; tmp=$(mktemp "$SETTINGS.tmp.XXXXXX")
+    # Merge against a SNAPSHOT, then check the live file still matches it before
+    # renaming over the top. Claude Code and other installers write this file too,
+    # and without the check a change landing mid-merge would be silently undone.
+    local snap; snap=$(mktemp "$SETTINGS.snap.XXXXXX")
+    cp "$SETTINGS" "$snap"
     # Dedup is PER HOOK, not per group: a group keyed on its first hook silently
     # drops any hook added to that group later, so upgrades would never land.
     jq -s "$JQ_LIB"'
@@ -155,16 +160,16 @@ hooks_wire() {
                  ([refs($managed; true)[] | select(. as $b | $have | index($b))] | length) == 0)))
              | map(select((.hooks | length) > 0))) as $new
           | .[$ev] = ($existing + $new)))
-    ' "$SETTINGS" "$SNIPPET" >"$tmp"
+    ' "$snap" "$SNIPPET" >"$tmp"
 
     # Check before replacing. Wiring only ever ADDS, so a result that is not valid
     # JSON, or that holds fewer hooks than we started with, means the merge went
     # wrong and the live file is better off untouched.
     local before after
-    before=$(jq '[.hooks[]?[]?.hooks[]?] | length' "$SETTINGS" 2>/dev/null || echo 0)
+    before=$(jq '[.hooks[]?[]?.hooks[]?] | length' "$snap" 2>/dev/null || echo 0)
     after=$(jq '[.hooks[]?[]?.hooks[]?] | length' "$tmp" 2>/dev/null || echo -1)
     if ! jq -e . "$tmp" >/dev/null 2>&1 || [ "$after" -lt "$before" ]; then
-        rm -f "$tmp"
+        rm -f "$tmp" "$snap"
         echo "install.sh: the settings.json merge did not look right, so your file was left alone" >&2
         echo "  it is unchanged, and a copy is at $SETTINGS_BAK" >&2
         return 1
@@ -173,10 +178,17 @@ hooks_wire() {
     # That is what keeps an older backup intact: re-running the installer, which is
     # also the upgrade path, cannot overwrite the copy of your pre-kit config.
     if cmp -s "$tmp" "$SETTINGS"; then
-        rm -f "$tmp"
+        rm -f "$tmp" "$snap"
         echo "  hooks already wired; $SETTINGS left untouched"
         return 0
     fi
+    if ! cmp -s "$snap" "$SETTINGS"; then
+        rm -f "$tmp" "$snap"
+        echo "install.sh: $SETTINGS changed while it was being read, so nothing was written" >&2
+        echo "  another tool wrote it at the same moment. Re-run to merge against the new file." >&2
+        return 1
+    fi
+    rm -f "$snap"
     # Nothing to back up when the file did not exist a moment ago; the rollback for
     # that case is removing it, which needs no copy.
     if [ "$SETTINGS_CREATED" -eq 0 ]; then cp "$SETTINGS" "$SETTINGS_BAK"; fi
@@ -190,12 +202,24 @@ hooks_wire() {
 hooks_unwire() {
     [ -f "$SETTINGS" ] || return 0
     [ -f "$SNIPPET" ] || { echo "install.sh: no settings.snippet.json — leaving hooks in place" >&2; return 0; }
-    command -v jq >/dev/null 2>&1 || { echo "install.sh: jq not found — leaving hooks in place" >&2; return 0; }
+    # Without jq the hooks cannot be removed safely, and the tree is about to go, so
+    # say exactly what is left behind and how to finish by hand. The hooks stay
+    # harmless meanwhile, since each exits quietly when its script is missing, but
+    # silence would leave a config nobody knows is stale.
+    command -v jq >/dev/null 2>&1 || {
+        echo "install.sh: jq not found, so the hooks cannot be removed from $SETTINGS" >&2
+        echo "  they will keep pointing at files this uninstall is about to delete." >&2
+        echo "  Nothing breaks (each hook exits quietly when its script is gone). To tidy" >&2
+        echo "  up, delete the lines naming these from $SETTINGS:" >&2
+        echo "    version-check.sh  session-note.sh  session-guard.sh  session-drift.sh" >&2
+        return 0; }
     if [ "$DRY" -eq 1 ]; then printf '  would: remove kit hooks from %s\n' "$SETTINGS"; return 0; fi
     # Staged NEXT TO settings.json, not in $TMPDIR: a rename within one directory is
     # atomic, while moving across filesystems is a copy that can be interrupted
     # partway and leave the config truncated.
     local tmp; tmp=$(mktemp "$SETTINGS.tmp.XXXXXX")
+    local snap; snap=$(mktemp "$SETTINGS.snap.XXXXXX")
+    cp "$SETTINGS" "$snap"
     # Prune upward so an emptied file keeps no scaffolding: our hooks, then groups
     # that became empty, then events, then the "hooks" key itself. Shapes we do not
     # recognise pass through untouched rather than being tidied away.
@@ -215,7 +239,7 @@ hooks_unwire() {
             | with_entries(select((.value | type) != "array" or (.value | length) > 0)))
           | if (.hooks | type) == "object" and (.hooks | length) == 0 then del(.hooks) else . end
         end
-    ' "$SETTINGS" "$SNIPPET" >"$tmp"
+    ' "$snap" "$SNIPPET" >"$tmp"
 
     # Check before replacing. Removal is expected to shrink the file, so counting
     # totals proves nothing; what must hold is that every hook that was NOT ours
@@ -224,19 +248,26 @@ hooks_unwire() {
     keep_before=$(jq -s "$JQ_LIB"'
         .[0] as $live | .[1] as $snip | ($snip | managed_names) as $managed
         | [$live.hooks[]?[]?.hooks[]? | select((refs($managed; true) | length) == 0)] | length' \
-        "$SETTINGS" "$SNIPPET" 2>/dev/null || echo -1)
+        "$snap" "$SNIPPET" 2>/dev/null || echo -1)
     keep_after=$(jq '[.hooks[]?[]?.hooks[]?] | length' "$tmp" 2>/dev/null || echo -2)
     if ! jq -e . "$tmp" >/dev/null 2>&1 || [ "$keep_after" != "$keep_before" ]; then
-        rm -f "$tmp"
+        rm -f "$tmp" "$snap"
         echo "install.sh: removing the hooks would have changed something else, so your file was left alone" >&2
         echo "  it is unchanged, and a copy is at $SETTINGS_BAK" >&2
         return 1
     fi
     if cmp -s "$tmp" "$SETTINGS"; then
-        rm -f "$tmp"
+        rm -f "$tmp" "$snap"
         echo "  no kit hooks were wired; $SETTINGS left untouched"
         return 0
     fi
+    if ! cmp -s "$snap" "$SETTINGS"; then
+        rm -f "$tmp" "$snap"
+        echo "install.sh: $SETTINGS changed while it was being read, so nothing was written" >&2
+        echo "  the hooks are still wired. Re-run --uninstall to try again." >&2
+        return 1
+    fi
+    rm -f "$snap"
     cp "$SETTINGS" "$SETTINGS_BAK"
     SETTINGS_TOUCHED=1
     mv "$tmp" "$SETTINGS"

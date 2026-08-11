@@ -1550,6 +1550,43 @@ rm -f "$PARTIAL/core/sessions.sh"
 CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" \
     bash "$PARTIAL/install.sh" >/dev/null 2>&1
 is "a failed install leaves settings.json byte-identical" "" "$(diff "$FAKE/original.json" "$SETT")"
+drop_home
+
+# Another writer lands between our read and our write. Claude Code and other
+# installers edit this file too, and without the check our merge, built from the
+# older copy, would silently erase whatever they just added. Simulated by a copy
+# whose merge step is followed by an edit from "somebody else".
+new_home
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"; mkdir -p "$IPREFIX"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"~/bin/U.sh"}]}]}}' >"$SETT"
+RACER="$FAKE/racer"; mkdir -p "$RACER"
+( cd "$ROOT" && tar cf - --exclude .git . ) | ( cd "$RACER" && tar xf - )
+python3 - "$RACER/install.sh" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+# Right after the merge is staged, have someone else write the live file.
+old = '''    local before after'''
+new = '''    jq '.hooks.Stop += [{"hooks":[{"type":"command","command":"~/bin/RACE.sh"}]}]' \\
+        "$SETTINGS" >"$SETTINGS.race" && mv "$SETTINGS.race" "$SETTINGS"
+    local before after'''
+assert s.count(old) == 1
+open(p, "w").write(s.replace(old, new))
+PY
+OUT=$(CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" \
+      bash "$RACER/install.sh" 2>&1)
+case "$OUT" in *"changed while it was being read"*) ok "a concurrent write is detected, not clobbered" ;;
+    *) bad "a concurrent write is detected, not clobbered" "a changed-underneath message" "$OUT";; esac
+is "…and the other writer's hook survives" 1 \
+   "$(jq '[.hooks[]?[]?.hooks[]?.command | select(test("RACE[.]sh"))] | length' "$SETT")"
+is "…while ours were not written" 0 "$(ours)"
+is "…and no snapshot file is left behind" 0 \
+   "$(find "$IPREFIX" -maxdepth 1 -name 'settings.json.snap.*' 2>/dev/null | grep -c . || true)"
+drop_home
+
+new_home
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"; mkdir -p "$IPREFIX"
+printf '{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"~/bin/mine.sh"}]}]}}' >"$SETT"
+cp "$SETT" "$FAKE/original.json"
 
 # The rollback itself: a failure AFTER the write must restore the previous file.
 # Forced with a copy whose wiring step is followed by a guaranteed failure, which
