@@ -8,8 +8,8 @@ README's FAQ, and one of them is listed at the bottom because it looks like a fa
 
 ## Nothing happens: no note, no reminders, no drift check
 
-**Check.** The kit never writes `settings.json`, so the four hooks are off until you wire
-them:
+**Check.** The installer wires the four hooks, so the usual cause is an install that did
+not finish, or a session that was already open when it ran:
 
 ```bash
 jq '.hooks | tostring | test("session-kit")' ~/.claude/settings.json
@@ -17,8 +17,10 @@ jq '.hooks | tostring | test("session-kit")' ~/.claude/settings.json
 
 `false` means nothing is wired.
 
-**Fix.** Merge the JSON block from the README's Install section, then start a new session.
-Hooks are read at session start, so an already-open session will not pick them up.
+**Fix.** Re-run `./install.sh`, then start a new session. Hooks are read at session start,
+so an already-open session will not pick them up. If you would rather wire it by hand,
+merge [settings.snippet.json](../settings.snippet.json) yourself; that is the same block
+the installer merges.
 
 The three skills work with no hooks at all. If `/rename-session` works but you never get a
 note or a reminder, this is the reason.

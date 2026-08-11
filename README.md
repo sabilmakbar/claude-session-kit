@@ -79,26 +79,13 @@ back empty, the usual cause is a missing `jq` (see
 [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)). The three skills are available in any new
 session; `/rename-session` is the quickest one to try.
 
-It never touches `settings.json`. To turn the hooks on, merge this in yourself:
+The installer also wires the four hooks into `~/.claude/settings.json` for you, backing
+the file up first and adding only what is missing. Hooks you wrote yourself, and other
+tools' hooks, are left alone. They start working in your next session.
 
-```json
-{
-  "hooks": {
-    "SessionStart": [
-      { "hooks": [
-        { "type": "command", "command": "\"$HOME/.claude/session-kit/hooks/version-check.sh\" 2>/dev/null || true" }
-      ]}
-    ],
-    "UserPromptSubmit": [
-      { "hooks": [
-        { "type": "command", "command": "\"$HOME/.claude/session-kit/hooks/session-note.sh\" 2>/dev/null || true" },
-        { "type": "command", "command": "\"$HOME/.claude/session-kit/hooks/session-guard.sh\" 2>/dev/null || true" },
-        { "type": "command", "command": "\"$HOME/.claude/session-kit/hooks/session-drift.sh\" 2>/dev/null || true" }
-      ]}
-    ]
-  }
-}
-```
+The exact block it merges is [settings.snippet.json](settings.snippet.json), so you can
+paste it by hand instead if you would rather the installer stayed out of that file. To
+drop a single hook, delete its line; to remove all four, run `./install.sh --uninstall`.
 
 ## Upgrading
 
@@ -110,8 +97,10 @@ git -C ~/claude-session-kit pull && ~/claude-session-kit/install.sh
 
 It runs the test suite first and refuses to install if anything fails, so a tree the tests
 reject never reaches `~/.claude/session-kit`. Only kit code is replaced: your notes, handoff
-folders, transcripts, and your edited `config` are left as they are. Hooks you wired into
-`settings.json` survive too, because the installer never reads that file.
+folders, transcripts, and your edited `config` are left as they are. In `settings.json` it
+adds only what is missing, so nothing is duplicated and no other tool's hook is touched.
+One thing to know: if you deleted one of the four hooks, re-running the installer puts it
+back, because "install" means "wire my hooks". Use `--uninstall` if you want them gone.
 
 ## Is it working?
 
@@ -193,8 +182,10 @@ No. The kit writes the same kind of title entry `/rename` writes, one appended
 line. The newest title wins, cleanly, whichever tool wrote it.
 
 **Do I need all four hooks?**
-No. Each one works alone; wire the ones you want. The skills work with no hooks at
-all; you just lose the automatic reminders.
+No. The installer wires all four, but each works alone, so delete the lines you do not
+want from `settings.json`. Re-running the installer puts them back, so use
+`./install.sh --uninstall` if you want them gone for good. The skills work with no hooks
+at all; you just lose the automatic reminders.
 
 **Does anything leave my machine?**
 No. There is no network code. Even the failure report is written locally and
@@ -214,9 +205,10 @@ warns you until it is looked at.
 Removes the installed libraries, the three skills, and the knobs config (it
 configures nothing once the kit is gone). It leaves your notes
 (`~/.claude/session-notes/`), your handoff folders (`~/.claude/session-handoffs/`),
-and every transcript exactly where they are. The kit never owned those. If you
-wired the hooks into `settings.json`, remove those lines too; until you do they
-point at nothing and silently do nothing.
+and every transcript exactly where they are. The kit never owned those. It also
+takes its four hooks back out of `settings.json`, backing the file up first, so
+nothing is left firing at a path that no longer exists. Hooks it did not put
+there are not touched.
 
 ## Working on the kit
 
@@ -233,9 +225,8 @@ every rule exists; read them before changing one.
 
 - **[claude-setup-template](https://github.com/sabilmakbar/claude-setup-template)**: one
   manifest for a whole Claude Code setup. You declare the kits, CLI tools, plugins, and
-  hooks a machine should have, and its `setup.sh` converges the machine onto it. Its
-  example manifest installs this kit and takes care of the `settings.json` hook wiring
-  above, so start there if you are setting up a machine rather than adding one piece.
+  hooks a machine should have, and its `setup.sh` converges the machine onto it. Start
+  there if you are setting up a whole machine rather than adding one piece.
 - **[claude-memory-kit](https://github.com/sabilmakbar/claude-memory-kit)**: the sibling
   kit. It keeps the preferences you teach Claude across sessions and machines, where this
   kit looks after the sessions themselves.

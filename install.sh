@@ -29,8 +29,104 @@ done
 
 run() { [ "$DRY" -eq 1 ] && { printf '  would: %s\n' "$*"; return 0; }; "$@"; }
 
+# --- settings.json hook wiring ------------------------------------------------
+#
+# This kit wires its own hooks and removes them again, matching claude-memory-kit:
+# two kits shipping two different installer contracts is worse than either choice
+# on its own. settings.snippet.json is the single source of truth for both halves
+# and for anyone who would rather paste the JSON by hand.
+#
+# Identity is the script BASENAME tokenised out of the command, never the exact
+# command string. Measured before this rule existed, exact matching duplicated a
+# hook on five spellings: a knob prefix, an absolute path where the snippet writes
+# $HOME, a missing 2>/dev/null, single quotes for double, and extra spacing.
+#
+# Two rules protect a file we share with every other tool: a command naming a
+# script we do not own is never touched, and a malformed command counts as NOT
+# ours (so removal leaves it alone rather than tidying someone else's mess).
+SETTINGS="${CLAUDE_SESSION_KIT_PREFIX:-$HOME/.claude}/settings.json"
+SNIPPET="$ROOT/settings.snippet.json"
+[ -f "$SNIPPET" ] || SNIPPET="$DEST_LIB/settings.snippet.json"
+
+# The basenames a command references: split on whitespace, reduce each token past
+# its last "/", then drop anything a filename cannot contain, which strips the
+# quotes the command was written with instead of trying to parse them. A
+# non-string command yields nothing, which is what makes malformed read as "not
+# ours". Matching is on the WHOLE basename, so mysession-note.sh is never ours.
+JQ_LIB='
+def cmd_basenames:
+    if type == "string"
+    then [scan("[^\\s]+")] | map(split("/") | last | gsub("[^A-Za-z0-9._-]"; ""))
+    else [] end;
+# Managed = the .sh basenames THIS kit ships in the snippet. Deriving it from the
+# snippet keeps the list in exactly one place: adding a hook there is the only
+# edit either half needs. The .sh filter drops shell noise ("null" from
+# 2>/dev/null, "true", "||") that would otherwise match across unrelated hooks.
+def managed_names: [.hooks[]?[]?.hooks[]?.command | cmd_basenames[] | select(endswith(".sh"))] | unique;
+def managed_in($set): [(.command | cmd_basenames)[] | select(. as $b | $set | index($b))];
+'
+
+hooks_wire() {
+    [ -f "$SNIPPET" ] || { echo "install.sh: no settings.snippet.json — skipping hook wiring" >&2; return 0; }
+    if [ "$DRY" -eq 1 ]; then printf '  would: merge kit hooks into %s\n' "$SETTINGS"; return 0; fi
+    mkdir -p "$(dirname "$SETTINGS")"
+    [ -f "$SETTINGS" ] || echo '{}' >"$SETTINGS"
+    cp "$SETTINGS" "$SETTINGS.bak"
+    local tmp; tmp=$(mktemp)
+    # Dedup is PER HOOK, not per group: a group keyed on its first hook silently
+    # drops any hook added to that group later, so upgrades would never land.
+    jq -s "$JQ_LIB"'
+      .[0] as $live | .[1] as $snip
+      | ($snip | managed_names) as $managed
+      | $live
+      | .hooks = (reduce ($snip.hooks | keys[]) as $ev ((.hooks // {});
+          (.[$ev] // []) as $existing
+          | ([$existing[]?.hooks[]?.command | cmd_basenames[]?] | unique) as $have
+          | ($snip.hooks[$ev]
+             | map(.hooks |= map(select(
+                 ([managed_in($managed)[] | select(. as $b | $have | index($b))] | length) == 0)))
+             | map(select((.hooks | length) > 0))) as $new
+          | .[$ev] = ($existing + $new)))
+    ' "$SETTINGS" "$SNIPPET" >"$tmp" && mv "$tmp" "$SETTINGS"
+    echo "  hooks wired into $SETTINGS (backup: $SETTINGS.bak)"
+}
+
+hooks_unwire() {
+    [ -f "$SETTINGS" ] || return 0
+    [ -f "$SNIPPET" ] || { echo "install.sh: no settings.snippet.json — leaving hooks in place" >&2; return 0; }
+    command -v jq >/dev/null 2>&1 || { echo "install.sh: jq not found — leaving hooks in place" >&2; return 0; }
+    if [ "$DRY" -eq 1 ]; then printf '  would: remove kit hooks from %s\n' "$SETTINGS"; return 0; fi
+    cp "$SETTINGS" "$SETTINGS.bak"
+    local tmp; tmp=$(mktemp)
+    # Prune upward so an emptied file keeps no scaffolding: our hooks, then groups
+    # that became empty, then events, then the "hooks" key itself. Shapes we do not
+    # recognise pass through untouched rather than being tidied away.
+    jq -s "$JQ_LIB"'
+      .[0] as $live | .[1] as $snip
+      | ($snip | managed_names) as $managed
+      | $live
+      | if (.hooks | type) != "object" then .
+        else .hooks = (.hooks
+            | map_values(
+                if type == "array" then
+                    map(if (.hooks | type) == "array"
+                        then .hooks |= map(select((managed_in($managed) | length) == 0))
+                        else . end)
+                    | map(select((.hooks | type) != "array" or (.hooks | length) > 0))
+                else . end)
+            | with_entries(select((.value | type) != "array" or (.value | length) > 0)))
+          | if (.hooks | type) == "object" and (.hooks | length) == 0 then del(.hooks) else . end
+        end
+    ' "$SETTINGS" "$SNIPPET" >"$tmp" && mv "$tmp" "$SETTINGS"
+    echo "  hooks removed from $SETTINGS (backup: $SETTINGS.bak)"
+}
+
 if [ "$UNINSTALL" -eq 1 ]; then
     echo "uninstalling"
+    # Unwire BEFORE the tree goes: the snippet that names our hooks may be the
+    # installed copy. An uninstalled kit whose hooks still fire at a path that no
+    # longer exists is the failure this half exists to prevent.
+    hooks_unwire
     # Note DATA (~/.claude/session-notes) is deliberately left alone: it is user
     # content, not kit code, which is also why it lives outside $DEST_LIB.
     run rm -rf "$DEST_LIB" "$DEST_SKILL" "$DEST_SKILL_NOTE" "$DEST_SKILL_HANDOFF"
@@ -45,6 +141,7 @@ command -v jq >/dev/null 2>&1 || {
     echo "install.sh: jq is required (brew install jq)" >&2; exit 1; }
 
 for f in core/sessions.sh naming/rename.sh notes/note.sh tests/smoke.sh config.example \
+         settings.snippet.json \
          hooks/version-check.sh hooks/session-note.sh hooks/session-guard.sh hooks/session-drift.sh \
          handoff/export.sh handoff/import.sh handoff/split.sh handoff/claim.sh handoff/release.sh \
          skills/rename-session/SKILL.md skills/session-note/SKILL.md skills/handoff/SKILL.md; do
@@ -89,6 +186,10 @@ run cp "$ROOT/tests/smoke.sh"    "$DEST_LIB/tests/smoke.sh"
 # as the guardrail's denylist.local. Removed by --uninstall along with the kit.
 run cp "$ROOT/config.example" "$DEST_LIB/config.example"
 [ -f "$DEST_LIB/config" ] || run cp "$ROOT/config.example" "$DEST_LIB/config"
+
+# The snippet ships with the kit so an installed copy can unwire itself, and so
+# the manual paste path names a real file instead of a block in the README.
+run cp "$ROOT/settings.snippet.json" "$DEST_LIB/settings.snippet.json"
 
 # The SessionStart hook is installed but NOT wired up: adding it to settings.json
 # is the user's call, not an installer's. Printed at the end instead.
@@ -141,6 +242,11 @@ for pair in "rename-session|$DEST_SKILL" "session-note|$DEST_SKILL_NOTE" "handof
     fi
 done
 
+# --- hooks -------------------------------------------------------------------
+
+echo "wiring hooks"
+hooks_wire
+
 # --- verify -----------------------------------------------------------------
 
 if [ "$DRY" -eq 0 ]; then
@@ -161,11 +267,10 @@ echo "  . $DEST_LIB/core/sessions.sh && cs_list"
 echo "if Claude Code updates and the kit warns that internals may have moved:"
 echo "  bash $DEST_LIB/tests/smoke.sh"
 echo
-echo "to re-verify automatically instead, add to SessionStart in settings.json:"
-echo "  \"$DEST_LIB/hooks/version-check.sh\" 2>/dev/null || true"
-echo "to have session notes surface on resume, add to UserPromptSubmit:"
-echo "  \"$DEST_LIB/hooks/session-note.sh\" 2>/dev/null || true"
-echo "to have split sessions remind you where the topic went, also add:"
-echo "  \"$DEST_LIB/hooks/session-guard.sh\" 2>/dev/null || true"
-echo "to get drift checks (rename / split / wrong tab), also add:"
-echo "  \"$DEST_LIB/hooks/session-drift.sh\" 2>/dev/null || true"
+echo "four hooks are now wired in $SETTINGS:"
+echo "  version-check   re-tests the kit after a Claude Code update"
+echo "  session-note    hands a reopened session its own note back"
+echo "  session-guard   points a split session at where the topic went"
+echo "  session-drift   notices a stale title or a message in the wrong tab"
+echo "they take effect in NEW sessions. To drop one, delete its line from"
+echo "settings.json; ./install.sh --uninstall removes all four."
