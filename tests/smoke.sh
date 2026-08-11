@@ -137,11 +137,11 @@ PROJECTS="$(_cs_projects_dir)"
 # A session transcript is <session-uuid>.jsonl directly inside a project dir. Keying on
 # the UUID matters: subagent transcripts live a level deeper as agent-*.jsonl, and a
 # plain depth count would read those 8-on-this-machine as misplaced sessions.
-CS_UUID_RE='/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$'
+UUID_RE='/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$'
 
-FILES=$(find "$PROJECTS" -mindepth 2 -maxdepth 2 -name '*.jsonl' -type f 2>/dev/null | grep -E "$CS_UUID_RE")
+FILES=$(find "$PROJECTS" -mindepth 2 -maxdepth 2 -name '*.jsonl' -type f 2>/dev/null | grep -E "$UUID_RE")
 N=$(printf '%s\n' "$FILES" | grep -c .)
-ANYWHERE=$(find "$PROJECTS" -name '*.jsonl' -type f 2>/dev/null | grep -cE "$CS_UUID_RE")
+ANYWHERE=$(find "$PROJECTS" -name '*.jsonl' -type f 2>/dev/null | grep -cE "$UUID_RE")
 
 # Genuinely nothing here — a CI runner, or a fresh machine. Skipping is correct.
 #

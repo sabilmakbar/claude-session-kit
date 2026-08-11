@@ -1206,6 +1206,99 @@ case "$OUT" in
     *) bad "a bad root fails loudly and names the fix" "actionable error" "${OUT:-silence}" ;;
 esac
 
+# --- the config file ---------------------------------------------------------
+#
+# Knobs resolve env > file > default. The file lives in the state dir (beside
+# .verified), is parsed strictly and never sourced — the injection test proves a
+# command-shaped value cannot run — and anything malformed falls back to the
+# default: hooks fail open.
+
+echo "the config file"
+
+new_home
+CONF="$FAKE/.claude/session-kit"; mkdir -p "$CONF"
+. "$ROOT/core/sessions.sh"
+
+is "no config file: the default answers" 200 "$(cs_conf CS_DRIFT_EVERY 200)"
+printf 'CS_DRIFT_EVERY=300\n' >"$CONF/config"
+is "a file value overrides the default" 300 "$(cs_conf CS_DRIFT_EVERY 200)"
+is "a key the file lacks keeps its default" 20 "$(cs_conf CS_DRIFT_MIN_HISTORY 20)"
+printf '# comment\nCS_DRIFT_EVERY=300\nCS_DRIFT_EVERY=400\n' >"$CONF/config"
+is "the last duplicate wins" 400 "$(cs_conf CS_DRIFT_EVERY 200)"
+printf 'CS_DRIFT_EVERY=  77  \n' >"$CONF/config"
+is "surrounding whitespace is tolerated" 77 "$(cs_conf CS_DRIFT_EVERY 200)"
+printf 'CS_DRIFT_EVERY=ten\n' >"$CONF/config"
+is "a non-numeric value falls back to the default" 200 "$(cs_conf CS_DRIFT_EVERY 200)"
+printf 'CS_DRIFT_EVERY=$(touch %s/pwned)\n' "$FAKE" >"$CONF/config"
+is "a command-shaped value falls back to the default" 200 "$(cs_conf CS_DRIFT_EVERY 200)"
+[ ! -e "$FAKE/pwned" ] && ok "…and provably never executed" \
+    || bad "…and provably never executed" "no side effect" "pwned file exists"
+
+# End to end through the drift hook: the file value drives gate B, and env still
+# wins over the file. Both branches discriminate: if the file were ignored, the
+# default cadence (200) would keep every fixture silent.
+ID9=cccc9999-0000-0000-0000-000000000001; transcript "$ID9" >/dev/null
+add_ai "$ID9" "Config knob test"
+pidfile "$$" "$ID9" "documents-9" derived
+printf 'CS_DRIFT_EVERY=10\nCS_DRIFT_MIN_HISTORY=3\n' >"$CONF/config"
+drift9() { printf '{"session_id":"%s"}' "$1" | bash "$ROOT/hooks/session-drift.sh"; }
+is "hook via file config: a near-empty session stays quiet" "" "$(drift9 "$ID9")"
+fill "$ID9" 10
+case "$(drift9 "$ID9")" in *Drift\ check*) ok "the drift cadence honors the config file" ;;
+    *) bad "the drift cadence honors the config file" "drift payload" "silence";; esac
+fill "$ID9" 3
+case "$(CS_DRIFT_EVERY=3 drift9 "$ID9")" in *Drift\ check*) ok "env still beats the file" ;;
+    *) bad "env still beats the file" "drift payload" "silence";; esac
+drop_home
+
+# The pickup knobs, previously untested. Max-history gates who counts as brand-new
+# (file form, proving the guard reads the config too); the window knob is shown by
+# inversion: an aged marker plus a huge window is still offered, where the default
+# window (already tested above) would have gone stale.
+new_home
+CONF="$FAKE/.claude/session-kit"; mkdir -p "$CONF"
+OLD9=cccc9999-0000-0000-0000-000000000002
+NEW9=cccc9999-0000-0000-0000-000000000003
+transcript "$OLD9" >/dev/null; add_ai "$OLD9" "Knob source"
+transcript "$NEW9" >/dev/null; add_ai "$NEW9" "x"
+pidfile "$$" "$OLD9" "documents-8" derived
+printf '## Context\nx\n## Assertions\n- x\n' >"$FAKE/note9.md"
+CLAUDE_CODE_SESSION_ID=$OLD9 bash "$ROOT/handoff/split.sh" -n "$FAKE/note9.md" -t "knobs" >/dev/null 2>&1
+guard9() { printf '{"session_id":"%s"}' "$1" | bash "$ROOT/hooks/session-guard.sh"; }
+
+printf 'CS_PICKUP_MAX_HISTORY=1\n' >"$CONF/config"
+is "pickup max-history via the config file gates the nudge" "" "$(guard9 "$NEW9")"
+rm -f "$CONF/config" "$FAKE/.claude/session-handoffs/$NEW9.pickup-seen"
+touch -t 202001010000 "$FAKE/.claude/session-handoffs/$OLD9.handed"
+case "$(CS_PICKUP_WINDOW_MIN=99999999 guard9 "$NEW9")" in *pending*claim.sh*) ok "a wider pickup window keeps an aged handoff alive" ;;
+    *) bad "a wider pickup window keeps an aged handoff alive" "pickup payload" "silence";; esac
+case "$(CS_PICKUP_WINDOW_MIN=99999999 guard9 "$OLD9")" in *NEVER\ CLAIMED*) bad "…and the source guard is not stale under it" "normal guard" "stale";;
+    *split\ off*) ok "…and the source guard is not stale under it" ;;
+    *) bad "…and the source guard is not stale under it" "normal guard" "silence";; esac
+drop_home
+
+# --- install seeds the config once --------------------------------------------
+#
+# First suite section to invoke install.sh itself (CLAUDE_SESSION_KIT_NO_GATE skips its
+# run.sh gate — gating would recurse). The property under test: a fresh install
+# seeds config from the example, an upgrade never overwrites a user's edits.
+
+echo "install seeds the config once"
+
+new_home
+IPREFIX="$FAKE/.claude"
+( CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" bash "$ROOT/install.sh" >/dev/null 2>&1 )
+is "install from the checkout exits 0" 0 $?
+[ -f "$IPREFIX/session-kit/config" ] && ok "a fresh install seeds the config" \
+    || bad "a fresh install seeds the config" "config present" "missing"
+printf 'CS_DRIFT_EVERY=42\n' >"$IPREFIX/session-kit/config"
+( CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" bash "$ROOT/install.sh" >/dev/null 2>&1 )
+is "a re-run (the upgrade path) preserves the edited config" "CS_DRIFT_EVERY=42" \
+   "$(cat "$IPREFIX/session-kit/config")"
+[ -f "$IPREFIX/session-kit/config.example" ] && ok "…while the example ships regardless" \
+    || bad "…while the example ships regardless" "example present" "missing"
+drop_home
+
 # --- result -----------------------------------------------------------------
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"

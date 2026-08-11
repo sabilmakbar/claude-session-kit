@@ -44,7 +44,12 @@ flowchart TD
 
 The numbers (20 entries of history, a check every 200 entries) are deliberately
 low-stakes. A check that finds nothing costs one silent thought, not an
-interruption. Both can be changed with environment variables.
+interruption. All four knobs (these two, the 48-hour pickup window, and how new a
+session must be to get offered pending handoffs) live in
+`~/.claude/session-kit/config`, seeded at install with every default shown
+commented out. The format is KEY=value, whole numbers only; the file is read,
+never executed; a malformed value quietly falls back to its default; and an
+environment variable with the same name overrides the file.
 
 ## Splitting a session on the same machine
 

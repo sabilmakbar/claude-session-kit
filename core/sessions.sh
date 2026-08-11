@@ -16,7 +16,8 @@
 # sourced file runs under the caller's shell. bash and zsh both work; keep it that way.
 
 # The version the AUTHOR tested against. A floor, not the whole answer — see
-# cs_verified_version.
+# cs_verified_version. A namespaced CONSTANT, not a knob: this file is sourced into
+# arbitrary shells (hence the prefix), and smoke.sh/export.sh read it as core's API.
 CS_VERIFIED_VERSION="2.1.222"
 
 _cs_home()         { printf '%s' "${CLAUDE_SESSION_KIT_HOME:-$HOME}"; }
@@ -40,6 +41,23 @@ cs_verified_version() {
 }
 
 cs_have_deps() { command -v jq >/dev/null 2>&1; }
+
+# Tunable knobs: KEY=value lines in $(_cs_state_dir)/config — the same place
+# .verified lives, so one file serves hooks, skills, and a dev checkout alike, and
+# the tests' fake HOMEs isolate it for free. Parsed strictly and NEVER sourced: a
+# stray line in a user-edited file must not become code inside a hook. Values must
+# be whole numbers; anything else falls back to the caller's default, silently —
+# hooks fail open. Precedence is env > file > default, with the env half at the
+# call site: VAR="${VAR:-$(cs_conf VAR default)}" (indirect expansion is bash-only
+# and this file must load under zsh too).
+cs_conf() {  # <key> <default> -> value
+    local k="$1" d="$2" f="" v=""
+    f="$(_cs_state_dir)/config"
+    [ -r "$f" ] || { printf '%s' "$d"; return; }
+    v=$(grep -E "^${k}=" "$f" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '[:space:]')
+    case "$v" in ''|*[!0-9]*) v="$d";; esac
+    printf '%s' "$v"
+}
 
 # The session this script is running inside, if any.
 cs_current_id() { printf '%s' "${CLAUDE_CODE_SESSION_ID:-}"; }
