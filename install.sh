@@ -50,6 +50,11 @@ run() { [ "$DRY" -eq 1 ] && { printf '  would: %s\n' "$*"; return 0; }; "$@"; }
 # (removal tidies nobody else's mess), and a same-named hook belonging to someone
 # else is left alone AND reported, because silence there looks like a bug in us.
 SETTINGS="${CLAUDE_SESSION_KIT_PREFIX:-$HOME/.claude}/settings.json"
+# Kit-specific backup name on purpose: claude-memory-kit backs the same file up to
+# settings.json.bak, so a shared name means each kit's installer clobbers the
+# other's copy. It lives beside settings.json rather than inside the kit tree
+# because --uninstall removes that tree, which is exactly when a backup matters.
+SETTINGS_BAK="$SETTINGS.session-kit.bak"
 SNIPPET="$ROOT/settings.snippet.json"
 [ -f "$SNIPPET" ] || SNIPPET="$DEST_LIB/settings.snippet.json"
 
@@ -66,8 +71,8 @@ rollback_settings() {
     local rc=$?
     [ "$rc" -eq 0 ] && return 0
     [ "$SETTINGS_TOUCHED" -eq 1 ] || return 0
-    [ -f "$SETTINGS.bak" ] || return 0
-    cp "$SETTINGS.bak" "$SETTINGS" 2>/dev/null \
+    [ -f "$SETTINGS_BAK" ] || return 0
+    cp "$SETTINGS_BAK" "$SETTINGS" 2>/dev/null \
         && echo "install.sh: run failed, so settings.json was rolled back to its previous contents" >&2
     return 0
 }
@@ -152,7 +157,7 @@ hooks_wire() {
     if ! jq -e . "$tmp" >/dev/null 2>&1 || [ "$after" -lt "$before" ]; then
         rm -f "$tmp"
         echo "install.sh: the settings.json merge did not look right, so your file was left alone" >&2
-        echo "  it is unchanged, and a copy is at $SETTINGS.bak" >&2
+        echo "  it is unchanged, and a copy is at $SETTINGS_BAK" >&2
         return 1
     fi
     # Identical result means there is nothing to do, so neither file is touched.
@@ -163,10 +168,10 @@ hooks_wire() {
         echo "  hooks already wired; $SETTINGS left untouched"
         return 0
     fi
-    cp "$SETTINGS" "$SETTINGS.bak"
+    cp "$SETTINGS" "$SETTINGS_BAK"
     SETTINGS_TOUCHED=1
     mv "$tmp" "$SETTINGS"
-    echo "  hooks wired into $SETTINGS (previous contents: $SETTINGS.bak)"
+    echo "  hooks wired into $SETTINGS (previous contents: $SETTINGS_BAK)"
 }
 
 hooks_unwire() {
@@ -211,7 +216,7 @@ hooks_unwire() {
     if ! jq -e . "$tmp" >/dev/null 2>&1 || [ "$keep_after" != "$keep_before" ]; then
         rm -f "$tmp"
         echo "install.sh: removing the hooks would have changed something else, so your file was left alone" >&2
-        echo "  it is unchanged, and a copy is at $SETTINGS.bak" >&2
+        echo "  it is unchanged, and a copy is at $SETTINGS_BAK" >&2
         return 1
     fi
     if cmp -s "$tmp" "$SETTINGS"; then
@@ -219,10 +224,10 @@ hooks_unwire() {
         echo "  no kit hooks were wired; $SETTINGS left untouched"
         return 0
     fi
-    cp "$SETTINGS" "$SETTINGS.bak"
+    cp "$SETTINGS" "$SETTINGS_BAK"
     SETTINGS_TOUCHED=1
     mv "$tmp" "$SETTINGS"
-    echo "  hooks removed from $SETTINGS (previous contents: $SETTINGS.bak)"
+    echo "  hooks removed from $SETTINGS (previous contents: $SETTINGS_BAK)"
 }
 
 if [ "$UNINSTALL" -eq 1 ]; then

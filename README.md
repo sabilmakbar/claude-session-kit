@@ -91,7 +91,8 @@ breaks earlier leaves `settings.json` untouched, a merge that does not look righ
 discarded rather than saved, and a failure after the write puts the previous contents
 back. A run that would change nothing writes nothing at all.
 
-The version from just before the last real change is kept at `settings.json.bak`, so you
+The version from just before the last real change is kept at
+`settings.json.session-kit.bak`, so you
 can restore it yourself at any time. Because repeat runs skip the write, upgrading never
 overwrites that copy: after any number of re-installs it is still your config from before
 the kit first touched it.

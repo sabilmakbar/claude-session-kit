@@ -1354,7 +1354,12 @@ is "…one of them on SessionStart" 1 \
    "$(jq '[.hooks.SessionStart[]?.hooks[]?] | length' "$SETT")"
 is "…and three on UserPromptSubmit" 3 \
    "$(jq '[.hooks.UserPromptSubmit[]?.hooks[]?] | length' "$SETT")"
-[ -f "$SETT.bak" ] && ok "…leaving a backup" || bad "…leaving a backup" "settings.json.bak" "missing"
+[ -f "$SETT.session-kit.bak" ] && ok "…leaving a backup" \
+    || bad "…leaving a backup" "settings.json.session-kit.bak" "missing"
+# The shared name belongs to nobody: claude-memory-kit backs up to settings.json.bak
+# too, so writing there would destroy whichever kit installed first.
+[ -e "$SETT.bak" ] && bad "…without touching the shared settings.json.bak" "untouched" "written" \
+    || ok "…without touching the shared settings.json.bak"
 
 # Every command the snippet wires must name a script the kit actually installs.
 # Drift here would wire a hook at a path that never fires, silently.
@@ -1502,7 +1507,7 @@ IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"; mkdir -p "$IPREFIX"
 printf '{"model":"opus","hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"~/bin/mine.sh"}]}]}}' >"$SETT"
 cp "$SETT" "$FAKE/original.json"
 inst
-is "the backup holds exactly the pre-install file" "" "$(diff "$FAKE/original.json" "$SETT.bak")"
+is "the backup holds exactly the pre-install file" "" "$(diff "$FAKE/original.json" "$SETT.session-kit.bak")"
 is "…and unrelated settings survive the merge" '"opus"' "$(jq -c .model "$SETT")"
 is "…as does the user's own hook" 1 \
    "$(jq '[.hooks[]?[]?.hooks[]?.command | select(test("bin/mine"))] | length' "$SETT")"
@@ -1511,7 +1516,7 @@ is "…as does the user's own hook" 1 \
 # back up the already-wired file, and the copy of the pre-kit config would be gone
 # after a single upgrade, which is exactly when someone might want it back.
 inst; inst
-is "…and it survives two more installs" "" "$(diff "$FAKE/original.json" "$SETT.bak")"
+is "…and it survives two more installs" "" "$(diff "$FAKE/original.json" "$SETT.session-kit.bak")"
 OUT=$(CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" bash "$ROOT/install.sh" 2>&1)
 case "$OUT" in *"already wired"*"left untouched"*) ok "a no-op run says so and writes nothing" ;;
     *) bad "a no-op run says so and writes nothing" "already wired / left untouched" "$OUT";; esac
