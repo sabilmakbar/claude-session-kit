@@ -49,13 +49,11 @@ itself stops working, you get a single line saying so and what to do about it, o
 day until it is fixed. Otherwise a broken kit and a healthy one would look exactly the
 same, since both say nothing.
 
-## Try it from a checkout
+## What it looks like
 
-Nothing below writes anything, so a checkout is enough to see what the kit already knows
-about your sessions, installed or not:
+`cs_list` is the kit's view of your sessions:
 
 ```
-$ . core/sessions.sh
 $ cs_list
 7c1e0a4b-...   live   Rewrite the billing importer, split by tenant
 b93f5d21-...   live   documents-41
@@ -63,15 +61,12 @@ b93f5d21-...   live   documents-41
 ```
 
 Three tab-separated columns: the session id, whether a process is still running for it, and
-the best name the kit can find. `documents-41` on the second row is what an unnamed session
-looks like, and is the thing `/rename-session` fixes.
+the best name the kit can find. `documents-41` is what an unnamed session looks like, and is
+what `/rename-session` fixes. `cs_find "billing importer"` finds one by name fragment or id
+prefix. Both only read; nothing here writes.
 
-```bash
-cs_find "billing importer"   # by name fragment, or by id prefix
-```
-
-The titles above are made up. Yours are your own work, so treat `cs_list` output the way you
-would treat a list of your branch names.
+The titles are made up. Yours are your own work, so treat `cs_list` output the way you would
+treat a list of your branch names.
 
 ## Install
 
