@@ -32,8 +32,9 @@ still matches its title. Three outcomes:
 A session that never got a real name gets a gentler nudge: want to name this?
 
 Both of those numbers, how much history a session needs before the checks start and
-how often they run, are settings rather than constants. [FLOWS.md](FLOWS.md) gives the
-values and the environment variables that change them.
+how often they run, are settings rather than constants. They live in a small config
+file the install seeds at `~/.claude/session-kit/config`, and the choices are
+explained inside it. [FLOWS.md](FLOWS.md) gives the values and the rules.
 
 ## When a session outgrows itself
 
