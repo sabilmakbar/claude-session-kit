@@ -1539,6 +1539,36 @@ CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" \
 is "a failure after the write rolls settings.json back" "" "$(diff "$FAKE/original.json" "$SETT")"
 drop_home
 
+# A settings.json that is ALREADY broken is caught in preflight, before anything is
+# written. Without that check the run installs everything and then dies at the very
+# last step with a bare parser error, which reads as "the kit is broken".
+new_home
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"; mkdir -p "$IPREFIX"
+printf '{"hooks": {oops not json' >"$SETT"
+cp "$SETT" "$FAKE/original.json"
+OUT=$(CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" \
+      bash "$ROOT/install.sh" 2>&1); RC=$?
+is "an already-broken settings.json refuses the install" 1 "$RC"
+case "$OUT" in *"not a valid JSON object"*) ok "…saying which file to fix" ;;
+    *) bad "…saying which file to fix" "a clear message" "$OUT";; esac
+is "…leaving it exactly as it was" "" "$(diff "$FAKE/original.json" "$SETT")"
+[ -d "$IPREFIX/session-kit" ] && bad "…and installing nothing at all" "nothing" "kit tree created" \
+    || ok "…and installing nothing at all"
+drop_home
+
+# Nothing may be left lying beside settings.json. The staging file is created there
+# on purpose (a rename inside one directory is atomic, a cross-filesystem move is
+# not), so it has to be gone by the end of both operations.
+new_home
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"
+inst
+is "install leaves no staging file behind" 0 \
+   "$(find "$IPREFIX" -maxdepth 1 -name 'settings.json.tmp.*' 2>/dev/null | grep -c . || true)"
+inst --uninstall
+is "uninstall leaves no staging file behind" 0 \
+   "$(find "$IPREFIX" -maxdepth 1 -name 'settings.json.tmp.*' 2>/dev/null | grep -c . || true)"
+drop_home
+
 # An incomplete checkout must refuse BEFORE copying, or a re-run (the upgrade path)
 # would half-overwrite a working install.
 new_home

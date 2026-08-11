@@ -124,7 +124,10 @@ hooks_wire() {
     fi
 
     cp "$SETTINGS" "$SETTINGS.bak"
-    local tmp; tmp=$(mktemp)
+    # Staged NEXT TO settings.json, not in $TMPDIR: a rename within one directory is
+    # atomic, while moving across filesystems is a copy that can be interrupted
+    # partway and leave the config truncated.
+    local tmp; tmp=$(mktemp "$SETTINGS.tmp.XXXXXX")
     # Dedup is PER HOOK, not per group: a group keyed on its first hook silently
     # drops any hook added to that group later, so upgrades would never land.
     jq -s "$JQ_LIB"'
@@ -164,7 +167,10 @@ hooks_unwire() {
     command -v jq >/dev/null 2>&1 || { echo "install.sh: jq not found — leaving hooks in place" >&2; return 0; }
     if [ "$DRY" -eq 1 ]; then printf '  would: remove kit hooks from %s\n' "$SETTINGS"; return 0; fi
     cp "$SETTINGS" "$SETTINGS.bak"
-    local tmp; tmp=$(mktemp)
+    # Staged NEXT TO settings.json, not in $TMPDIR: a rename within one directory is
+    # atomic, while moving across filesystems is a copy that can be interrupted
+    # partway and leave the config truncated.
+    local tmp; tmp=$(mktemp "$SETTINGS.tmp.XXXXXX")
     # Prune upward so an emptied file keeps no scaffolding: our hooks, then groups
     # that became empty, then events, then the "hooks" key itself. Shapes we do not
     # recognise pass through untouched rather than being tidied away.
@@ -232,6 +238,16 @@ for f in core/sessions.sh naming/rename.sh notes/note.sh tests/smoke.sh config.e
          skills/rename-session/SKILL.md skills/session-note/SKILL.md skills/handoff/SKILL.md; do
     [ -f "$ROOT/$f" ] || { echo "install.sh: missing $f — run from a full checkout" >&2; exit 1; }
 done
+
+# A settings.json that is already broken stops us before anything is written. The
+# wiring step would fail on it at the very end anyway, after a full install, with
+# nothing but a raw parser error to show for it. Failing here costs nothing and
+# says which file to fix.
+if [ -f "$SETTINGS" ] && ! jq -e 'type == "object"' "$SETTINGS" >/dev/null 2>&1; then
+    echo "install.sh: $SETTINGS is not a valid JSON object, so the hooks cannot be wired" >&2
+    echo "  fix or move that file and re-run. Nothing has been installed or changed." >&2
+    exit 1
+fi
 
 # Refuse to install something the tests reject. CLAUDE_SESSION_KIT_NO_GATE exists for the
 # suite itself, whose install fixtures call this installer — gating would recurse.
