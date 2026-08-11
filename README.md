@@ -145,8 +145,10 @@ machine.
   rewrites a transcript and never touches VS Code's database.
 - Your notes live in their own folder. Uninstalling the kit never deletes them.
 - The timing knobs (when drift checks start, how often they repeat, the handoff
-  pickup window) live in `~/.claude/session-kit/config`. Edit it freely; upgrades
-  never overwrite it.
+  pickup window) live in `~/.claude/session-kit/config`, seeded at install with
+  every default shown. To change one, uncomment its line and edit the number;
+  upgrades never overwrite your edits. If you work from a checkout without
+  installing, copy `config.example` to that path yourself.
 - Claude Code's internals are undocumented and can change. The kit is built to
   fail loudly and safely when they do, and to tell you what to run next.
 - Verified against Claude Code 2.1.222. The real-data suite also passes over

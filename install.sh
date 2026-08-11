@@ -154,6 +154,8 @@ fi
 
 echo
 echo "done. /rename-session, /session-note and /handoff are available in new sessions."
+echo "timing knobs (drift cadence, pickup window) live in $DEST_LIB/config —"
+echo "  uncomment a line to change one; upgrades never overwrite your edits."
 echo "the libraries are usable directly too:"
 echo "  . $DEST_LIB/core/sessions.sh && cs_list"
 echo "if Claude Code updates and the kit warns that internals may have moved:"
