@@ -13,6 +13,16 @@ It is plain bash plus `jq`. Moving sessions between machines also needs `shasum`
 refuse rather than write a bundle nothing can verify. No server, no telemetry, nothing
 to build.
 
+The docs go shortest first. New here? [HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) tells the
+whole story in plain words, and it is the only one you need in order to use the kit.
+[FLOWS.md](docs/FLOWS.md) is the next step down: diagrams of what runs when, with the
+specifics the plain-language version leaves out. The three `docs/DESIGN-*.md` files are
+decision records, for anyone changing the kit rather than running it: every rule in the
+code with the reason it exists.
+
+If something is broken rather than unclear, go straight to
+[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+
 ## What you get
 
 Three skills to use inside any session:
@@ -164,19 +174,6 @@ That report is built to be published. It carries versions, check names, and the 
 characters of a session id, never a title or a path. The terminal output is deliberately not
 redacted, because seeing the offending title is what makes a failure debuggable on your own
 machine.
-
-## Reading more
-
-- [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) tells the whole story in plain words,
-  and it is the only one you need in order to use the kit.
-- [docs/FLOWS.md](docs/FLOWS.md) is the next step down: diagrams of what runs when,
-  with the specifics the plain-language version leaves out.
-- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) is symptom, check, fix. Start
-  there when something is actually broken.
-- [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) lists what the kit needs. Short
-  version: `jq`.
-- The three `docs/DESIGN-*.md` files are decision records. Read them before
-  changing the kit; every rule in the code has its reason written down there.
 
 ## Good to know
 
