@@ -78,18 +78,27 @@ It never touches `settings.json`. To turn the hooks on, merge this in yourself:
 
 ## Try it from a checkout
 
+Nothing below writes anything, so a checkout is enough to see what the kit already knows
+about your sessions, installed or not:
+
 ```bash
 . core/sessions.sh
 cs_list                    # every session, with its best-known name
 cs_find "memory review"    # find a session by name or id
-
-bash tests/run.sh          # the test suite, runs on any machine
-bash tests/smoke.sh        # checks the kit against your real ~/.claude
 ```
 
-If a Claude Code update changes something the kit depends on, `smoke.sh` fails and
-writes a report you can paste straight into an issue. The report contains version
-numbers and check names only. Never your titles, paths, or username.
+## Upgrading
+
+Re-run the installer. That is the whole upgrade path:
+
+```bash
+git -C ~/claude-session-kit pull && ~/claude-session-kit/install.sh
+```
+
+It runs the test suite first and refuses to install if anything fails, so a tree the tests
+reject never reaches `~/.claude/session-kit`. Only kit code is replaced: your notes, handoff
+folders, transcripts, and your edited `config` are left as they are. Hooks you wired into
+`settings.json` survive too, because the installer never reads that file.
 
 ## Is it working?
 
@@ -195,6 +204,17 @@ configures nothing once the kit is gone). It leaves your notes
 and every transcript exactly where they are. The kit never owned those. If you
 wired the hooks into `settings.json`, remove those lines too; until you do they
 point at nothing and silently do nothing.
+
+## Working on the kit
+
+```bash
+bash tests/run.sh          # the fixture suite, runs on any machine, gates every install
+bash tests/smoke.sh        # the real-data suite, checks the kit against your ~/.claude
+```
+
+`run.sh` is the gate. `smoke.sh` passes or skips depending on the machine it runs on, which
+is the point, so it is never a required check. The design records under `docs/` say why
+every rule exists; read them before changing one.
 
 ## Related projects
 
