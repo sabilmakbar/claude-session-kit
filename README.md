@@ -80,8 +80,10 @@ back empty, the usual cause is a missing `jq` (see
 session; `/rename-session` is the quickest one to try.
 
 The installer also wires the four hooks into `~/.claude/settings.json` for you, backing
-the file up first and adding only what is missing. Hooks you wrote yourself, and other
-tools' hooks, are left alone. They start working in your next session.
+the file up first and adding only what is missing. They start working in your next
+session. It only ever writes or removes hooks under `session-kit/hooks/`, so hooks you
+wrote yourself and other tools' hooks are left alone, and if another tool happens to use
+one of the same filenames the installer says so instead of guessing.
 
 The exact block it merges is [settings.snippet.json](settings.snippet.json), so you can
 paste it by hand instead if you would rather the installer stayed out of that file. To

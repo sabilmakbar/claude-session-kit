@@ -36,34 +36,50 @@ run() { [ "$DRY" -eq 1 ] && { printf '  would: %s\n' "$*"; return 0; }; "$@"; }
 # on its own. settings.snippet.json is the single source of truth for both halves
 # and for anyone who would rather paste the JSON by hand.
 #
-# Identity is the script BASENAME tokenised out of the command, never the exact
-# command string. Measured before this rule existed, exact matching duplicated a
-# hook on five spellings: a knob prefix, an absolute path where the snippet writes
-# $HOME, a missing 2>/dev/null, single quotes for double, and extra spacing.
+# Identity is the script basename tokenised out of the command AND the directory
+# that basename sits in, never the exact command string. Exact matching duplicated
+# a hook on five spellings (a knob prefix, an absolute path where the snippet
+# writes $HOME, a missing 2>/dev/null, single quotes for double, extra spacing);
+# basename alone was worse in both directions, because tool names collide: another
+# tool shipping its own session-note.sh made us skip wiring ours (a silently dead
+# kit) and then deleted THEIR hook on uninstall. So a hook is ours only when the
+# basename is one we ship and its directory ends in session-kit/hooks.
 #
-# Two rules protect a file we share with every other tool: a command naming a
-# script we do not own is never touched, and a malformed command counts as NOT
-# ours (so removal leaves it alone rather than tidying someone else's mess).
+# Three rules protect a file we share with every other tool: a command naming a
+# script we do not own is never touched, a malformed command counts as NOT ours
+# (removal tidies nobody else's mess), and a same-named hook belonging to someone
+# else is left alone AND reported, because silence there looks like a bug in us.
 SETTINGS="${CLAUDE_SESSION_KIT_PREFIX:-$HOME/.claude}/settings.json"
 SNIPPET="$ROOT/settings.snippet.json"
 [ -f "$SNIPPET" ] || SNIPPET="$DEST_LIB/settings.snippet.json"
 
-# The basenames a command references: split on whitespace, reduce each token past
-# its last "/", then drop anything a filename cannot contain, which strips the
-# quotes the command was written with instead of trying to parse them. A
+# Tokens of a command: split on whitespace, then drop characters a path cannot
+# contain, which strips the quotes it was written with instead of parsing them. A
 # non-string command yields nothing, which is what makes malformed read as "not
-# ours". Matching is on the WHOLE basename, so mysession-note.sh is never ours.
+# ours". Basenames are compared WHOLE, so mysession-note.sh is never ours either.
 JQ_LIB='
-def cmd_basenames:
+def cmd_tokens:
     if type == "string"
-    then [scan("[^\\s]+")] | map(split("/") | last | gsub("[^A-Za-z0-9._-]"; ""))
+    then [scan("[^\\s]+")] | map(gsub("[^A-Za-z0-9._/$~{}-]"; "")) | map(select(length > 0))
     else [] end;
+def cmd_basenames: cmd_tokens | map(split("/") | last);
+# Every managed basename this command references, split by whether the path is
+# ours: refs($managed; true) is this kit, refs($managed; false) is someone else
+# using the same filename. The directory test is the whole point, and it holds for
+# a deployed tree, a custom prefix, and a checkout alike, since all three end
+# .../session-kit/hooks.
+def refs($managed; $mine):
+    [ (.command | cmd_tokens)[] as $t
+      | ($t | split("/") | last) as $b
+      | ($t | split("/") | .[:-1] | join("/")) as $dir
+      | select($managed | index($b))
+      | select(($dir | endswith("session-kit/hooks")) == $mine)
+      | $b ];
 # Managed = the .sh basenames THIS kit ships in the snippet. Deriving it from the
 # snippet keeps the list in exactly one place: adding a hook there is the only
 # edit either half needs. The .sh filter drops shell noise ("null" from
 # 2>/dev/null, "true", "||") that would otherwise match across unrelated hooks.
 def managed_names: [.hooks[]?[]?.hooks[]?.command | cmd_basenames[] | select(endswith(".sh"))] | unique;
-def managed_in($set): [(.command | cmd_basenames)[] | select(. as $b | $set | index($b))];
 '
 
 hooks_wire() {
@@ -71,6 +87,22 @@ hooks_wire() {
     if [ "$DRY" -eq 1 ]; then printf '  would: merge kit hooks into %s\n' "$SETTINGS"; return 0; fi
     mkdir -p "$(dirname "$SETTINGS")"
     [ -f "$SETTINGS" ] || echo '{}' >"$SETTINGS"
+
+    # Warn about hooks that use one of our filenames but live somewhere else. They
+    # are another tool's, so they are neither counted as already-wired nor removed
+    # later; saying so is the difference between a shared file and a surprise.
+    local clash
+    clash=$(jq -rs "$JQ_LIB"'
+      .[0] as $live | .[1] as $snip
+      | ($snip | managed_names) as $managed
+      | [$live.hooks[]?[]?.hooks[]? | select((refs($managed; false) | length) > 0) | .command]
+      | unique | .[]' "$SETTINGS" "$SNIPPET" 2>/dev/null)
+    if [ -n "$clash" ]; then
+        echo "  ! settings.json already has hooks named like ours, owned by something else:" >&2
+        printf '      %s\n' "$clash" >&2
+        echo "    left untouched; this kit only ever writes or removes .../session-kit/hooks/*" >&2
+    fi
+
     cp "$SETTINGS" "$SETTINGS.bak"
     local tmp; tmp=$(mktemp)
     # Dedup is PER HOOK, not per group: a group keyed on its first hook silently
@@ -81,10 +113,10 @@ hooks_wire() {
       | $live
       | .hooks = (reduce ($snip.hooks | keys[]) as $ev ((.hooks // {});
           (.[$ev] // []) as $existing
-          | ([$existing[]?.hooks[]?.command | cmd_basenames[]?] | unique) as $have
+          | ([$existing[]?.hooks[]? | refs($managed; true)[]] | unique) as $have
           | ($snip.hooks[$ev]
              | map(.hooks |= map(select(
-                 ([managed_in($managed)[] | select(. as $b | $have | index($b))] | length) == 0)))
+                 ([refs($managed; true)[] | select(. as $b | $have | index($b))] | length) == 0)))
              | map(select((.hooks | length) > 0))) as $new
           | .[$ev] = ($existing + $new)))
     ' "$SETTINGS" "$SNIPPET" >"$tmp" && mv "$tmp" "$SETTINGS"
@@ -110,7 +142,7 @@ hooks_unwire() {
             | map_values(
                 if type == "array" then
                     map(if (.hooks | type) == "array"
-                        then .hooks |= map(select((managed_in($managed) | length) == 0))
+                        then .hooks |= map(select((refs($managed; true) | length) == 0))
                         else . end)
                     | map(select((.hooks | type) != "array" or (.hooks | length) > 0))
                 else . end)

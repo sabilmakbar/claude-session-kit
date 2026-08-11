@@ -1427,6 +1427,30 @@ inst --uninstall
 is "uninstalling twice is not an error" 0 $?
 drop_home
 
+# A DIFFERENT toolkit shipping a script with one of our filenames. Basename alone
+# cannot tell them apart, and getting it wrong fails in both directions at once:
+# we skip wiring ours (a kit that silently does nothing) and delete theirs on
+# uninstall. The DIRECTORY decides, and the clash is reported rather than passed
+# over in silence, because silence there looks like a bug in us.
+new_home
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"; mkdir -p "$IPREFIX"
+cat >"$SETT" <<'JSON'
+{ "hooks": { "UserPromptSubmit": [ { "hooks": [
+  { "type": "command", "command": "\"$HOME/.claude/other-toolkit/hooks/session-note.sh\" 2>/dev/null || true" }
+] } ] } }
+JSON
+theirs() { jq '[.hooks[]?[]?.hooks[]?.command | select(test("other-toolkit"))] | length' "$SETT"; }
+mine()   { jq '[.hooks[]?[]?.hooks[]?.command | select(test("session-kit/hooks/"))] | length' "$SETT"; }
+OUT=$(CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" bash "$ROOT/install.sh" 2>&1)
+case "$OUT" in *"owned by something else"*other-toolkit*) ok "install warns about a same-named hook owned by another toolkit" ;;
+    *) bad "install warns about a same-named hook owned by another toolkit" "a clash warning" "${OUT:-silence}";; esac
+is "…and wires all four of ours anyway" 4 "$(mine)"
+is "…without disturbing theirs" 1 "$(theirs)"
+inst --uninstall
+is "uninstall removes only hooks living under session-kit/hooks" 0 "$(mine)"
+is "…so the other toolkit's hook is still there" 1 "$(theirs)"
+drop_home
+
 # Pruning all the way up: when ours were the only hooks, no scaffolding is left.
 new_home
 IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"
