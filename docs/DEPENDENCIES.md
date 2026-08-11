@@ -4,9 +4,11 @@ Tools the kit expects. `install.sh` checks the hard requirement and refuses poli
 when it is missing; everything else degrades to a clear error at the point of use.
 
 ## Required
-- **jq**. Parses transcripts, pid files, and hook input, and builds every JSON line
-  the kit writes. Without it, the resolver reports "no data" and `rename`, `note`,
-  and `handoff` refuse with a message. Nothing guesses.
+- **jq 1.5 or newer**. Parses transcripts, pid files, and hook input, and builds every
+  JSON line the kit writes. Without it, the resolver reports "no data" and `rename`,
+  `note`, and `handoff` refuse with a message. Nothing guesses. The 1.5 floor is the
+  regex functions (`capture`, `gsub`, named captures); nothing here needs 1.6 or later,
+  so any `jq` you are likely to already have will do. Developed against 1.7.
 
 ## Used when you use the feature
 - **tar**, and **shasum** or **sha256sum** (one of the two, both stock on macOS and
@@ -22,7 +24,8 @@ when it is missing; everything else degrades to a clear error at the point of us
 - **bash or zsh.** The full test suite runs under both. Other shells fail loudly at
   parse time instead of misbehaving quietly.
 - **macOS and Linux** with their stock userland. The scripts stick to portable
-  calls; no Homebrew coreutils needed. CI runs the suite on both.
+  calls; no Homebrew coreutils needed. CI runs the suite on `ubuntu` and `macos`,
+  under both shells.
 - **Claude Code** itself. The kit reads its undocumented internals, verified
   against the versions listed in `core/sessions.sh`. A version-check hook re-tests
   after every Claude Code update and warns if something moved.

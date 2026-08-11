@@ -34,6 +34,30 @@ And four optional background hooks:
 The hooks stay quiet unless they have something useful to say. If anything inside
 them fails, they do nothing. They cannot break a session.
 
+## Try it from a checkout
+
+Nothing below writes anything, so a checkout is enough to see what the kit already knows
+about your sessions, installed or not:
+
+```
+$ . core/sessions.sh
+$ cs_list
+7c1e0a4b-...   live   Rewrite the billing importer, split by tenant
+b93f5d21-...   live   documents-41
+0af6e8c3-...   dead   Investigate flaky checkout tests on CI
+```
+
+Three tab-separated columns: the session id, whether a process is still running for it, and
+the best name the kit can find. `documents-41` on the second row is what an unnamed session
+looks like, and is the thing `/rename-session` fixes.
+
+```bash
+cs_find "billing importer"   # by name fragment, or by id prefix
+```
+
+The titles above are made up. Yours are your own work, so treat `cs_list` output the way you
+would treat a list of your branch names.
+
 ## Install
 
 ```bash
@@ -44,16 +68,16 @@ git clone https://github.com/sabilmakbar/claude-session-kit.git ~/claude-session
 The installer runs the test suite first and refuses to install if anything fails, then
 checks that the copy it just installed loads. Re-running it is safe.
 
-To confirm it works, ask it to list your sessions:
+To confirm it works, run the same listing against the installed copy:
 
 ```bash
 . ~/.claude/session-kit/core/sessions.sh && cs_list
 ```
 
-You should get one line per session: its id, whether it is live or dead, and the best name
-the kit can find for it. If nothing prints, or the name column comes back empty, the usual
-cause is a missing `jq` (see [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)). The three
-skills are available in any new session; `/rename-session` is the quickest one to try.
+You should get the three columns shown above. If nothing prints, or the name column comes
+back empty, the usual cause is a missing `jq` (see
+[docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)). The three skills are available in any new
+session; `/rename-session` is the quickest one to try.
 
 It never touches `settings.json`. To turn the hooks on, merge this in yourself:
 
@@ -76,20 +100,18 @@ It never touches `settings.json`. To turn the hooks on, merge this in yourself:
 }
 ```
 
-## Try it from a checkout
+## Upgrading
+
+Re-run the installer. That is the whole upgrade path:
 
 ```bash
-. core/sessions.sh
-cs_list                    # every session, with its best-known name
-cs_find "memory review"    # find a session by name or id
-
-bash tests/run.sh          # the test suite, runs on any machine
-bash tests/smoke.sh        # checks the kit against your real ~/.claude
+git -C ~/claude-session-kit pull && ~/claude-session-kit/install.sh
 ```
 
-If a Claude Code update changes something the kit depends on, `smoke.sh` fails and
-writes a report you can paste straight into an issue. The report contains version
-numbers and check names only. Never your titles, paths, or username.
+It runs the test suite first and refuses to install if anything fails, so a tree the tests
+reject never reaches `~/.claude/session-kit`. Only kit code is replaced: your notes, handoff
+folders, transcripts, and your edited `config` are left as they are. Hooks you wired into
+`settings.json` survive too, because the installer never reads that file.
 
 ## Is it working?
 
@@ -195,6 +217,17 @@ configures nothing once the kit is gone). It leaves your notes
 and every transcript exactly where they are. The kit never owned those. If you
 wired the hooks into `settings.json`, remove those lines too; until you do they
 point at nothing and silently do nothing.
+
+## Working on the kit
+
+```bash
+bash tests/run.sh          # the fixture suite, runs on any machine, gates every install
+bash tests/smoke.sh        # the real-data suite, checks the kit against your ~/.claude
+```
+
+`run.sh` is the gate. `smoke.sh` passes or skips depending on the machine it runs on, which
+is the point, so it is never a required check. The design records under `docs/` say why
+every rule exists; read them before changing one.
 
 ## Related projects
 
