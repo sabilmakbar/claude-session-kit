@@ -123,7 +123,6 @@ hooks_wire() {
         echo "    left untouched; this kit only ever writes or removes .../session-kit/hooks/*" >&2
     fi
 
-    cp "$SETTINGS" "$SETTINGS.bak"
     # Staged NEXT TO settings.json, not in $TMPDIR: a rename within one directory is
     # atomic, while moving across filesystems is a copy that can be interrupted
     # partway and leave the config truncated.
@@ -156,6 +155,15 @@ hooks_wire() {
         echo "  it is unchanged, and a copy is at $SETTINGS.bak" >&2
         return 1
     fi
+    # Identical result means there is nothing to do, so neither file is touched.
+    # That is what keeps an older backup intact: re-running the installer, which is
+    # also the upgrade path, cannot overwrite the copy of your pre-kit config.
+    if cmp -s "$tmp" "$SETTINGS"; then
+        rm -f "$tmp"
+        echo "  hooks already wired; $SETTINGS left untouched"
+        return 0
+    fi
+    cp "$SETTINGS" "$SETTINGS.bak"
     SETTINGS_TOUCHED=1
     mv "$tmp" "$SETTINGS"
     echo "  hooks wired into $SETTINGS (previous contents: $SETTINGS.bak)"
@@ -166,7 +174,6 @@ hooks_unwire() {
     [ -f "$SNIPPET" ] || { echo "install.sh: no settings.snippet.json — leaving hooks in place" >&2; return 0; }
     command -v jq >/dev/null 2>&1 || { echo "install.sh: jq not found — leaving hooks in place" >&2; return 0; }
     if [ "$DRY" -eq 1 ]; then printf '  would: remove kit hooks from %s\n' "$SETTINGS"; return 0; fi
-    cp "$SETTINGS" "$SETTINGS.bak"
     # Staged NEXT TO settings.json, not in $TMPDIR: a rename within one directory is
     # atomic, while moving across filesystems is a copy that can be interrupted
     # partway and leave the config truncated.
@@ -207,6 +214,12 @@ hooks_unwire() {
         echo "  it is unchanged, and a copy is at $SETTINGS.bak" >&2
         return 1
     fi
+    if cmp -s "$tmp" "$SETTINGS"; then
+        rm -f "$tmp"
+        echo "  no kit hooks were wired; $SETTINGS left untouched"
+        return 0
+    fi
+    cp "$SETTINGS" "$SETTINGS.bak"
     SETTINGS_TOUCHED=1
     mv "$tmp" "$SETTINGS"
     echo "  hooks removed from $SETTINGS (previous contents: $SETTINGS.bak)"

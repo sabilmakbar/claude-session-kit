@@ -1506,6 +1506,25 @@ is "the backup holds exactly the pre-install file" "" "$(diff "$FAKE/original.js
 is "…and unrelated settings survive the merge" '"opus"' "$(jq -c .model "$SETT")"
 is "…as does the user's own hook" 1 \
    "$(jq '[.hooks[]?[]?.hooks[]?.command | select(test("bin/mine"))] | length' "$SETT")"
+
+# A run that changes nothing writes nothing. Without this, the second install would
+# back up the already-wired file, and the copy of the pre-kit config would be gone
+# after a single upgrade, which is exactly when someone might want it back.
+inst; inst
+is "…and it survives two more installs" "" "$(diff "$FAKE/original.json" "$SETT.bak")"
+OUT=$(CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" bash "$ROOT/install.sh" 2>&1)
+case "$OUT" in *"already wired"*"left untouched"*) ok "a no-op run says so and writes nothing" ;;
+    *) bad "a no-op run says so and writes nothing" "already wired / left untouched" "$OUT";; esac
+
+# Round trip: install then uninstall returns the file to what it was. Compared as
+# parsed content, not bytes, because jq reformats what it rewrites.
+inst --uninstall
+is "install then uninstall restores the original content" "" \
+   "$(diff <(jq -S . "$FAKE/original.json") <(jq -S . "$SETT"))"
+OUT=$(CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" \
+      bash "$ROOT/install.sh" --uninstall 2>&1)
+case "$OUT" in *"no kit hooks were wired"*) ok "a second uninstall writes nothing either" ;;
+    *) bad "a second uninstall writes nothing either" "left untouched" "$OUT";; esac
 drop_home
 
 # A run that fails partway must not touch settings.json at all. An incomplete

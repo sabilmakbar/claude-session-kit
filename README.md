@@ -89,8 +89,12 @@ Editing a file you share with every other tool deserves care, so that step is th
 thing the installer does, after everything else is installed and checked. A run that
 breaks earlier leaves `settings.json` untouched, a merge that does not look right is
 discarded rather than saved, and a failure after the write puts the previous contents
-back. Your file as it was before the run is always kept at `settings.json.bak`, so you
-can restore it yourself at any time.
+back. A run that would change nothing writes nothing at all.
+
+The version from just before the last real change is kept at `settings.json.bak`, so you
+can restore it yourself at any time. Because repeat runs skip the write, upgrading never
+overwrites that copy: after any number of re-installs it is still your config from before
+the kit first touched it.
 
 If you want to see exactly what will be added, it is all in
 [settings.snippet.json](settings.snippet.json). To drop a single hook afterwards, delete
