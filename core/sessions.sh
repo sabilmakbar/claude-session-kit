@@ -16,9 +16,9 @@
 # sourced file runs under the caller's shell. bash and zsh both work; keep it that way.
 
 # The version the AUTHOR tested against. A floor, not the whole answer — see
-# cs_verified_version. A namespaced CONSTANT, not a knob: this file is sourced into
-# arbitrary shells (hence the prefix), and smoke.sh/export.sh read it as core's API.
-CS_VERIFIED_VERSION="2.1.222"
+# cs_verified_version. Exported API (smoke.sh and export.sh read it directly); the
+# long prefix marks kit infrastructure — user knobs alone wear CS_*.
+CLAUDE_SESSION_KIT_VERIFIED_VERSION="2.1.222"
 
 _cs_home()         { printf '%s' "${CLAUDE_SESSION_KIT_HOME:-$HOME}"; }
 _cs_projects_dir() { printf '%s/.claude/projects' "$(_cs_home)"; }
@@ -36,7 +36,7 @@ cs_verified_version() {
     local f="" v=""
     f="$(_cs_state_dir)/.verified"
     [ -r "$f" ] && v=$(head -1 "$f" 2>/dev/null | tr -d '[:space:]')
-    [ -n "$v" ] || v="$CS_VERIFIED_VERSION"
+    [ -n "$v" ] || v="$CLAUDE_SESSION_KIT_VERIFIED_VERSION"
     printf '%s' "$v"
 }
 

@@ -82,7 +82,7 @@ write_report() {
         echo
         printf -- '- claude code running: `%s`\n' "${running:-unknown}"
         printf -- '- last verified against: `%s`\n' "${verified:-unknown}"
-        printf -- '- kit verified for: `%s`\n' "$CS_VERIFIED_VERSION"
+        printf -- '- kit verified for: `%s`\n' "$CLAUDE_SESSION_KIT_VERIFIED_VERSION"
         printf -- '- os: `%s`\n' "$(uname -sr 2>/dev/null)"
         printf -- '- bash: `%s`\n' "$(bash --version 2>/dev/null | head -1 | sed 's/.*version //;s/ .*//')"
         printf -- '- zsh: `%s`\n' "$(zsh --version 2>/dev/null | awk '{print $2}')"

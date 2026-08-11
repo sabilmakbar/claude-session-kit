@@ -38,9 +38,9 @@ add_user()   { add_line "$1" "$(jq -cn --arg t "$2" '{type:"user",message:{conte
 
 # pidfile <pid> <id> <name> [nameSource]
 pidfile() {
-    # Match CS_VERIFIED_VERSION so the version guard stays quiet; a mismatch here is
+    # Match CLAUDE_SESSION_KIT_VERIFIED_VERSION so the version guard stays quiet; a mismatch here is
     # noise, and the guard's own behaviour is not what these cases are testing.
-    jq -n --arg p "$1" --arg i "$2" --arg n "$3" --arg s "${4:-}" --arg v "$CS_VERIFIED_VERSION" \
+    jq -n --arg p "$1" --arg i "$2" --arg n "$3" --arg s "${4:-}" --arg v "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" \
         '{pid:($p|tonumber),sessionId:$i,name:$n,version:$v}
          + (if $s=="" then {} else {nameSource:$s} end)' >"$PIDS/$1.json"
 }
@@ -294,7 +294,7 @@ echo "version tracking"
 
 new_home
 is "falls back to the author's version with no state file" \
-   "$CS_VERIFIED_VERSION" "$(cs_verified_version)"
+   "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" "$(cs_verified_version)"
 
 mkdir -p "$FAKE/.claude/session-kit"
 echo "9.9.9" >"$FAKE/.claude/session-kit/.verified"
@@ -305,7 +305,7 @@ is "surrounding whitespace is ignored" "2.5.0" "$(cs_verified_version)"
 
 : >"$FAKE/.claude/session-kit/.verified"
 is "an empty state file falls back, never resolves empty" \
-   "$CS_VERIFIED_VERSION" "$(cs_verified_version)"
+   "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" "$(cs_verified_version)"
 drop_home
 
 # The guard must stay quiet once the running version has been verified here, and
@@ -348,7 +348,7 @@ new_home
 ID=77777777-0000-0000-0000-000000000001; transcript "$ID" >/dev/null
 add_custom "$ID" "$SECRET"
 printf 'this is not json\n' >>"$PROJ/$ID.jsonl"
-jq -n --arg v "$CS_VERIFIED_VERSION" '{pid:1,sessionId:"z",name:"n",version:$v}' >"$PIDS/1.json"
+jq -n --arg v "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" '{pid:1,sessionId:"z",name:"n",version:$v}' >"$PIDS/1.json"
 
 OUT=$(bash "$ROOT/tests/smoke.sh" 2>&1); RC=$?
 REPORT="$FAKE/.claude/session-kit/last-failure.md"
@@ -393,7 +393,7 @@ drop_home
 new_home
 ID=77777777-0000-0000-0000-000000000002; transcript "$ID" >/dev/null
 add_ai "$ID" "Perfectly fine"
-jq -n --arg v "$CS_VERIFIED_VERSION" '{pid:1,sessionId:"z",name:"n",version:$v}' >"$PIDS/1.json"
+jq -n --arg v "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" '{pid:1,sessionId:"z",name:"n",version:$v}' >"$PIDS/1.json"
 mkdir -p "$FAKE/.claude/session-kit"
 echo "stale" >"$FAKE/.claude/session-kit/last-failure.md"
 bash "$ROOT/tests/smoke.sh" >/dev/null 2>&1
@@ -401,7 +401,7 @@ bash "$ROOT/tests/smoke.sh" >/dev/null 2>&1
     && bad "a passing run clears a stale report" "removed" "still there" \
     || ok "a passing run clears a stale report"
 is "a passing run records the verified version" \
-   "$CS_VERIFIED_VERSION" "$(cat "$FAKE/.claude/session-kit/.verified" 2>/dev/null)"
+   "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" "$(cat "$FAKE/.claude/session-kit/.verified" 2>/dev/null)"
 drop_home
 
 # --- hostile and degenerate input -------------------------------------------
@@ -834,7 +834,7 @@ is "…and modifies nothing" "$sha_before" "$(cksum "$DESTB/$S1.jsonl")"
 # Exporting a LIVE session is allowed but must say the bundle is a snapshot.
 # (This section builds its homes by hand, so write the pid-file into HA directly —
 # the pidfile helper writes into new_home's dirs, which are not in play here.)
-jq -n --arg p "$$" --arg i "$S1" --arg v "$CS_VERIFIED_VERSION" \
+jq -n --arg p "$$" --arg i "$S1" --arg v "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" \
     '{pid:($p|tonumber),sessionId:$i,name:"n",version:$v}' >"$HA/.claude/sessions/$$.json"
 LOUT=$(CLAUDE_SESSION_KIT_HOME="$HA" bash "$ROOT/handoff/export.sh" -o "$OUT" "$S1" 2>&1 >/dev/null); RC=$?
 is "a live session still exports" 0 "$RC"
@@ -1119,7 +1119,7 @@ drop_home
 new_home
 ID=eeee9999-0000-0000-0000-000000000002; transcript "$ID" >/dev/null
 fill "$ID" 2
-jq -n --arg p "$$" --arg i "$ID" --arg v "$CS_VERIFIED_VERSION" \
+jq -n --arg p "$$" --arg i "$ID" --arg v "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" \
     '{pid:($p|tonumber),sessionId:$i,version:$v}' >"$PIDS/$$.json"
 drift "$ID" >/dev/null                      # lay the marker (near-empty: silent)
 fill "$ID" 10
