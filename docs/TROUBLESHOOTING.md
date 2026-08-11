@@ -18,9 +18,7 @@ jq '.hooks | tostring | test("session-kit")' ~/.claude/settings.json
 `false` means nothing is wired.
 
 **Fix.** Re-run `./install.sh`, then start a new session. Hooks are read at session start,
-so an already-open session will not pick them up. If you would rather wire it by hand,
-merge [settings.snippet.json](../settings.snippet.json) yourself; that is the same block
-the installer merges.
+so an already-open session will not pick them up.
 
 The three skills work with no hooks at all. If `/rename-session` works but you never get a
 note or a reminder, this is the reason.

@@ -85,9 +85,10 @@ session. It only ever writes or removes hooks under `session-kit/hooks/`, so hoo
 wrote yourself and other tools' hooks are left alone, and if another tool happens to use
 one of the same filenames the installer says so instead of guessing.
 
-The exact block it merges is [settings.snippet.json](settings.snippet.json), so you can
-paste it by hand instead if you would rather the installer stayed out of that file. To
-drop a single hook, delete its line; to remove all four, run `./install.sh --uninstall`.
+If you want to see exactly what will be added before running an installer that edits your
+global config, it is all in [settings.snippet.json](settings.snippet.json). To drop a
+single hook afterwards, delete its line; to remove all four, run
+`./install.sh --uninstall`.
 
 ## Upgrading
 
