@@ -38,9 +38,9 @@ add_user()   { add_line "$1" "$(jq -cn --arg t "$2" '{type:"user",message:{conte
 
 # pidfile <pid> <id> <name> [nameSource]
 pidfile() {
-    # Match CS_VERIFIED_VERSION so the version guard stays quiet; a mismatch here is
+    # Match CLAUDE_SESSION_KIT_VERIFIED_VERSION so the version guard stays quiet; a mismatch here is
     # noise, and the guard's own behaviour is not what these cases are testing.
-    jq -n --arg p "$1" --arg i "$2" --arg n "$3" --arg s "${4:-}" --arg v "$CS_VERIFIED_VERSION" \
+    jq -n --arg p "$1" --arg i "$2" --arg n "$3" --arg s "${4:-}" --arg v "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" \
         '{pid:($p|tonumber),sessionId:$i,name:$n,version:$v}
          + (if $s=="" then {} else {nameSource:$s} end)' >"$PIDS/$1.json"
 }
@@ -294,7 +294,7 @@ echo "version tracking"
 
 new_home
 is "falls back to the author's version with no state file" \
-   "$CS_VERIFIED_VERSION" "$(cs_verified_version)"
+   "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" "$(cs_verified_version)"
 
 mkdir -p "$FAKE/.claude/session-kit"
 echo "9.9.9" >"$FAKE/.claude/session-kit/.verified"
@@ -305,7 +305,7 @@ is "surrounding whitespace is ignored" "2.5.0" "$(cs_verified_version)"
 
 : >"$FAKE/.claude/session-kit/.verified"
 is "an empty state file falls back, never resolves empty" \
-   "$CS_VERIFIED_VERSION" "$(cs_verified_version)"
+   "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" "$(cs_verified_version)"
 drop_home
 
 # The guard must stay quiet once the running version has been verified here, and
@@ -348,7 +348,7 @@ new_home
 ID=77777777-0000-0000-0000-000000000001; transcript "$ID" >/dev/null
 add_custom "$ID" "$SECRET"
 printf 'this is not json\n' >>"$PROJ/$ID.jsonl"
-jq -n --arg v "$CS_VERIFIED_VERSION" '{pid:1,sessionId:"z",name:"n",version:$v}' >"$PIDS/1.json"
+jq -n --arg v "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" '{pid:1,sessionId:"z",name:"n",version:$v}' >"$PIDS/1.json"
 
 OUT=$(bash "$ROOT/tests/smoke.sh" 2>&1); RC=$?
 REPORT="$FAKE/.claude/session-kit/last-failure.md"
@@ -393,7 +393,7 @@ drop_home
 new_home
 ID=77777777-0000-0000-0000-000000000002; transcript "$ID" >/dev/null
 add_ai "$ID" "Perfectly fine"
-jq -n --arg v "$CS_VERIFIED_VERSION" '{pid:1,sessionId:"z",name:"n",version:$v}' >"$PIDS/1.json"
+jq -n --arg v "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" '{pid:1,sessionId:"z",name:"n",version:$v}' >"$PIDS/1.json"
 mkdir -p "$FAKE/.claude/session-kit"
 echo "stale" >"$FAKE/.claude/session-kit/last-failure.md"
 bash "$ROOT/tests/smoke.sh" >/dev/null 2>&1
@@ -401,7 +401,7 @@ bash "$ROOT/tests/smoke.sh" >/dev/null 2>&1
     && bad "a passing run clears a stale report" "removed" "still there" \
     || ok "a passing run clears a stale report"
 is "a passing run records the verified version" \
-   "$CS_VERIFIED_VERSION" "$(cat "$FAKE/.claude/session-kit/.verified" 2>/dev/null)"
+   "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" "$(cat "$FAKE/.claude/session-kit/.verified" 2>/dev/null)"
 drop_home
 
 # --- hostile and degenerate input -------------------------------------------
@@ -539,37 +539,59 @@ echo "the commit guardrail"
 # guardrail itself blocked an email-shaped config value here when it was inline.)
 GR=$(mktemp -d)
 git -C "$GR" init -q
+# The hook is COPIED into the scratch repo and invoked from there: hookdir resolves
+# relative to the hook file, so this is what keeps every test below hermetic — the
+# developer's real guardrail/denylist.local is never read, the scratch one is.
+mkdir -p "$GR/guardrail"
+cp "$ROOT/guardrail/pre-commit" "$GR/guardrail/pre-commit"
 
 printf 'a clean line, ~ instead of a real path\n' >"$GR/ok.md"
 git -C "$GR" add ok.md
 is "clean staged content passes" 0 \
-   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+   "$(cd "$GR" && bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
 
 leak_path="/Use""rs/janedoe/secret-project"
 printf 'data at %s today\n' "$leak_path" >"$GR/leak.md"
 git -C "$GR" add leak.md
 is "a staged home path is blocked" 1 \
-   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+   "$(cd "$GR" && bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
 git -C "$GR" rm -q --cached leak.md
 
 leak_mail="someone@""example.com"
 printf 'contact: %s\n' "$leak_mail" >"$GR/mail.md"
 git -C "$GR" add mail.md
 is "a staged email is blocked" 1 \
-   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+   "$(cd "$GR" && bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
 git -C "$GR" rm -q --cached mail.md
 
 printf 'remote: git@github.com:someone/repo.git\n' >"$GR/rem.md"
 git -C "$GR" add rem.md
 is "an SSH remote URL is not treated as an email" 0 \
-   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+   "$(cd "$GR" && bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
 git -C "$GR" rm -q --cached rem.md
 
 printf 'the contoso engagement notes\n' >"$GR/dl.md"
 git -C "$GR" add dl.md
 is "a denylisted term via env is blocked" 1 \
-   "$(cd "$GR" && CLAUDE_CONFIG_DENYLIST=contoso bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+   "$(cd "$GR" && CLAUDE_CONFIG_DENYLIST=contoso bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+
+# The FILE path was untested while being the documented mechanism, and its failure
+# is silent: generic patterns keep blocking, only private terms quietly stop. The
+# same staged leak, no env var — the term must come from denylist.local alone.
+printf '# private terms\ncontoso\n' >"$GR/guardrail/denylist.local"
+is "a denylisted term via the FILE is blocked" 1 \
+   "$(cd "$GR" && bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
 git -C "$GR" rm -q --cached dl.md
+
+# The example ships comments-only and install.sh seeds it verbatim: the seeded
+# default must block nothing (a parsing slip could turn comments into patterns).
+cp "$ROOT/guardrail/denylist.local.example" "$GR/guardrail/denylist.local"
+printf 'an ordinary line about work\n' >"$GR/plain.md"
+git -C "$GR" add plain.md
+is "the shipped example (comments only) blocks nothing" 0 \
+   "$(cd "$GR" && bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+git -C "$GR" rm -q --cached plain.md
+rm -f "$GR/guardrail/denylist.local"
 
 # The style rule scopes to reader-facing docs only (README.md, docs/*.md), so this
 # suite may hold the literal em-dash safely — run.sh is never inside that scope.
@@ -577,19 +599,19 @@ mkdir -p "$GR/docs"
 printf 'a clause — set off wrong\n' >"$GR/docs/style.md"
 git -C "$GR" add docs/style.md
 is "an em-dash staged in docs/*.md is blocked" 1 \
-   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+   "$(cd "$GR" && bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
 git -C "$GR" rm -q --cached docs/style.md
 
 printf 'a clause — set off wrong\n' >"$GR/README.md"
 git -C "$GR" add README.md
 is "an em-dash staged in README.md is blocked" 1 \
-   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+   "$(cd "$GR" && bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
 git -C "$GR" rm -q --cached README.md
 
 printf 'a scratch note — em-dash allowed here\n' >"$GR/scratch.md"
 git -C "$GR" add scratch.md
 is "an em-dash outside README/docs passes (scope is the path, not the extension)" 0 \
-   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+   "$(cd "$GR" && bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
 rm -rf "$GR"
 
 # --- session notes -----------------------------------------------------------
@@ -812,7 +834,7 @@ is "…and modifies nothing" "$sha_before" "$(cksum "$DESTB/$S1.jsonl")"
 # Exporting a LIVE session is allowed but must say the bundle is a snapshot.
 # (This section builds its homes by hand, so write the pid-file into HA directly —
 # the pidfile helper writes into new_home's dirs, which are not in play here.)
-jq -n --arg p "$$" --arg i "$S1" --arg v "$CS_VERIFIED_VERSION" \
+jq -n --arg p "$$" --arg i "$S1" --arg v "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" \
     '{pid:($p|tonumber),sessionId:$i,name:"n",version:$v}' >"$HA/.claude/sessions/$$.json"
 LOUT=$(CLAUDE_SESSION_KIT_HOME="$HA" bash "$ROOT/handoff/export.sh" -o "$OUT" "$S1" 2>&1 >/dev/null); RC=$?
 is "a live session still exports" 0 "$RC"
@@ -1097,7 +1119,7 @@ drop_home
 new_home
 ID=eeee9999-0000-0000-0000-000000000002; transcript "$ID" >/dev/null
 fill "$ID" 2
-jq -n --arg p "$$" --arg i "$ID" --arg v "$CS_VERIFIED_VERSION" \
+jq -n --arg p "$$" --arg i "$ID" --arg v "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" \
     '{pid:($p|tonumber),sessionId:$i,version:$v}' >"$PIDS/$$.json"
 drift "$ID" >/dev/null                      # lay the marker (near-empty: silent)
 fill "$ID" 10
