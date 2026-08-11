@@ -34,6 +34,30 @@ And four optional background hooks:
 The hooks stay quiet unless they have something useful to say. If anything inside
 them fails, they do nothing. They cannot break a session.
 
+## Try it from a checkout
+
+Nothing below writes anything, so a checkout is enough to see what the kit already knows
+about your sessions, installed or not:
+
+```
+$ . core/sessions.sh
+$ cs_list
+7c1e0a4b-...   live   Rewrite the billing importer, split by tenant
+b93f5d21-...   live   documents-41
+0af6e8c3-...   dead   Investigate flaky checkout tests on CI
+```
+
+Three tab-separated columns: the session id, whether a process is still running for it, and
+the best name the kit can find. `documents-41` on the second row is what an unnamed session
+looks like, and is the thing `/rename-session` fixes.
+
+```bash
+cs_find "billing importer"   # by name fragment, or by id prefix
+```
+
+The titles above are made up. Yours are your own work, so treat `cs_list` output the way you
+would treat a list of your branch names.
+
 ## Install
 
 ```bash
@@ -44,16 +68,16 @@ git clone https://github.com/sabilmakbar/claude-session-kit.git ~/claude-session
 The installer runs the test suite first and refuses to install if anything fails, then
 checks that the copy it just installed loads. Re-running it is safe.
 
-To confirm it works, ask it to list your sessions:
+To confirm it works, run the same listing against the installed copy:
 
 ```bash
 . ~/.claude/session-kit/core/sessions.sh && cs_list
 ```
 
-You should get one line per session: its id, whether it is live or dead, and the best name
-the kit can find for it. If nothing prints, or the name column comes back empty, the usual
-cause is a missing `jq` (see [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)). The three
-skills are available in any new session; `/rename-session` is the quickest one to try.
+You should get the three columns shown above. If nothing prints, or the name column comes
+back empty, the usual cause is a missing `jq` (see
+[docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)). The three skills are available in any new
+session; `/rename-session` is the quickest one to try.
 
 It never touches `settings.json`. To turn the hooks on, merge this in yourself:
 
@@ -74,17 +98,6 @@ It never touches `settings.json`. To turn the hooks on, merge this in yourself:
     ]
   }
 }
-```
-
-## Try it from a checkout
-
-Nothing below writes anything, so a checkout is enough to see what the kit already knows
-about your sessions, installed or not:
-
-```bash
-. core/sessions.sh
-cs_list                    # every session, with its best-known name
-cs_find "memory review"    # find a session by name or id
 ```
 
 ## Upgrading
