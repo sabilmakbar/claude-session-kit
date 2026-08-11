@@ -539,37 +539,59 @@ echo "the commit guardrail"
 # guardrail itself blocked an email-shaped config value here when it was inline.)
 GR=$(mktemp -d)
 git -C "$GR" init -q
+# The hook is COPIED into the scratch repo and invoked from there: hookdir resolves
+# relative to the hook file, so this is what keeps every test below hermetic — the
+# developer's real guardrail/denylist.local is never read, the scratch one is.
+mkdir -p "$GR/guardrail"
+cp "$ROOT/guardrail/pre-commit" "$GR/guardrail/pre-commit"
 
 printf 'a clean line, ~ instead of a real path\n' >"$GR/ok.md"
 git -C "$GR" add ok.md
 is "clean staged content passes" 0 \
-   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+   "$(cd "$GR" && bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
 
 leak_path="/Use""rs/janedoe/secret-project"
 printf 'data at %s today\n' "$leak_path" >"$GR/leak.md"
 git -C "$GR" add leak.md
 is "a staged home path is blocked" 1 \
-   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+   "$(cd "$GR" && bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
 git -C "$GR" rm -q --cached leak.md
 
 leak_mail="someone@""example.com"
 printf 'contact: %s\n' "$leak_mail" >"$GR/mail.md"
 git -C "$GR" add mail.md
 is "a staged email is blocked" 1 \
-   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+   "$(cd "$GR" && bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
 git -C "$GR" rm -q --cached mail.md
 
 printf 'remote: git@github.com:someone/repo.git\n' >"$GR/rem.md"
 git -C "$GR" add rem.md
 is "an SSH remote URL is not treated as an email" 0 \
-   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+   "$(cd "$GR" && bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
 git -C "$GR" rm -q --cached rem.md
 
 printf 'the contoso engagement notes\n' >"$GR/dl.md"
 git -C "$GR" add dl.md
 is "a denylisted term via env is blocked" 1 \
-   "$(cd "$GR" && CLAUDE_CONFIG_DENYLIST=contoso bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+   "$(cd "$GR" && CLAUDE_CONFIG_DENYLIST=contoso bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+
+# The FILE path was untested while being the documented mechanism, and its failure
+# is silent: generic patterns keep blocking, only private terms quietly stop. The
+# same staged leak, no env var — the term must come from denylist.local alone.
+printf '# private terms\ncontoso\n' >"$GR/guardrail/denylist.local"
+is "a denylisted term via the FILE is blocked" 1 \
+   "$(cd "$GR" && bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
 git -C "$GR" rm -q --cached dl.md
+
+# The example ships comments-only and install.sh seeds it verbatim: the seeded
+# default must block nothing (a parsing slip could turn comments into patterns).
+cp "$ROOT/guardrail/denylist.local.example" "$GR/guardrail/denylist.local"
+printf 'an ordinary line about work\n' >"$GR/plain.md"
+git -C "$GR" add plain.md
+is "the shipped example (comments only) blocks nothing" 0 \
+   "$(cd "$GR" && bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+git -C "$GR" rm -q --cached plain.md
+rm -f "$GR/guardrail/denylist.local"
 
 # The style rule scopes to reader-facing docs only (README.md, docs/*.md), so this
 # suite may hold the literal em-dash safely — run.sh is never inside that scope.
@@ -577,19 +599,19 @@ mkdir -p "$GR/docs"
 printf 'a clause — set off wrong\n' >"$GR/docs/style.md"
 git -C "$GR" add docs/style.md
 is "an em-dash staged in docs/*.md is blocked" 1 \
-   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+   "$(cd "$GR" && bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
 git -C "$GR" rm -q --cached docs/style.md
 
 printf 'a clause — set off wrong\n' >"$GR/README.md"
 git -C "$GR" add README.md
 is "an em-dash staged in README.md is blocked" 1 \
-   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+   "$(cd "$GR" && bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
 git -C "$GR" rm -q --cached README.md
 
 printf 'a scratch note — em-dash allowed here\n' >"$GR/scratch.md"
 git -C "$GR" add scratch.md
 is "an em-dash outside README/docs passes (scope is the path, not the extension)" 0 \
-   "$(cd "$GR" && bash "$ROOT/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
+   "$(cd "$GR" && bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
 rm -rf "$GR"
 
 # --- session notes -----------------------------------------------------------
