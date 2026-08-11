@@ -67,9 +67,18 @@ SNIPPET="$ROOT/settings.snippet.json"
 #   3. if the script still dies after the write, this trap puts the previous
 #      contents back from the .bak taken moments earlier.
 SETTINGS_TOUCHED=0
+SETTINGS_CREATED=0
 rollback_settings() {
     local rc=$?
     [ "$rc" -eq 0 ] && return 0
+    # A file we created ourselves is undone by removing it, not by restoring an
+    # empty one: on a machine that had no settings.json, leaving a {} behind is
+    # not the state the run started in.
+    if [ "$SETTINGS_CREATED" -eq 1 ]; then
+        rm -f "$SETTINGS" 2>/dev/null \
+            && echo "install.sh: run failed, so the settings.json it created was removed again" >&2
+        return 0
+    fi
     [ "$SETTINGS_TOUCHED" -eq 1 ] || return 0
     [ -f "$SETTINGS_BAK" ] || return 0
     cp "$SETTINGS_BAK" "$SETTINGS" 2>/dev/null \
@@ -111,7 +120,7 @@ hooks_wire() {
     [ -f "$SNIPPET" ] || { echo "install.sh: no settings.snippet.json — skipping hook wiring" >&2; return 0; }
     if [ "$DRY" -eq 1 ]; then printf '  would: merge kit hooks into %s\n' "$SETTINGS"; return 0; fi
     mkdir -p "$(dirname "$SETTINGS")"
-    [ -f "$SETTINGS" ] || echo '{}' >"$SETTINGS"
+    if [ ! -f "$SETTINGS" ]; then echo '{}' >"$SETTINGS"; SETTINGS_CREATED=1; fi
 
     # Warn about hooks that use one of our filenames but live somewhere else. They
     # are another tool's, so they are neither counted as already-wired nor removed
@@ -168,10 +177,14 @@ hooks_wire() {
         echo "  hooks already wired; $SETTINGS left untouched"
         return 0
     fi
-    cp "$SETTINGS" "$SETTINGS_BAK"
+    # Nothing to back up when the file did not exist a moment ago; the rollback for
+    # that case is removing it, which needs no copy.
+    if [ "$SETTINGS_CREATED" -eq 0 ]; then cp "$SETTINGS" "$SETTINGS_BAK"; fi
     SETTINGS_TOUCHED=1
     mv "$tmp" "$SETTINGS"
-    echo "  hooks wired into $SETTINGS (previous contents: $SETTINGS_BAK)"
+    if [ "$SETTINGS_CREATED" -eq 1 ]
+    then echo "  hooks wired into $SETTINGS (created; there was no settings.json before)"
+    else echo "  hooks wired into $SETTINGS (previous contents: $SETTINGS_BAK)"; fi
 }
 
 hooks_unwire() {

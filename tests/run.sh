@@ -1320,6 +1320,11 @@ ours() { jq '[.hooks[]?[]?.hooks[]?.command // ""
 
 new_home
 IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"
+# Seed a pre-existing config so the backup assertions below have something to back
+# up. A machine with no settings.json is a different case, covered further down:
+# there, undoing means removing the file we created, so no backup is written.
+mkdir -p "$IPREFIX"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"~/bin/pre-existing.sh"}]}]}}' >"$SETT"
 
 inst; is "install from the checkout exits 0" 0 $?
 
@@ -1561,6 +1566,30 @@ PY
 CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" \
     bash "$BROKEN/install.sh" >/dev/null 2>&1
 is "a failure after the write rolls settings.json back" "" "$(diff "$FAKE/original.json" "$SETT")"
+drop_home
+
+# A machine with no settings.json at all. Undoing a file we created means REMOVING
+# it: restoring an empty one would leave behind something the machine never had.
+new_home
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"
+inst
+is "a fresh install with no settings.json wires all four" 4 "$(ours)"
+[ -e "$SETT.session-kit.bak" ] && bad "…and writes no backup of a file that did not exist" "no backup" "backup written" \
+    || ok "…and writes no backup of a file that did not exist"
+rm -rf "$IPREFIX"
+BROKEN2="$FAKE/broken2"; mkdir -p "$BROKEN2"
+( cd "$ROOT" && tar cf - --exclude .git . ) | ( cd "$BROKEN2" && tar xf - )
+python3 - "$BROKEN2/install.sh" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+old = 'echo "wiring hooks"\nhooks_wire'
+assert s.count(old) == 1
+open(p, "w").write(s.replace(old, old + '\nfalse'))
+PY
+CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" \
+    bash "$BROKEN2/install.sh" >/dev/null 2>&1
+[ -e "$SETT" ] && bad "a failed install removes the settings.json it created" "no file" "left behind" \
+    || ok "a failed install removes the settings.json it created"
 drop_home
 
 # A settings.json that is ALREADY broken is caught in preflight, before anything is
