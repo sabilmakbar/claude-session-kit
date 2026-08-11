@@ -92,10 +92,14 @@ discarded rather than saved, and a failure after the write puts the previous con
 back. A run that would change nothing writes nothing at all.
 
 The version from just before the last real change is kept at
-`settings.json.session-kit.bak`, so you
-can restore it yourself at any time. Because repeat runs skip the write, upgrading never
-overwrites that copy: after any number of re-installs it is still your config from before
-the kit first touched it.
+`settings.json.session-kit.bak`, so you can undo that change yourself at any time. It is a
+one-step undo of the installer's edit, not a permanent copy of your pre-kit config:
+ordinary re-installs change nothing and so leave it alone, but when the kit's own set of
+hooks changes, the next install backs up the file as it stood that day, our hooks included.
+
+To get your config as it would be without this kit, do not reach for that file. Run
+`./install.sh --uninstall`, which takes out our four hooks and leaves everything else
+exactly as it is, including hooks you added after installing.
 
 If you want to see exactly what will be added, it is all in
 [settings.snippet.json](settings.snippet.json). To drop a single hook afterwards, delete
