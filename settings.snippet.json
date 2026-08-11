@@ -1,0 +1,32 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/session-kit/hooks/version-check.sh\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/session-kit/hooks/session-note.sh\" 2>/dev/null || true"
+          },
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/session-kit/hooks/session-guard.sh\" 2>/dev/null || true"
+          },
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/session-kit/hooks/session-drift.sh\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  }
+}

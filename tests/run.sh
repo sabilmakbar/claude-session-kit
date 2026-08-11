@@ -1299,26 +1299,380 @@ case "$(CS_PICKUP_WINDOW_MIN=99999999 guard9 "$OLD9")" in *NEVER\ CLAIMED*) bad 
     *) bad "…and the source guard is not stale under it" "normal guard" "silence";; esac
 drop_home
 
-# --- install seeds the config once --------------------------------------------
+# --- install and uninstall ------------------------------------------------------
 #
-# First suite section to invoke install.sh itself (CLAUDE_SESSION_KIT_NO_GATE skips its
-# run.sh gate — gating would recurse). The property under test: a fresh install
-# seeds config from the example, an upgrade never overwrites a user's edits.
+# install.sh is invoked for real against a scratch prefix (CLAUDE_SESSION_KIT_NO_GATE
+# skips its run.sh gate — gating would recurse). Everything here is a property the
+# installer promises in the README, so a broken promise fails a test rather than a
+# user's machine.
 
-echo "install seeds the config once"
+echo "install and uninstall"
+
+inst() { CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" \
+         bash "$ROOT/install.sh" "$@" >/dev/null 2>&1; }
+# Hooks belonging to THIS kit, counted by the four shipped basenames. The leading
+# [/] is load-bearing: unanchored, "session-note.sh" also matches the near-miss
+# "mysession-note.sh" below, and this counter would report the installer buggy
+# when it behaved correctly (it did, the first time this was written).
+ours() { jq '[.hooks[]?[]?.hooks[]?.command // ""
+              | select(test("[/](version-check|session-note|session-guard|session-drift)[.]sh"))]
+             | length' "$SETT" 2>/dev/null; }
 
 new_home
-IPREFIX="$FAKE/.claude"
-( CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" bash "$ROOT/install.sh" >/dev/null 2>&1 )
-is "install from the checkout exits 0" 0 $?
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"
+# Seed a pre-existing config so the backup assertions below have something to back
+# up. A machine with no settings.json is a different case, covered further down:
+# there, undoing means removing the file we created, so no backup is written.
+mkdir -p "$IPREFIX"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"~/bin/pre-existing.sh"}]}]}}' >"$SETT"
+
+inst; is "install from the checkout exits 0" 0 $?
+
+# --- what lands on disk ---
+for f in core/sessions.sh naming/rename.sh notes/note.sh tests/smoke.sh \
+         hooks/version-check.sh hooks/session-note.sh hooks/session-guard.sh hooks/session-drift.sh \
+         handoff/export.sh handoff/import.sh handoff/split.sh handoff/claim.sh handoff/release.sh \
+         config.example settings.snippet.json; do
+    [ -f "$IPREFIX/session-kit/$f" ] || { bad "installs $f" "present" "missing"; continue; }
+    ok "installs $f"
+done
+for h in version-check session-note session-guard session-drift; do
+    [ -x "$IPREFIX/session-kit/hooks/$h.sh" ] && ok "hooks/$h.sh is executable" \
+        || bad "hooks/$h.sh is executable" "executable" "not executable"
+done
+for s in rename-session session-note handoff; do
+    [ -f "$IPREFIX/skills/$s/SKILL.md" ] && ok "installs the $s skill" \
+        || bad "installs the $s skill" "present" "missing"
+done
+# A missed path rewrite installs a skill that silently cannot find its libraries.
+is "skills have no un-rewritten relative sources" "" \
+   "$(grep -lE '^\. (core|naming|notes)/|^handoff/' "$IPREFIX"/skills/*/SKILL.md 2>/dev/null)"
+
+# --- the config file, seeded once ---
 [ -f "$IPREFIX/session-kit/config" ] && ok "a fresh install seeds the config" \
     || bad "a fresh install seeds the config" "config present" "missing"
 printf 'CS_DRIFT_EVERY=42\n' >"$IPREFIX/session-kit/config"
-( CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" bash "$ROOT/install.sh" >/dev/null 2>&1 )
+
+# --- hook wiring ---
+is "install wires all four hooks" 4 "$(ours)"
+is "…one of them on SessionStart" 1 \
+   "$(jq '[.hooks.SessionStart[]?.hooks[]?] | length' "$SETT")"
+is "…and three on UserPromptSubmit" 3 \
+   "$(jq '[.hooks.UserPromptSubmit[]?.hooks[]?] | length' "$SETT")"
+[ -f "$SETT.session-kit.bak" ] && ok "…leaving a backup" \
+    || bad "…leaving a backup" "settings.json.session-kit.bak" "missing"
+# The shared name belongs to nobody: claude-memory-kit backs up to settings.json.bak
+# too, so writing there would destroy whichever kit installed first.
+[ -e "$SETT.bak" ] && bad "…without touching the shared settings.json.bak" "untouched" "written" \
+    || ok "…without touching the shared settings.json.bak"
+
+# Every command the snippet wires must name a script the kit actually installs.
+# Drift here would wire a hook at a path that never fires, silently.
+for b in $(jq -r '[.hooks[][].hooks[].command] | .[]' "$ROOT/settings.snippet.json" \
+           | grep -oE '[A-Za-z0-9_-]+\.sh'); do
+    [ -f "$IPREFIX/session-kit/hooks/$b" ] && ok "the snippet's $b is a script we ship" \
+        || bad "the snippet's $b is a script we ship" "installed hook" "no such file"
+done
+
+inst
 is "a re-run (the upgrade path) preserves the edited config" "CS_DRIFT_EVERY=42" \
    "$(cat "$IPREFIX/session-kit/config")"
 [ -f "$IPREFIX/session-kit/config.example" ] && ok "…while the example ships regardless" \
     || bad "…while the example ships regardless" "example present" "missing"
+is "…and wiring is idempotent, still four" 4 "$(ours)"
+
+# Deleting a hook and re-installing puts it back: "install" means "wire my hooks".
+# The README says so in both the Upgrading section and the FAQ, so pin it.
+jq 'del(.hooks.UserPromptSubmit[0].hooks[0])' "$SETT" >"$SETT.t" && mv "$SETT.t" "$SETT"
+is "sanity: one hook deleted by hand" 3 "$(ours)"
+inst
+is "re-installing restores a hook the user deleted" 4 "$(ours)"
+drop_home
+
+# Identity is the script BASENAME, never the exact command string. Each spelling
+# below is a real way the same hook gets written; exact-string matching duplicated
+# every one of them. Pre-wire all four in variant spellings: install must add NONE.
+new_home
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"; mkdir -p "$IPREFIX"
+cat >"$SETT" <<'JSON'
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "/abs/elsewhere/session-kit/hooks/version-check.sh 2>/dev/null || true" } ] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [
+        { "type": "command", "command": "\"$HOME/.claude/session-kit/hooks/session-note.sh\" || true" },
+        { "type": "command", "command": "CS_DRIFT_EVERY=50 \"$HOME/.claude/session-kit/hooks/session-drift.sh\" 2>/dev/null || true" },
+        { "type": "command", "command": "\"$HOME/.claude/session-kit/hooks/session-guard.sh\"    2>/dev/null   || true" }
+      ] }
+    ]
+  }
+}
+JSON
+inst
+is "five spellings of the same hooks are recognised, none duplicated" 4 "$(ours)"
+
+# Near-miss and foreign scripts are never ours, in either direction.
+jq '.hooks.UserPromptSubmit += [
+      {"hooks":[{"type":"command","command":"\"$HOME/.claude/x/mysession-note.sh\""}]},
+      {"hooks":[{"type":"command","command":"\"$HOME/.claude/memory-kit/scripts/memory-delta-ping.sh\" 2>/dev/null || true"}]}
+    ]' "$SETT" >"$SETT.tmp" && mv "$SETT.tmp" "$SETT"
+inst
+is "a near-miss basename is not treated as ours" 1 \
+   "$(jq '[.hooks[]?[]?.hooks[]?.command | select(test("mysession-note[.]sh"))] | length' "$SETT")"
+is "…and install still adds nothing" 4 "$(ours)"
+
+inst --uninstall
+is "uninstall removes every spelling of our hooks" 0 "$(ours)"
+is "…and leaves the foreign kit's hook alone" 1 \
+   "$(jq '[.hooks[]?[]?.hooks[]?.command | select(test("memory-delta-ping[.]sh"))] | length' "$SETT")"
+is "…and leaves the near-miss alone" 1 \
+   "$(jq '[.hooks[]?[]?.hooks[]?.command | select(test("mysession-note[.]sh"))] | length' "$SETT")"
+is "…and prunes the event left empty" "null" "$(jq -r '.hooks.SessionStart // "null"' "$SETT")"
+[ -d "$IPREFIX/session-kit" ] && bad "uninstall removes the kit tree" "gone" "present" \
+    || ok "uninstall removes the kit tree"
+is "…and the skills" "" "$(ls "$IPREFIX/skills" 2>/dev/null)"
+inst --uninstall
+is "uninstalling twice is not an error" 0 $?
+drop_home
+
+# A DIFFERENT toolkit shipping a script with one of our filenames. Basename alone
+# cannot tell them apart, and getting it wrong fails in both directions at once:
+# we skip wiring ours (a kit that silently does nothing) and delete theirs on
+# uninstall. The DIRECTORY decides, and the clash is reported rather than passed
+# over in silence, because silence there looks like a bug in us.
+new_home
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"; mkdir -p "$IPREFIX"
+cat >"$SETT" <<'JSON'
+{ "hooks": { "UserPromptSubmit": [ { "hooks": [
+  { "type": "command", "command": "\"$HOME/.claude/other-toolkit/hooks/session-note.sh\" 2>/dev/null || true" }
+] } ] } }
+JSON
+theirs() { jq '[.hooks[]?[]?.hooks[]?.command | select(test("other-toolkit"))] | length' "$SETT"; }
+mine()   { jq '[.hooks[]?[]?.hooks[]?.command | select(test("session-kit/hooks/"))] | length' "$SETT"; }
+OUT=$(CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" bash "$ROOT/install.sh" 2>&1)
+case "$OUT" in *"owned by something else"*other-toolkit*) ok "install warns about a same-named hook owned by another toolkit" ;;
+    *) bad "install warns about a same-named hook owned by another toolkit" "a clash warning" "${OUT:-silence}";; esac
+is "…and wires all four of ours anyway" 4 "$(mine)"
+is "…without disturbing theirs" 1 "$(theirs)"
+inst --uninstall
+is "uninstall removes only hooks living under session-kit/hooks" 0 "$(mine)"
+is "…so the other toolkit's hook is still there" 1 "$(theirs)"
+drop_home
+
+# Pruning all the way up: when ours were the only hooks, no scaffolding is left.
+new_home
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"
+inst
+is "sanity: four wired before the prune test" 4 "$(ours)"
+inst --uninstall
+is "an emptied settings.json keeps no hooks key at all" "null" "$(jq -r '.hooks // "null"' "$SETT")"
+is "…and stays valid JSON" 0 "$(jq -e . "$SETT" >/dev/null 2>&1; echo $?)"
+drop_home
+
+# Shapes we do not recognise are left exactly as they are: a malformed command
+# counts as NOT ours, so removal tidies nobody else's mess and cannot crash.
+new_home
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"; mkdir -p "$IPREFIX"
+cat >"$SETT" <<'JSON'
+{
+  "hooks": {
+    "UserPromptSubmit": [ { "hooks": "not-an-array" }, { "no_hooks_key": 1 } ],
+    "Weird": "a string where an array belongs"
+  },
+  "otherSetting": {"keep": true}
+}
+JSON
+inst; is "install survives malformed pre-existing settings" 0 $?
+is "…and wires our four anyway" 4 "$(ours)"
+inst --uninstall; is "uninstall survives them too" 0 $?
+is "…leaving the malformed entries untouched" 2 \
+   "$(jq '.hooks.UserPromptSubmit | length' "$SETT")"
+is "…the foreign event untouched" '"a string where an array belongs"' "$(jq -c '.hooks.Weird' "$SETT")"
+is "…and unrelated settings untouched" '{"keep":true}' "$(jq -c '.otherSetting' "$SETT")"
+drop_home
+
+# --dry-run must not touch anything, which is the whole point of offering it.
+new_home
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"
+inst --dry-run
+[ -e "$IPREFIX/session-kit" ] && bad "--dry-run installs nothing" "nothing" "kit tree created" \
+    || ok "--dry-run installs nothing"
+[ -e "$SETT" ] && bad "--dry-run writes no settings.json" "nothing" "settings.json created" \
+    || ok "--dry-run writes no settings.json"
+drop_home
+
+# settings.json is the user's global config, so a broken run must never leave it
+# altered. Three guarantees: the .bak holds exactly what was there before, a run
+# that fails before the wiring step leaves the file byte-identical, and a failure
+# after the write rolls it back.
+new_home
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"; mkdir -p "$IPREFIX"
+printf '{"model":"opus","hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"~/bin/mine.sh"}]}]}}' >"$SETT"
+cp "$SETT" "$FAKE/original.json"
+inst
+is "the backup holds exactly the pre-install file" "" "$(diff "$FAKE/original.json" "$SETT.session-kit.bak")"
+is "…and unrelated settings survive the merge" '"opus"' "$(jq -c .model "$SETT")"
+is "…as does the user's own hook" 1 \
+   "$(jq '[.hooks[]?[]?.hooks[]?.command | select(test("bin/mine"))] | length' "$SETT")"
+
+# A run that changes nothing writes nothing. Without this, the second install would
+# back up the already-wired file, and the copy of the pre-kit config would be gone
+# after a single upgrade, which is exactly when someone might want it back.
+inst; inst
+is "…and it survives two more installs" "" "$(diff "$FAKE/original.json" "$SETT.session-kit.bak")"
+OUT=$(CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" bash "$ROOT/install.sh" 2>&1)
+case "$OUT" in *"already wired"*"left untouched"*) ok "a no-op run says so and writes nothing" ;;
+    *) bad "a no-op run says so and writes nothing" "already wired / left untouched" "$OUT";; esac
+
+# Round trip: install then uninstall returns the file to what it was. Compared as
+# parsed content, not bytes, because jq reformats what it rewrites.
+inst --uninstall
+is "install then uninstall restores the original content" "" \
+   "$(diff <(jq -S . "$FAKE/original.json") <(jq -S . "$SETT"))"
+OUT=$(CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" \
+      bash "$ROOT/install.sh" --uninstall 2>&1)
+case "$OUT" in *"no kit hooks were wired"*) ok "a second uninstall writes nothing either" ;;
+    *) bad "a second uninstall writes nothing either" "left untouched" "$OUT";; esac
+drop_home
+
+# A run that fails partway must not touch settings.json at all. An incomplete
+# checkout forces that honestly: it refuses in preflight, long before the wiring
+# step, which is the ordering this asserts.
+new_home
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"; mkdir -p "$IPREFIX"
+printf '{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"~/bin/mine.sh"}]}]}}' >"$SETT"
+cp "$SETT" "$FAKE/original.json"
+PARTIAL="$FAKE/partial"; mkdir -p "$PARTIAL"
+( cd "$ROOT" && tar cf - --exclude .git . ) | ( cd "$PARTIAL" && tar xf - )
+rm -f "$PARTIAL/core/sessions.sh"
+CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" \
+    bash "$PARTIAL/install.sh" >/dev/null 2>&1
+is "a failed install leaves settings.json byte-identical" "" "$(diff "$FAKE/original.json" "$SETT")"
+drop_home
+
+# Another writer lands between our read and our write. Claude Code and other
+# installers edit this file too, and without the check our merge, built from the
+# older copy, would silently erase whatever they just added. Simulated by a copy
+# whose merge step is followed by an edit from "somebody else".
+new_home
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"; mkdir -p "$IPREFIX"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"~/bin/U.sh"}]}]}}' >"$SETT"
+RACER="$FAKE/racer"; mkdir -p "$RACER"
+( cd "$ROOT" && tar cf - --exclude .git . ) | ( cd "$RACER" && tar xf - )
+python3 - "$RACER/install.sh" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+# Right after the merge is staged, have someone else write the live file.
+old = '''    local before after'''
+new = '''    jq '.hooks.Stop += [{"hooks":[{"type":"command","command":"~/bin/RACE.sh"}]}]' \\
+        "$SETTINGS" >"$SETTINGS.race" && mv "$SETTINGS.race" "$SETTINGS"
+    local before after'''
+assert s.count(old) == 1
+open(p, "w").write(s.replace(old, new))
+PY
+OUT=$(CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" \
+      bash "$RACER/install.sh" 2>&1)
+case "$OUT" in *"changed while it was being read"*) ok "a concurrent write is detected, not clobbered" ;;
+    *) bad "a concurrent write is detected, not clobbered" "a changed-underneath message" "$OUT";; esac
+is "…and the other writer's hook survives" 1 \
+   "$(jq '[.hooks[]?[]?.hooks[]?.command | select(test("RACE[.]sh"))] | length' "$SETT")"
+is "…while ours were not written" 0 "$(ours)"
+is "…and no snapshot file is left behind" 0 \
+   "$(find "$IPREFIX" -maxdepth 1 -name 'settings.json.snap.*' 2>/dev/null | grep -c . || true)"
+drop_home
+
+new_home
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"; mkdir -p "$IPREFIX"
+printf '{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"~/bin/mine.sh"}]}]}}' >"$SETT"
+cp "$SETT" "$FAKE/original.json"
+
+# The rollback itself: a failure AFTER the write must restore the previous file.
+# Forced with a copy whose wiring step is followed by a guaranteed failure, which
+# is the ordering the real installer deliberately avoids.
+BROKEN="$FAKE/broken"; mkdir -p "$BROKEN"
+( cd "$ROOT" && tar cf - --exclude .git . ) | ( cd "$BROKEN" && tar xf - )
+python3 - "$BROKEN/install.sh" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+old = 'echo "wiring hooks"\nhooks_wire'
+assert s.count(old) == 1
+open(p, "w").write(s.replace(old, old + '\nfalse'))
+PY
+CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" \
+    bash "$BROKEN/install.sh" >/dev/null 2>&1
+is "a failure after the write rolls settings.json back" "" "$(diff "$FAKE/original.json" "$SETT")"
+drop_home
+
+# A machine with no settings.json at all. Undoing a file we created means REMOVING
+# it: restoring an empty one would leave behind something the machine never had.
+new_home
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"
+inst
+is "a fresh install with no settings.json wires all four" 4 "$(ours)"
+[ -e "$SETT.session-kit.bak" ] && bad "…and writes no backup of a file that did not exist" "no backup" "backup written" \
+    || ok "…and writes no backup of a file that did not exist"
+rm -rf "$IPREFIX"
+BROKEN2="$FAKE/broken2"; mkdir -p "$BROKEN2"
+( cd "$ROOT" && tar cf - --exclude .git . ) | ( cd "$BROKEN2" && tar xf - )
+python3 - "$BROKEN2/install.sh" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+old = 'echo "wiring hooks"\nhooks_wire'
+assert s.count(old) == 1
+open(p, "w").write(s.replace(old, old + '\nfalse'))
+PY
+CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" \
+    bash "$BROKEN2/install.sh" >/dev/null 2>&1
+[ -e "$SETT" ] && bad "a failed install removes the settings.json it created" "no file" "left behind" \
+    || ok "a failed install removes the settings.json it created"
+drop_home
+
+# A settings.json that is ALREADY broken is caught in preflight, before anything is
+# written. Without that check the run installs everything and then dies at the very
+# last step with a bare parser error, which reads as "the kit is broken".
+new_home
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"; mkdir -p "$IPREFIX"
+printf '{"hooks": {oops not json' >"$SETT"
+cp "$SETT" "$FAKE/original.json"
+OUT=$(CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" \
+      bash "$ROOT/install.sh" 2>&1); RC=$?
+is "an already-broken settings.json refuses the install" 1 "$RC"
+case "$OUT" in *"not a valid JSON object"*) ok "…saying which file to fix" ;;
+    *) bad "…saying which file to fix" "a clear message" "$OUT";; esac
+is "…leaving it exactly as it was" "" "$(diff "$FAKE/original.json" "$SETT")"
+[ -d "$IPREFIX/session-kit" ] && bad "…and installing nothing at all" "nothing" "kit tree created" \
+    || ok "…and installing nothing at all"
+drop_home
+
+# Nothing may be left lying beside settings.json. The staging file is created there
+# on purpose (a rename inside one directory is atomic, a cross-filesystem move is
+# not), so it has to be gone by the end of both operations.
+new_home
+IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"
+inst
+is "install leaves no staging file behind" 0 \
+   "$(find "$IPREFIX" -maxdepth 1 -name 'settings.json.tmp.*' 2>/dev/null | grep -c . || true)"
+inst --uninstall
+is "uninstall leaves no staging file behind" 0 \
+   "$(find "$IPREFIX" -maxdepth 1 -name 'settings.json.tmp.*' 2>/dev/null | grep -c . || true)"
+drop_home
+
+# An incomplete checkout must refuse BEFORE copying, or a re-run (the upgrade path)
+# would half-overwrite a working install.
+new_home
+IPREFIX="$FAKE/.claude"; PARTIAL="$FAKE/partial"
+mkdir -p "$PARTIAL"
+( cd "$ROOT" && tar cf - --exclude .git . ) | ( cd "$PARTIAL" && tar xf - )
+rm -f "$PARTIAL/hooks/session-drift.sh"
+OUT=$(CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" \
+      bash "$PARTIAL/install.sh" 2>&1); RC=$?
+is "an incomplete checkout refuses to install" 1 "$RC"
+case "$OUT" in *session-drift.sh*full\ checkout*) ok "…naming the missing file" ;;
+    *) bad "…naming the missing file" "the missing path" "$OUT";; esac
+[ -e "$IPREFIX/session-kit" ] && bad "…having written nothing" "nothing" "kit tree created" \
+    || ok "…having written nothing"
 drop_home
 
 # --- result -----------------------------------------------------------------

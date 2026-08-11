@@ -79,6 +79,9 @@ and check names only, never your titles or paths.
 - Never rewrites a transcript. Every write is a single appended line, and undo is
   another append.
 - Never touches VS Code's own database.
-- Never edits `settings.json`; you wire the hooks yourself.
+- Never touches a hook in `settings.json` that it did not write. It knows its own by
+  where they live, under `session-kit/hooks/`, so another tool using the same filename
+  is reported and left alone rather than claimed. It adds its four when you install,
+  takes them back out when you uninstall, and backs the file up before either.
 - Never deletes your notes or handoff folders, not even on uninstall.
 - Never sends anything anywhere. There is no network code in the kit.
