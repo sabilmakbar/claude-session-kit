@@ -4,12 +4,20 @@
 > exists so that future changes know what they would be overturning. For how the
 > kit behaves day to day, read [FLOWS.md](FLOWS.md). For setup, the README.
 
+    Status:            Implemented
+    First built:       2026-08-08
+    Last revised:      2026-08-12
+    Verified against:  Claude Code 2.1.222
+    Supersedes:        (none)
+
+Assumes the three-identity model and the append-only rule from
+[DESIGN-naming.md](DESIGN-naming.md); read that first if this is your entry point.
+
 A per-session working note: what was decided, what is done, what comes next. The
 agent writes it near milestones; when the session is later reopened, a hook hands the
 note back so the conversation resumes with its own state instead of a cold start.
 
-Status: built 2026-08-08. Decisions below, each with its reason, so a change knows
-what it is overturning.
+Each decision below carries its reason, so a change knows what it is overturning.
 
 ## Decisions
 
@@ -29,11 +37,16 @@ Reading any session's note takes an id and is harmless.
 
 ### 3. Surfaced on `UserPromptSubmit`, not `SessionStart` (on receipts)
 
-The memory kit's `memory-delta-ping.sh` takes `.session_id` from `UserPromptSubmit`
-stdin and has done so correctly across 24 sessions on the machine this was designed
-on (the per-session marker files are the receipts). Neither `SessionStart` hook on
-that machine reads stdin at all, so whether that event delivers a session id is a
-guess with no evidence. Build on the proven event.
+`UserPromptSubmit` is the only one of the two observed delivering `.session_id` on
+stdin. On the machine this was designed on, a hook reading it that way resolved the
+right session across 24 consecutive sessions, with per-session marker files as the
+receipts. No `SessionStart` hook on that machine reads stdin at all, so whether that
+event carries a session id is a guess with nothing behind it. Build on the event with
+evidence.
+
+The evidence is one machine, so it proves the event works rather than that the other
+one does not. If a `SessionStart` hook is ever seen resolving a session id, this
+decision is worth reopening.
 
 Cost: the note arrives on the first *message* after reopening, not at tab-open.
 Acceptable; arguably better, since it lands exactly when work resumes.

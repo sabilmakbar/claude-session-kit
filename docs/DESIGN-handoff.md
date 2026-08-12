@@ -4,6 +4,14 @@
 > exists so that future changes know what they would be overturning. For how the
 > kit behaves day to day, read [FLOWS.md](FLOWS.md). For setup, the README.
 
+    Status:            Implemented
+    Last revised:      2026-08-12
+    Verified against:  Claude Code 2.1.222
+    Supersedes:        (none)
+
+Assumes the three-identity model and the append-only rule from
+[DESIGN-naming.md](DESIGN-naming.md); read that first if this is your entry point.
+
 ## The problem
 
 Moving work between machines is manual today. The 2026-07-26 Linux→Mac move (the
@@ -112,9 +120,9 @@ hint costs a sentence of noise; a false positive on a hard refusal blocks legiti
 and leaves the user arguing with a hook. Same uncertain signal, very different blast
 radius.
 
-Mechanism: a `UserPromptSubmit` / `SessionStart` hook injecting `additionalContext`, the
-same pattern the memory kit uses (both events confirmed present in the extension's
-settings schema).
+Mechanism: a `UserPromptSubmit` / `SessionStart` hook injecting `additionalContext`. Both
+events were confirmed present in the extension's own settings schema before anything was
+built on them.
 
 **This is where a kit-owned state file is justified**: the opposite of the naming
 decision, for a specific reason. The name sidecar was dropped because Claude Code already
