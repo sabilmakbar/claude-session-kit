@@ -4,6 +4,14 @@
 > exists so that future changes know what they would be overturning. For how the
 > kit behaves day to day, read [FLOWS.md](FLOWS.md). For setup, the README.
 
+    Status:            Implemented
+    Last revised:      2026-08-12
+    Verified against:  Claude Code 2.1.222
+    Supersedes:        (none)
+
+Read this one first if you are reading more than one. It sets the three-identity model and
+the append-only rule that the other records assume rather than restate.
+
 ## The problem
 
 One session has three identities, stored in three places that never talk to each other:
@@ -51,7 +59,7 @@ The memory `feedback_session_identifiers` (miner P-009) already tells Claude to 
 to sessions by title, flag drift, and suggest renames. What is missing is tooling:
 detection is manual and renaming is buried in the UI.
 
-## Proposed pieces
+## The three pieces, and what each one settled
 
 1. ~~**`core/sessions.sh`**~~: **built.** Resolves a session from any identifier (title
    substring, short id, full UUID) and lists sessions with their best-known name. Reads
@@ -182,9 +190,11 @@ so a sixth change has to argue against these rather than rediscover them.
 
 ### Why the scope narrowed to one session
 
-Renaming dead and imported sessions is a real requirement (it is how titles survive a
-handoff), but **import does not exist yet** (backlog item 3), so the capability had no
-caller. A guard was considered: require the caller to state the target session's current
+Renaming dead and imported sessions is a real requirement, since it is how titles survive
+a handoff. When this was decided there was no import, so the capability had no caller and
+narrowing cost nothing. `handoff/import.sh` exists now and titles the sessions it installs,
+which is the one sanctioned exception recorded below.
+A guard was considered: require the caller to state the target session's current
 name, and refuse on mismatch. It was rejected as a guarantee that cannot hold, because a
 caller can satisfy it from the same lookup it just performed:
 
