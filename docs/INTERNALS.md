@@ -38,11 +38,11 @@ grep -rn '\bO8\b' docs/DESIGN-*.md
 Eleven are automated. Four need a live VS Code session, because a headless run has no tab to
 observe, and nothing automated will ever cover those.
 
-Ten of the fifteen are cited by at least one decision. **O2, O7, O9, O11 and O15 are cited by
+Eleven of the fifteen are cited by at least one decision. **O2, O9, O11 and O15 are cited by
 none**, which does not make them dead: each is either the evidence a neighbouring entry was
 derived from, or, in O15's case, a property the code relies on without any decision record
 naming it. Amending one changes what its neighbours rest on even though nothing cites it.
-Check both directions before editing.
+Check both directions before editing, using the third command above.
 
 **Numbers run in discovery order, positions run by surface**, so an entry can sit between two
 lower-numbered neighbours. O15 appearing among the transcript entries is the convention
@@ -135,7 +135,7 @@ it.
                         more at `<encoded-cwd>/<session-uuid>/subagents/agent-<hex>.jsonl`.
                         Every `<session-uuid>` directory had a real session transcript beside
                         it at depth 2. A sibling `tool-results/` holds `.txt`, not `.jsonl`
-    Needs:              nothing beyond find
+    Needs:              find
     Checkable:          automated
 
 A session transcript is named for its session id and sits at depth 2. A subagent transcript
@@ -222,7 +222,7 @@ API. There is no palette entry and nothing invocable from outside.
     Re-verified:        2.1.222
     Surface:            inferred from O9; the file itself was never read
     How:                deduction from the runtime-property finding
-    Needs:              nothing
+    Needs:              none (a deduction, so there is nothing to run)
     Checkable:          manual (deduced from O9; the file itself is never read)
 
 An offline write would be both an unsupported write to a file VS Code holds open, and
@@ -233,9 +233,10 @@ pointless for any live session, whose panel would overwrite it.
     First observed:     2026-08-05 · 2.1.221
     Re-verified:        2.1.222
     Surface:            pid-file and transcript
-    How:                live experiment. Ran /rename in a live VS Code session; all three pid-file
-                        fields changed as predicted (documents-07 / derived / null to a real name /
-                        absent / a timestamp) and the tab title did not change
+    How:                live experiment. Ran /rename in a live VS Code session. All three pid-file
+                        fields changed as predicted: `name` from documents-07 to the new title,
+                        `nameSource` from derived to absent, `updatedAt` from null to an
+                        epoch-millisecond integer. The tab title did not change
     Needs:              a live VS Code session, jq
     Checkable:          manual (a headless run has no tab)
     Supersedes:         "the tab is unreachable", claimed and retracted 2026-08-05

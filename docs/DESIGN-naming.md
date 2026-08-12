@@ -159,7 +159,8 @@ so a sixth change has to argue against these rather than rediscover them.
 ### Evidence behind position 5
 
 - One session ran under **three** processes in a day: `26094` → `45158` → `58005`, each
-  writing a fresh `documents-NN` with `nameSource: derived`.
+  writing a fresh `documents-NN` with `nameSource: derived`. That `nameSource` is the
+  human-named marker is O7; that a restart destroys the name is O8.
 - The `26094` → `45158` restart erased `detector-heuristic-testing`, a name set by
   `/rename` itself. **The built-in's pid-file write is no more durable than ours.**
 - The tab reads `custom-title` from the transcript, verified with the pid-file
