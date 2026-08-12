@@ -5,10 +5,10 @@
 > live in the `DESIGN-*.md` records, which cite these by number. For how the kit behaves,
 > read [FLOWS.md](FLOWS.md).
 
-    Observed against:  Claude Code 2.1.220, 2.1.221, 2.1.222
-    Platform:          macOS, VS Code extension
-    Last re-verified:  2026-08-12
-    Needs to re-run:   jq, a live VS Code session, read access to the extension bundle
+    Observed against:   Claude Code 2.1.220, 2.1.221, 2.1.222
+    Platform:           macOS, VS Code extension
+    Last re-verified:   2026-08-12
+    Needs to re-run:    jq, a live VS Code session, read access to the extension bundle
 
 Nothing here is promised by Claude Code. Every entry is an observation with a date, a
 version, the surface it was read from, and how it was checked, so it can be re-run rather
@@ -21,9 +21,27 @@ decisions rather than observations and are recorded in
 software looks like, and it is why a decision resting on a superseded entry deserves more
 scepticism than one resting on an entry confirmed across three versions.
 
-Four entries, O10 through O12 plus the tab half of O9, cannot be checked without a live
-VS Code session, because a headless run has no tab to observe. Nothing automated will ever
-cover those.
+Every entry says per line whether it can be checked by a machine, so nothing here has to be
+believed on the strength of a sentence in this introduction:
+
+```bash
+# which observations a script could re-check, and which need a person
+awk '/^### O/{o=$2} /Checkable: +automated/{print o}' docs/INTERNALS.md
+
+# every version any entry has been seen on
+grep -hoE '2\.1\.[0-9]+' docs/INTERNALS.md | sort -u
+
+# which decisions rest on a given observation, before you amend it
+grep -rn '\bO8\b' docs/DESIGN-*.md
+```
+
+Ten are automated. Four need a live VS Code session, because a headless run has no tab to
+observe, and nothing automated will ever cover those.
+
+Ten of the fourteen are cited by at least one decision. **O2, O7, O9 and O11 are cited by
+none**, which does not make them dead: each one is the evidence a neighbouring entry was
+derived from, so amending one of those changes what its neighbours rest on even though no
+decision names it. Check both directions before editing.
 
 ## The surfaces
 
@@ -39,10 +57,12 @@ cover those.
 
 ### O1. One session has three identities, joined by the session UUID
 
-    Observed:   2026-08-04 · 2.1.221 · macOS, VS Code extension
-    Surface:    all three, compared side by side
-    How:        read a live session's transcript, pid-file, and rendered tab together
-    Needs:      jq
+    First observed:     2026-08-04 · 2.1.221
+    Re-verified:        2.1.222
+    Surface:            all three, compared side by side
+    How:                read a live session's transcript, pid-file, and rendered tab together
+    Needs:              jq
+    Checkable:          automated
 
 | Layer | Example | Where it lives | Who writes it |
 |---|---|---|---|
@@ -57,11 +77,13 @@ Identity was never ambiguous; only the human-readable label was.
 
 ### O2. Transcripts carry title entries as their own line types
 
-    Observed:   2026-08-05 · 2.1.221 · macOS, VS Code extension
-    Surface:    transcript, and the CLI binary
-    How:        read raw JSONL; found the CLI's compiled regex "customTitle":"([^"]+)"
-    Needs:      jq
-    Supersedes: "transcripts carry no title/summary entries", wrong, corrected the same day
+    First observed:     2026-08-05 · 2.1.221
+    Re-verified:        2.1.222
+    Surface:            transcript, and the CLI binary
+    How:                read raw JSONL; found the CLI's compiled regex "customTitle":"([^"]+)"
+    Needs:              jq
+    Checkable:          automated
+    Supersedes:         "transcripts carry no title/summary entries", wrong, corrected the same day
 
 `{"type":"ai-title","aiTitle":…}` from the opening message, and
 `{"type":"custom-title","customTitle":…}` appended by the built-in `/rename`. The CLI
@@ -71,20 +93,24 @@ file-backed and addressable**, not locked inside VS Code's sqlite.
 
 ### O3. `ai-title` is set from the opening message and never revised
 
-    Observed:   2026-08-05 · 2.1.221 · macOS, VS Code extension
-    Surface:    transcript
-    How:        18 byte-identical ai-title lines in one 75-turn session
-    Needs:      jq
+    First observed:     2026-08-05 · 2.1.221
+    Re-verified:        2.1.222
+    Surface:            transcript
+    How:                18 byte-identical ai-title lines in one 75-turn session
+    Needs:              jq
+    Checkable:          automated
 
 So any session that outgrows its first question carries a stale title. The title as a
 whole is revisable via `custom-title`; it is the automatic one that never moves.
 
 ### O4. `ai-title` is re-emitted immediately after every `custom-title`
 
-    Observed:   2026-08-05 · 2.1.221 · macOS, VS Code extension
-    Surface:    transcript
-    How:        exact repeating pairs at lines 275/276, 295/296, 307/308 of one transcript
-    Needs:      jq
+    First observed:     2026-08-05 · 2.1.221
+    Re-verified:        2.1.222
+    Surface:            transcript
+    How:                exact repeating pairs at lines 275/276, 295/296, 307/308 of one transcript
+    Needs:              jq
+    Checkable:          automated
 
 In any active session the last title line is almost always an `ai-title`. **A resolver
 that tails the file for "the most recent title" discards the user's rename every time**,
@@ -98,39 +124,47 @@ it.
 
 ### O5. The pid-file is per process, and only for sessions that ran on this machine
 
-    Observed:   2026-08-04 · 2.1.221 · macOS, VS Code extension
-    Surface:    pid-file
-    How:        keyed by pid; carries procStart / startedAt for the live process only
-    Needs:      jq
+    First observed:     2026-08-04 · 2.1.221
+    Re-verified:        2.1.222
+    Surface:            pid-file
+    How:                keyed by pid; carries procStart / startedAt for the live process only
+    Needs:              jq
+    Checkable:          automated
 
 Imported transcripts have no registration at all.
 
 ### O6. Derived names are not unique
 
-    Observed:   2026-08-04 · 2.1.221 · macOS, VS Code extension
-    Surface:    pid-file
-    How:        two concurrent sessions (99f81837, 280dbe52) both held documents-7c
-    Needs:      jq
+    First observed:     2026-08-04 · 2.1.221
+    Re-verified:        2.1.222
+    Surface:            pid-file
+    How:                two concurrent sessions (99f81837, 280dbe52) both held documents-7c
+    Needs:              jq
+    Checkable:          automated
 
 Any resolve-by-name path must handle ambiguity explicitly rather than assume one hit.
 
 ### O7. `nameSource` is absent on explicitly-named sessions
 
-    Observed:   2026-08-04 · 2.1.221 · macOS, VS Code extension
-    Surface:    pid-file
-    How:        8 live pid-files compared: 7 × documents-XX with derived, 1 named with no nameSource
-    Needs:      jq
+    First observed:     2026-08-04 · 2.1.221
+    Re-verified:        2.1.222
+    Surface:            pid-file
+    How:                8 live pid-files compared: 7 × documents-XX with derived, 1 named with no nameSource
+    Needs:              jq
+    Checkable:          automated
 
 Absence is the "a human named this" marker, not a missing field to default in.
 
 ### O8. An explicit name does not survive a process restart at the pid layer
 
-    Observed:   2026-08-05 · 2.1.221 · macOS, VS Code extension
-    Surface:    pid-file, against the transcript
-    How:        observed live: pid 26094 to 45158 turned detector-heuristic-testing into
-                documents-41 with nameSource derived; the transcript's custom-title for the
-                same session was untouched. pid-file count also fell from 10 to 3 in a day
-    Needs:      jq
+    First observed:     2026-08-05 · 2.1.221
+    Re-verified:        2.1.222
+    Surface:            pid-file, against the transcript
+    How:                observed live: pid 26094 to 45158 turned detector-heuristic-testing into
+                        documents-41 with nameSource derived; the transcript's custom-title for the
+                        same session was untouched. pid-file count also fell from 10 to 3 in a day
+    Needs:              jq
+    Checkable:          automated
 
 The pid layer is not merely ephemeral, it is **actively destructive of names**, and Claude
 Code prunes pid-files.
@@ -139,46 +173,54 @@ Code prunes pid-files.
 
 ### O9. The tab title is a runtime property of the live webview panel
 
-    Observed:   2026-08-04 · 2.1.221 · macOS, VS Code extension
-    Surface:    extension bundle
-    How:        jq '.contributes.commands[]' package.json: 23 commands, none renames.
-                extension.js handles request.type === "rename_tab", whose handler does
-                this.panelTab.title = request.title and swaps the tab icon
-    Needs:      jq, read access to the extension bundle
+    First observed:     2026-08-04 · 2.1.221
+    Re-verified:        2.1.222
+    Surface:            extension bundle
+    How:                jq '.contributes.commands[]' package.json: 23 commands, none renames.
+                        extension.js handles request.type === "rename_tab", whose handler does
+                        this.panelTab.title = request.title and swaps the tab icon
+    Needs:              jq, read access to the extension bundle
+    Checkable:          manual (the handler is readable in the bundle; the live behaviour is not)
 
 Set by the running CLI over its existing extension channel, through the sanctioned VS Code
 API. There is no palette entry and nothing invocable from outside.
 
 ### O10. `state.vscdb` only caches the rendered tab, after the fact
 
-    Observed:   2026-08-04 · 2.1.221 · macOS, VS Code extension
-    Surface:    inferred from O9; the file itself was never read
-    How:        deduction from the runtime-property finding
-    Needs:      nothing
+    First observed:     2026-08-04 · 2.1.221
+    Re-verified:        2.1.222
+    Surface:            inferred from O9; the file itself was never read
+    How:                deduction from the runtime-property finding
+    Needs:              nothing
+    Checkable:          manual (deduced from O9; the file itself is never read)
 
 An offline write would be both an unsupported write to a file VS Code holds open, and
 pointless for any live session, whose panel would overwrite it.
 
 ### O11. The built-in `/rename` writes both layers, and does not refresh a live tab
 
-    Observed:   2026-08-05 · 2.1.221 · macOS, VS Code extension
-    Surface:    pid-file and transcript
-    How:        live experiment. Ran /rename in a live VS Code session; all three pid-file
-                fields changed as predicted (documents-07 / derived / null to a real name /
-                absent / a timestamp) and the tab title did not change
-    Needs:      a live VS Code session, jq
-    Supersedes: "the tab is unreachable", claimed and retracted 2026-08-05
+    First observed:     2026-08-05 · 2.1.221
+    Re-verified:        2.1.222
+    Surface:            pid-file and transcript
+    How:                live experiment. Ran /rename in a live VS Code session; all three pid-file
+                        fields changed as predicted (documents-07 / derived / null to a real name /
+                        absent / a timestamp) and the tab title did not change
+    Needs:              a live VS Code session, jq
+    Checkable:          manual (a headless run has no tab)
+    Supersedes:         "the tab is unreachable", claimed and retracted 2026-08-05
 
 The tab title is not the session `name`; they are separate values with separate storage.
 What does not happen is a **live refresh** of an already-open tab.
 
 ### O12. The tab reads `custom-title`, and refreshes on reopen
 
-    Observed:   2026-08-05 · 2.1.221 · macOS, VS Code extension
-    Surface:    transcript, against the pid-file
-    How:        live experiment. Ran /rename, closed the tab, reopened the session, and the
-                tab showed the new name
-    Needs:      a live VS Code session
+    First observed:     2026-08-05 · 2.1.221
+    Re-verified:        2.1.222
+    Surface:            transcript, against the pid-file
+    How:                live experiment. Ran /rename, closed the tab, reopened the session, and the
+                        tab showed the new name
+    Needs:              a live VS Code session
+    Checkable:          manual (a headless run has no tab)
 
 The deduction that this comes from `custom-title` and not the pid-file: reopening starts a
 new process, which writes a fresh pid-file with a **derived** name, verified separately
@@ -195,11 +237,13 @@ open, in place.
 
 ### O13. Precedence for a resolved display name, highest first
 
-    Observed:   2026-08-05 · 2.1.221 · macOS, VS Code extension
-    Surface:    transcript and pid-file
-    How:        derived from O2, O7, O8 and O12, then confirmed by the reopen experiment
-    Needs:      jq
-    Supersedes: an earlier ordering that put the pid-file first, corrected 2026-08-05
+    First observed:     2026-08-05 · 2.1.221
+    Re-verified:        2.1.222
+    Surface:            transcript and pid-file
+    How:                derived from O2, O7, O8 and O12, then confirmed by the reopen experiment
+    Needs:              jq
+    Checkable:          automated
+    Supersedes:         an earlier ordering that put the pid-file first, corrected 2026-08-05
 
 1. transcript last **`custom-title`**: durable; survives restarts and import, and the only
    explicit record for a dead or imported session
@@ -222,11 +266,13 @@ then take the last of that type.
 
 ### O14. Version skew between layers is the normal state
 
-    Observed:   2026-08-04 · 2.1.220 and 2.1.221 together · macOS, VS Code extension
-    Surface:    pid-file and extension bundle
-    How:        all pid-files reported 2.1.220 while the installed extension was already
-                2.1.221, because running processes predate the update
-    Needs:      jq
+    First observed:     2026-08-04 · 2.1.220 and 2.1.221 together
+    Re-verified:        2.1.222
+    Surface:            pid-file and extension bundle
+    How:                all pid-files reported 2.1.220 while the installed extension was already
+                        2.1.221, because running processes predate the update
+    Needs:              jq
+    Checkable:          automated
 
 Not an anomaly. Accessors must tolerate skew rather than assert a single version.
 
