@@ -130,7 +130,11 @@ hooks_wire() {
       .[0] as $live | .[1] as $snip
       | ($snip | managed_names) as $managed
       | [$live.hooks[]?[]?.hooks[]? | select((refs($managed; false) | length) > 0) | .command]
-      | unique | .[]' "$SETTINGS" "$SNIPPET" 2>/dev/null)
+      | unique | .[]' "$SETTINGS" "$SNIPPET" 2>/dev/null) || clash=""
+    # This warning is advisory, so a shape it cannot scan must not end the run. Its
+    # stderr already went to /dev/null, so without the fallback `set -e` killed the
+    # install here with jq's exit 5 and NOTHING printed at all. The merge below is
+    # where an unusable file is supposed to be reported, and it says so in words.
     if [ -n "$clash" ]; then
         echo "  ! settings.json already has hooks named like ours, owned by something else:" >&2
         printf '      %s\n' "$clash" >&2
@@ -160,7 +164,11 @@ hooks_wire() {
                  ([refs($managed; true)[] | select(. as $b | $have | index($b))] | length) == 0)))
              | map(select((.hooks | length) > 0))) as $new
           | .[$ev] = ($existing + $new)))
-    ' "$snap" "$SNIPPET" >"$tmp"
+    ' "$snap" "$SNIPPET" >"$tmp" 2>/dev/null || {
+        rm -f "$tmp" "$snap"
+        echo "install.sh: the settings.json merge could not run, so your file was left alone" >&2
+        return 1
+    }
 
     # Check before replacing. Wiring only ever ADDS, so a result that is not valid
     # JSON, or that holds fewer hooks than we started with, means the merge went
@@ -308,6 +316,39 @@ done
 if [ -f "$SETTINGS" ] && ! jq -e 'type == "object"' "$SETTINGS" >/dev/null 2>&1; then
     echo "install.sh: $SETTINGS is not a valid JSON object, so the hooks cannot be wired" >&2
     echo "  fix or move that file and re-run. Nothing has been installed or changed." >&2
+    exit 1
+fi
+
+# Parsing as an object is necessary and not sufficient. `hooks` has to be an object,
+# and the events WE MERGE INTO have to be arrays, or the merge cannot run at all.
+# Those shapes used to get all the way to hooks_wire's jq at the END of the run,
+# after the tree and all three skills were already on disk: the install reported jq's
+# own exit 5 and a raw type error, and the sentence written for this case never
+# printed, because jq had exited first.
+#
+# Scoped to the snippet's own event keys, NOT to every event in the file. A foreign
+# event of the wrong type is not our business: the merge never reads it, it survives
+# an install and an uninstall untouched, and there is a test that says so. Refusing
+# over it would mean judging config we did not write, which is the one thing this
+# installer is built never to do. Deriving the list from the snippet keeps it the
+# single source of truth, so wiring a new event cannot forget to widen this check.
+#
+# Nothing is repaired automatically either. A wrongly-typed `hooks` holds something
+# this installer did not write, and guessing at it is the same overreach.
+if [ -f "$SETTINGS" ] && ! jq -e --slurpfile snip "$SNIPPET" '
+      ($snip[0].hooks | keys) as $ours
+      | (.hooks // {}) as $h
+      | ($h | type) == "object"
+        and ([ $ours[]
+               | $h[.]
+               | select(. != null)
+               | select((type != "array") or (any(.[]; type != "object")))
+             ] | length) == 0
+    ' "$SETTINGS" >/dev/null 2>&1; then
+    echo "install.sh: $SETTINGS parses, but its \"hooks\" is not a shape we can merge into" >&2
+    echo "  expected: \"hooks\" an object, and each event we wire an array of groups" >&2
+    echo "  it will not rewrite what it did not write. Fix that key and re-run." >&2
+    echo "  Nothing has been installed or changed." >&2
     exit 1
 fi
 

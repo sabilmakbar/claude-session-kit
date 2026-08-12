@@ -1662,6 +1662,65 @@ is "…the foreign event untouched" '"a string where an array belongs"' "$(jq -c
 is "…and unrelated settings untouched" '{"keep":true}' "$(jq -c '.otherSetting' "$SETT")"
 drop_home
 
+# --- shapes that parse but the merge cannot use ------------------------------
+#
+# Unparseable is covered further down, and the survive case is covered just above.
+# This is the middle, and it was a real bug: valid JSON holding a shape hooks_wire
+# cannot merge into used to reach the merge at the very END of the run, exit with jq's
+# own code 5 and a raw type error, and leave the tree and all three skills on disk
+# wired to nothing.
+#
+# Each refusal asserts three things, because a refusal that still deployed is barely
+# better than the crash it replaced: the exit code, the file left byte-identical, and
+# nothing written to disk.
+shape_refuses() {  # <desc> <json>
+    new_home; IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"; mkdir -p "$IPREFIX"
+    printf '%s' "$2" >"$SETT"
+    inst; is "$1" 1 $?
+    is "…leaving settings.json byte-identical" "$2" "$(cat "$SETT")"
+    [ -e "$IPREFIX/session-kit" ] \
+        && bad "…and deploying no tree" "nothing" "the tree was installed" \
+        || ok "…and deploying no tree"
+    [ -e "$IPREFIX/skills/rename-session" ] \
+        && bad "…nor any skill" "nothing" "skills were installed" \
+        || ok "…nor any skill"
+    drop_home
+}
+shape_refuses "an event we wire is not an array: refuses" '{"hooks":{"SessionStart":"nope"}}'
+shape_refuses "hooks as a number: refuses"                '{"hooks":42}'
+# An array of non-objects is the same fault one level down, and it used to be WORSE
+# than a raw parser error: it died in the clash warning, whose stderr is discarded, so
+# `set -e` ended the run after a full deploy with no message at all.
+shape_refuses "an event array holding non-objects: refuses" '{"hooks":{"SessionStart":[42]}}'
+shape_refuses "an event array holding null: refuses"        '{"hooks":{"UserPromptSubmit":[null]}}'
+
+# Deeper than preflight looks, on purpose: checking every level would mean modelling
+# someone else's config. What must hold is that the merge fails in WORDS and changes
+# nothing, rather than escaping as jq's own exit code.
+new_home; IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"; mkdir -p "$IPREFIX"
+printf '%s' '{"hooks":{"SessionStart":[{"hooks":[7]}]}}' >"$SETT"
+OUT=$(CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$IPREFIX" \
+      bash "$ROOT/install.sh" 2>&1); RC=$?
+is "a malformation below the preflight fails in words, not jq's exit code" 1 "$RC"
+case "$OUT" in
+    *"merge could not run"*"left alone"*) ok "…saying the merge could not run" ;;
+    *) bad "…saying the merge could not run" "the sentence" "${OUT:-silence}" ;;
+esac
+is "…and settings.json is byte-identical" '{"hooks":{"SessionStart":[{"hooks":[7]}]}}' "$(cat "$SETT")"
+drop_home
+
+# The SCOPE of that check is the point. A wrong-shaped event we never merge into is
+# not our business: the merge never reads it, so refusing would mean judging config
+# this installer did not write. The event list comes from the snippet, so wiring a new
+# event widens the check by itself.
+new_home; IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"; mkdir -p "$IPREFIX"
+printf '%s' '{"hooks":{"Weird":"a string where an array belongs"},"other":"keep me"}' >"$SETT"
+inst; is "a FOREIGN event of the wrong type still installs" 0 $?
+is "…with our four wired around it" 4 "$(ours)"
+is "…the foreign event untouched" '"a string where an array belongs"' "$(jq -c '.hooks.Weird' "$SETT")"
+is "…and an unrelated top-level key surviving" '"keep me"' "$(jq -c '.other' "$SETT")"
+drop_home
+
 # --dry-run must not touch anything, which is the whole point of offering it.
 new_home
 IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"
