@@ -95,8 +95,8 @@ git clone https://github.com/sabilmakbar/claude-session-kit.git ~/claude-session
 ~/claude-session-kit/install.sh     # --dry-run to preview, --uninstall to remove
 ```
 
-The installer runs the test suite first and refuses to install if anything fails, then
-checks that the copy it just installed loads. Re-running it is safe.
+After the suite passes, the installer checks that the copy it just installed loads. Re-running
+it is safe.
 
 To confirm it works, run the same listing against the installed copy:
 
@@ -109,17 +109,9 @@ back empty, the usual cause is a missing `jq` (see
 [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)). The three skills are available in any new
 session; `/rename-session` is the quickest one to try.
 
-The installer also wires the four hooks into `~/.claude/settings.json` for you, backing
-the file up first and adding only what is missing. They start working in your next
-session. It only ever writes or removes hooks under `session-kit/hooks/`, so hooks you
-wrote yourself and other tools' hooks are left alone, and if another tool happens to use
-one of the same filenames the installer says so instead of guessing.
-
-Editing a file you share with every other tool deserves care, so that step is the last
-thing the installer does, after everything else is installed and checked. A run that
-breaks earlier leaves `settings.json` untouched, a merge that does not look right is
-discarded rather than saved, and a failure after the write puts the previous contents
-back. A run that would change nothing writes nothing at all.
+The hooks start working in your next session. Wiring them is the **last** thing the installer
+does, after everything else is installed and checked, so a run that breaks earlier never
+reaches `settings.json` at all.
 
 The version from just before the last real change is kept at
 `settings.json.session-kit.bak`, so you can undo that change yourself at any time. It is a
@@ -131,9 +123,8 @@ To get your config as it would be without this kit, do not reach for that file. 
 `./install.sh --uninstall`, which takes out our four hooks and leaves everything else
 exactly as it is, including hooks you added after installing.
 
-If you want to see exactly what will be added, it is all in
-[settings.snippet.json](settings.snippet.json). To drop a single hook afterwards, delete
-its line; to remove all four, run `./install.sh --uninstall`.
+To drop a single hook afterwards, delete its line from `settings.json`; to remove all four,
+run `./install.sh --uninstall`.
 
 ## Upgrading
 
