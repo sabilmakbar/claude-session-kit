@@ -3,7 +3,9 @@
 Diagrams of what runs when, plus the specifics
 [HOW-IT-WORKS.md](HOW-IT-WORKS.md) deliberately leaves out. The reasons behind each
 choice live in the design docs: [DESIGN-naming.md](DESIGN-naming.md),
-[DESIGN-handoff.md](DESIGN-handoff.md), [DESIGN-notes.md](DESIGN-notes.md).
+[DESIGN-handoff.md](DESIGN-handoff.md), [DESIGN-notes.md](DESIGN-notes.md). What those
+decisions rest on, meaning the observed Claude Code behaviour rather than our choices, is
+[INTERNALS.md](INTERNALS.md).
 
 One rule keeps this file from growing into a second copy of the plain-language
 version: a sentence that also belongs in HOW-IT-WORKS goes there, not here. What

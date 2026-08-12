@@ -10,8 +10,9 @@
     Verified against:  Claude Code 2.1.222
     Supersedes:        (none)
 
-Assumes the three-identity model and the append-only rule from
-[DESIGN-naming.md](DESIGN-naming.md); read that first if this is your entry point.
+Assumes the observed behaviour in [INTERNALS.md](INTERNALS.md), chiefly the three-identity
+model (O1) and the append-only transcript. Read that first if this is your entry point; the
+decisions those observations forced live in [DESIGN-naming.md](DESIGN-naming.md).
 
 A per-session working note: what was decided, what is done, what comes next. The
 agent writes it near milestones; when the session is later reopened, a hook hands the
