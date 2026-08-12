@@ -44,6 +44,24 @@ bash ~/.claude/session-kit/tests/smoke.sh --report
 Then follow the next section, which is about exactly this. The line stops on its own
 once the suite passes again.
 
+## The installer refuses because of `settings.json`
+
+Three different refusals, all of them before anything is written, and all of them
+leaving the file exactly as it was.
+
+| Message contains | Cause | Fix |
+|---|---|---|
+| `is not a valid JSON object` | the file does not parse at all | fix or move it, then re-run |
+| `not a shape we can merge into` | it parses, but `hooks` is not an object, or an event we wire is not an array of groups | correct that key by hand, then re-run |
+| `the settings.json merge could not run` | something inside `hooks` is malformed deeper than the check looks | same, and the message names the file |
+
+Nothing is repaired for you on purpose. A wrongly shaped `hooks` holds something this
+installer did not write, and rewriting it would be guessing at another tool's config.
+
+Odd corners it does **not** refuse over: an event this kit never touches can be any
+shape at all, a malformed group inside an event we do wire is left alone, and
+unrelated top-level keys are never read. Those all install normally.
+
 ## The doctor reports a failure after a Claude Code update
 
 Expected, and it is what the check exists for. The kit reads undocumented internals, so an
