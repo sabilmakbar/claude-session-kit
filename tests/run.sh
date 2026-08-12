@@ -370,6 +370,104 @@ jq -n '{pid:2,sessionId:"b",name:"n",version:"2.1.10"}' >"$PIDS/2.json"
 is "the running version is the highest, version-sorted" "2.1.10" "$(cs_running_version)"
 drop_home
 
+# --- the degraded notice ----------------------------------------------------
+#
+# The kit's healthy state is silence, so both known breakages are invisible: without
+# jq every hook exits 0 printing nothing, and a self-check that failed reaches you
+# only through the commands you type. These cases are the difference between "quiet
+# because all is well" and "quiet because nothing is running".
+#
+# A PATH holding the notice path's tools but NOT jq reproduces the first one honestly,
+# rather than stubbing out the probe and testing the stub.
+
+echo "the degraded notice"
+
+nojq_run() {  # <shell-code> -> run it with a real PATH minus jq
+    local d="$FAKE/nojq" t=""
+    mkdir -p "$d"
+    for t in mkdir date find rm; do ln -sf "$(command -v "$t")" "$d/$t" 2>/dev/null; done
+    env PATH="$d" CLAUDE_SESSION_KIT_HOME="$FAKE" \
+        "$(command -v bash)" -c ". '$ROOT/core/sessions.sh' 2>/dev/null; $1" 2>&1
+}
+
+new_home
+mkdir -p "$FAKE/.claude/session-kit"
+is "a healthy kit says nothing" "" "$(cs_notice_degraded)"
+cs_degraded_reason >/dev/null 2>&1 \
+    && bad "a healthy kit reports no reason" "non-zero" "zero" \
+    || ok "a healthy kit reports no reason"
+
+# The jq fault, reproduced rather than simulated.
+OUT=$(nojq_run 'cs_notice_degraded')
+case "$OUT" in
+    *"claude-session-kit:"*"jq is missing"*"brew install jq"*)
+        ok "a missing jq is reported, and names the fix" ;;
+    *)  bad "a missing jq is reported, and names the fix" "the jq line" "${OUT:-silence}" ;;
+esac
+
+# ...and it must be reported ONCE a day, however many hooks fire.
+OUT=$(nojq_run 'cs_notice_degraded')
+is "the same fault is not repeated the same day" "" "$OUT"
+drop_home
+
+# A failed self-check is the other fault. smoke.sh's report file IS the signal, so it
+# clears itself: a later passing run deletes that file (asserted in failure reporting).
+new_home
+mkdir -p "$FAKE/.claude/session-kit"
+echo "stale report" >"$FAKE/.claude/session-kit/last-failure.md"
+OUT=$(cs_notice_degraded)
+case "$OUT" in
+    *"claude-session-kit:"*"last self-check failed"*"--report"*)
+        ok "a failed self-check is reported, and names the report command" ;;
+    *)  bad "a failed self-check is reported, and names the report command" \
+            "the self-check line" "${OUT:-silence}" ;;
+esac
+is "...and it too is reported only once a day" "" "$(cs_notice_degraded)"
+
+# Two faults on one day must not silence each other, which keying on the fault buys.
+OUT=$(nojq_run 'cs_notice_degraded')
+case "$OUT" in
+    *"jq is missing"*) ok "a second, different fault still gets through the same day" ;;
+    *) bad "a second, different fault still gets through the same day" "the jq line" "${OUT:-silence}" ;;
+esac
+
+# The marker directory must not grow forever.
+mkdir -p "$FAKE/.claude/session-kit/.notices/jq-2020-01-01"
+rm -rf "$FAKE/.claude/session-kit/.notices/selfcheck-$(date +%F)"
+OUT=$(cs_notice_degraded)
+[ -d "$FAKE/.claude/session-kit/.notices/jq-2020-01-01" ] \
+    && bad "markers from other days are swept" "gone" "still there" \
+    || ok "markers from other days are swept"
+drop_home
+
+# The whole point is that this reaches a hooks-only user, so assert it through a real
+# hook: the notice comes out, and the hook still exits 0 and never breaks a prompt.
+new_home
+mkdir -p "$FAKE/.claude/session-kit"
+NOJQ="$FAKE/nojq"; mkdir -p "$NOJQ"
+for t in mkdir date find rm cat; do ln -sf "$(command -v "$t")" "$NOJQ/$t" 2>/dev/null; done
+OUT=$(printf '{"session_id":"x"}' | env PATH="$NOJQ" CLAUDE_SESSION_KIT_HOME="$FAKE" \
+      CLAUDE_SESSION_KIT_ROOT="$ROOT" "$(command -v bash)" "$ROOT/hooks/session-note.sh" 2>&1); RC=$?
+is "the session-note hook still exits 0 with no jq" 0 "$RC"
+case "$OUT" in
+    *"jq is missing"*) ok "...and the notice reaches a hooks-only user" ;;
+    *) bad "...and the notice reaches a hooks-only user" "the jq line" "${OUT:-silence}" ;;
+esac
+drop_home
+
+# smoke.sh must stop calling a broken install a clean run.
+new_home
+NOJQ="$FAKE/nojq"; mkdir -p "$NOJQ"
+for t in mkdir date find rm cat printf; do ln -sf "$(command -v "$t")" "$NOJQ/$t" 2>/dev/null; done
+OUT=$(env PATH="$NOJQ" CLAUDE_SESSION_KIT_HOME="$FAKE" \
+      "$(command -v bash)" "$ROOT/tests/smoke.sh" 2>&1); RC=$?
+is "smoke refuses rather than reporting a clean run with no jq" 1 "$RC"
+case "$OUT" in
+    *"nothing can be checked"*) ok "...and says the kit is not working" ;;
+    *) bad "...and says the kit is not working" "the refusal" "${OUT:-silence}" ;;
+esac
+drop_home
+
 # --- failure reporting ------------------------------------------------------
 #
 # The report is built to be pasted into an issue on a repo that will be public, so

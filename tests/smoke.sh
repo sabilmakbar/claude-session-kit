@@ -129,7 +129,14 @@ if [ "${1:-}" = "--report" ]; then
     exit 0
 fi
 
-command -v jq >/dev/null 2>&1 || { echo "smoke: jq not found — nothing to check"; exit 0; }
+# Not a skip. jq is a hard requirement that install.sh refuses to proceed without, so
+# its absence here means a working install has been broken since. Exiting 0 with
+# "nothing to check" said the same thing as a clean run, which is the exact mistake
+# the transcript check below refuses to make.
+command -v jq >/dev/null 2>&1 || {
+    echo "smoke: jq is missing, so nothing can be checked at all" >&2
+    echo "  the kit is not working. install jq (brew install jq) and re-run" >&2
+    exit 1; }
 
 PROJECTS="$(_cs_projects_dir)"
 [ -d "$PROJECTS" ] || { echo "smoke: no $PROJECTS — skipping (this is fine on CI)"; exit 0; }

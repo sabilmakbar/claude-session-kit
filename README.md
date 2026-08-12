@@ -34,6 +34,11 @@ And four optional background hooks:
 The hooks stay quiet unless they have something useful to say. If anything inside
 them fails, they do nothing. They cannot break a session.
 
+There is one exception to the quiet, and it exists because of the quiet: if the kit
+itself stops working, you get a single line saying so and what to do about it, once a
+day until it is fixed. Otherwise a broken kit and a healthy one would look exactly the
+same, since both say nothing.
+
 ## Try it from a checkout
 
 Nothing below writes anything, so a checkout is enough to see what the kit already knows
@@ -185,10 +190,10 @@ machine.
   upgrades never overwrite your edits. If you work from a checkout without
   installing, copy `config.example` to that path yourself.
 - Claude Code's internals are undocumented and can change. The kit degrades safely
-  when they do: the hooks go quiet instead of erroring, and any command you run
-  yourself warns that internals may have moved and names the check to run. The
-  background re-test after an update is silent by design, so if you only ever use
-  the hooks, a failure waits until you next run a command.
+  when they do: the hooks go quiet instead of erroring, any command you run yourself
+  warns that internals may have moved and names the check to run, and if the
+  background re-test comes back failing you get told in your next session rather than
+  having to go looking.
 - Built and verified on Claude Code 2.1.x, with the real-data suite also passing
   over transcripts written by 20 different 2.1.x versions. Anything older is
   untested. That is only a starting point though: once the kit has run its check on

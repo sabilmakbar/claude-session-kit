@@ -10,6 +10,12 @@ when it is missing; everything else degrades to a clear error at the point of us
   regex functions (`capture`, `gsub`, named captures); nothing here needs 1.6 or later,
   so any `jq` you are likely to already have will do. Developed against 1.7.
 
+  If `jq` disappears after a working install, which a package cleanup or a PATH change
+  can do, the hooks cannot complain the way a command can: they have to exit quietly or
+  they would break the session. So the kit says it once a day in your session instead,
+  and `tests/smoke.sh` refuses with an error rather than reporting a clean run. Nothing
+  needs re-installing; everything picks up again as soon as `jq` is back.
+
 ## Used when you use the feature
 - **tar**, and **shasum** or **sha256sum** (one of the two, both stock on macOS and
   Linux). Only for cross-machine handoff bundles. Export and import refuse up front

@@ -87,6 +87,59 @@ cs_verified_span() {
 
 cs_have_deps() { command -v jq >/dev/null 2>&1; }
 
+# --- the degraded notice ----------------------------------------------------
+#
+# The kit's normal state is silence, which is also exactly what it looks like when it
+# is broken. Both known breakages are invisible: without jq all four hooks exit 0 and
+# print nothing, and a self-check that FAILED after a Claude Code update only ever
+# reaches you through cs_version_guard, which fires from the commands you type and
+# from no hook at all. Someone who uses the kit through its hooks is never told.
+#
+# So this is the one channel that says the kit is not working. It is separate from the
+# version guard on purpose: the guard warns that a version is UNVERIFIED, which is a
+# caution, while this reports that the kit is DEGRADED right now, which is a fault.
+#
+# It must not use jq, since a missing jq is half of what it reports.
+
+# What is wrong, as "<key> <sentence>", or non-zero when the kit is healthy. The key
+# names the fault so a jq notice today cannot suppress a failed-check notice today.
+cs_degraded_reason() {
+    command -v jq >/dev/null 2>&1 || {
+        printf 'jq jq is missing, so the kit is doing nothing at all. Install it (brew install jq) and it picks straight back up.'
+        return 0; }
+    [ -r "$(_cs_state_dir)/last-failure.md" ] && {
+        printf 'selfcheck its last self-check failed, so it may be reading Claude Code wrongly. See what moved: bash %s/tests/smoke.sh --report' \
+            "$(_cs_state_dir)"
+        return 0; }
+    return 1
+}
+
+# One notice per fault per day. mkdir is the throttle because it is atomic on every
+# POSIX filesystem: all three prompt hooks race on the same marker and exactly one
+# wins, so a fault is reported once and not three times. Markers from other days are
+# swept by the winner, so the directory cannot grow.
+_cs_notice_once() {  # <key> -> 0 if this caller should print
+    local d="" today=""
+    today=$(date +%F 2>/dev/null) || return 1
+    d="$(_cs_state_dir)/.notices"
+    mkdir -p "$d" 2>/dev/null || return 1
+    mkdir "$d/$1-$today" 2>/dev/null || return 1
+    find "$d" -mindepth 1 -maxdepth 1 -type d ! -name "*-$today" -exec rm -rf {} + 2>/dev/null
+    return 0
+}
+
+# Prints one line to stdout, which for a UserPromptSubmit hook is how it reaches the
+# session. Silent when healthy, silent when already reported today, and it stops on
+# its own: the jq fault clears when jq returns, and the self-check fault clears when
+# smoke.sh next passes and removes its report.
+cs_notice_degraded() {
+    local line="" key=""
+    line=$(cs_degraded_reason) || return 0
+    key=${line%% *}
+    _cs_notice_once "$key" || return 0
+    printf 'claude-session-kit: %s\n' "${line#* }"
+}
+
 # Tunable knobs: KEY=value lines in $(_cs_state_dir)/config — the same place
 # .verified lives, so one file serves hooks, skills, and a dev checkout alike, and
 # the tests' fake HOMEs isolate it for free. Parsed strictly and NEVER sourced: a
