@@ -13,6 +13,13 @@ Assumes the observed behaviour in [INTERNALS.md](INTERNALS.md), chiefly the thre
 model (O1) and the append-only transcript. Read that first if this is your entry point; the
 decisions those observations forced live in [DESIGN-naming.md](DESIGN-naming.md).
 
+**This record is half converted, deliberately.** D1 to D5 are numbered, which is the convention
+the other records in both kits follow. The decisions in the narrative sections above them are
+not numbered yet, because they are embedded in prose rather than listed: three sit under one
+heading, and two of the bold leads are status markers rather than decisions, so pulling them out
+is a restructure and not a renumbering. Numbers are assigned as decisions are settled and never
+reused, so those will take **D6 onwards** even though they appear earlier in the file.
+
 ## The problem
 
 Moving work between machines is manual today. The 2026-07-26 Linux→Mac move (the
@@ -154,19 +161,28 @@ by the claiming agent, semantically, while the old session is still alive to fix
 inadequate note. One active handoff per session: a second split overwrites the first;
 modelling multiple simultaneous outbound topics was considered and skipped.
 
-## Interoperability (verified 2026-08-09)
+## Interoperability: the premise behind D1 and D2
 
-Format cousins exist: Codex CLI keeps JSONL session transcripts under
-`~/.codex/sessions/`, Gemini CLI keeps JSON checkpoints under `~/.gemini/tmp/`, and
-the SKILL.md format this kit's skills use is an open standard adopted across those
-tools. Two consequences, neither of which changes scope:
+**Verified 2026-08-09.** Format cousins exist: Codex CLI keeps JSONL session
+transcripts under `~/.codex/sessions/`, Gemini CLI keeps JSON checkpoints under
+`~/.gemini/tmp/`, and the SKILL.md format this kit's skills use is an open standard adopted
+across those tools.
 
-- **Keep the seam, build no adapters.** Everything Claude-Code-specific already lives
-  behind `core/`; a `~/.codex` adapter could plug in there someday. Until a concrete
-  target exists, handoff reads and writes Claude Code sessions only.
-- **The note is the portable layer.** `HANDOFF.md` is plain markdown any agent can
-  ingest; the transcripts are the Claude-native payload. Keep that separation: never
-  let the note's usefulness depend on the transcripts beside it.
+This is an observation about other tools, not about Claude Code, so it stays here with the two
+decisions it supports rather than moving to [INTERNALS.md](INTERNALS.md), which is scoped to
+Claude Code. Neither consequence changes this kit's scope.
+
+## D1. Keep the seam, build no adapters
+
+Settled 2026-08-09. Everything Claude-Code-specific already lives behind `core/`; a
+`~/.codex` adapter could plug in there someday. Until a concrete target exists, handoff reads
+and writes Claude Code sessions only.
+
+## D2. The note is the portable layer
+
+Settled 2026-08-09. `HANDOFF.md` is plain markdown any agent can ingest; the transcripts are
+the Claude-native payload. Keep that separation: never let the note's usefulness depend on the
+transcripts beside it.
 
 ## Bundle format: one bundle, one manifest
 
@@ -229,36 +245,76 @@ pass them for the wrong reason.
 - No cwd rewriting. Imported sessions keep their original `cwd` fields; resume
   continues in the target machine's directory, and that mismatch is accepted.
 
-## Resolved questions (2026-08-04)
+## What import brings across: the three decisions D3 to D5
 
-- **Where import places sessions: the current project dir.** Confirming the prototype's
-  behaviour and the stated leaning. The alternative (recreating the source's encoded-cwd
-  dir) is truer to the origin but lands sessions in a project dir that may not exist on
-  the target, where nothing surfaces them. Revisit only if it pollutes pickers in
-  practice.
-- **Import does not carry pending non-repo state.** Confirming the leaning: one kit per
-  concern. The feedback tracker at `~/.local/share/claude-feedback/` stays the memory
-  kit's problem, and this kit does not reach into it.
-- **Titles survive the move as `custom-title` transcript entries.** DESIGN-naming.md
-  resolved the durable name to the transcript's own `custom-title` line rather than a
-  kit-owned sidecar, which settles lesson 1 above: import appends each manifest `title`
-  to the installed transcript, so descriptive names no longer live only in export
-  filenames or a hand-written table.
+All three were settled 2026-08-04, and each confirmed a leaning rather than reversing one.
 
-  This is strictly better than the sidecar it replaces, because Claude Code reads
-  `custom-title` itself: an imported session shows its real name in the normal session
-  picker, not only in this kit's tooling. Imported sessions are also the safe case for
-  writing it: no process is attached, so there is no concurrent writer to interleave
-  with. The VS Code *tab* picks it up too, the next time that session is opened;
-  verified 2026-08-05, see DESIGN-naming.md.
+## D3. Import places sessions in the current project dir
 
-  **Import is also the right place to normalise titles**, which a live session is not. A
-  running session's auto-titler re-emits `ai-title` after every turn (O4), so anything
-  written there competes with a process that writes more often than we do. No such race exists
-  around an imported transcript with no process attached. If a bundle carries a malformed
-  or missing title, import is where it gets fixed.
+**The alternative was recreating the source's encoded-cwd directory.** That is truer to the
+origin, and it loses: it lands sessions in a project dir that may not exist on the target,
+where nothing surfaces them. Revisit only if the current behaviour pollutes pickers in
+practice.
 
-  Import is likewise the concrete caller that brings back the other-session write path
-  deferred in DESIGN-naming.md's decision record: it knows exactly which sessions it just
-  installed and can assert against its own manifest: an independent source, unlike a
-  caller that satisfies a check from the same lookup it just performed.
+## D4. Import does not carry pending non-repo state
+
+One kit per concern. The feedback tracker at `~/.local/share/claude-feedback/` stays the memory
+kit's problem, and this kit does not reach into it.
+
+## D5. Import is where titles get normalised, and a live session is not
+
+Titles survive the move as `custom-title` transcript entries.
+[DESIGN-naming.md](DESIGN-naming.md) D2 resolved the durable name to the transcript's own
+`custom-title` line rather than a kit-owned sidecar, which settles lesson 1 above: import
+appends each manifest `title` to the installed transcript, so descriptive names no longer live
+only in export filenames or a hand-written table.
+
+**This is strictly better than the sidecar it replaces**, because Claude Code reads
+`custom-title` itself: an imported session shows its real name in the normal session picker,
+not only in this kit's tooling. Imported sessions are also the safe case for writing it: no
+process is attached, so there is no concurrent writer to interleave with. The VS Code *tab*
+picks it up the next time that session is opened, which is O12.
+
+**A live session is the wrong place.** Its auto-titler re-emits `ai-title` after every turn
+(O4), so anything written there competes with a process that writes more often than we do. No
+such race exists around an imported transcript with no process attached. If a bundle carries a
+malformed or missing title, import is where it gets fixed.
+
+Import is likewise the concrete caller that brings back the other-session write path deferred
+in [DESIGN-naming.md](DESIGN-naming.md) D1: it knows exactly which sessions it just installed
+and can assert against its own manifest, an independent source, unlike a caller that satisfies
+a check from the same lookup it just performed.
+
+## What would reopen this
+
+Scoped to D1 to D5, since the rest of this record is not yet numbered.
+
+- **D1, when a concrete second target exists.** The decision is explicitly "not yet", not
+  "never": the seam behind `core/` is where an adapter would go. A real `~/.codex` use case is
+  the trigger, not the mere existence of the format.
+- **D2, if the note ever needed transcript context to be useful.** Its portability is the whole
+  argument, and it holds only while the note stands alone.
+- **D3, if placing sessions in the current project dir pollutes pickers in practice.** The
+  record already names that as the condition, and the rejected alternative is written down.
+- **D5, if a live session ever became a safe place to write a title.** It is excluded because
+  O4 says the auto-titler re-emits after every turn. If that stopped, the race would stop with
+  it and normalising on import would be a convenience rather than a requirement.
+
+The premise above D1 and D2 is dated 2026-08-09 and has not been re-checked since. Other tools'
+layouts are outside anything this kit tests, so treat it as the oldest claim here.
+
+## Failure posture
+
+Handoff fails toward keeping the evidence.
+
+Nothing is deleted: a same-machine split archives its folder rather than removing it, because
+the note is the only written record of why the split happened and a few kilobytes is a poor
+trade against something unrecoverable. Cross-machine import verifies everything before writing
+anything, so a bundle that fails any check leaves the target untouched rather than half
+populated. The guard on a split session injects a hint rather than refusing, because the signal
+is unproven content-matching and a false refusal blocks real work while a false hint costs a
+sentence.
+
+The one thing it cannot protect against is a note that is **inadequate**, which is why the
+verification decision, still unnumbered in the narrative above, points the check at the note
+itself and runs it while the original session is still resumable and the fix is still cheap.
