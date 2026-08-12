@@ -13,6 +13,16 @@ It is plain bash plus `jq`. Moving sessions between machines also needs `shasum`
 refuse rather than write a bundle nothing can verify. No server, no telemetry, nothing
 to build.
 
+The docs go shortest first. New here? [HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) tells the
+whole story in plain words, and it is the only one you need in order to use the kit.
+[FLOWS.md](docs/FLOWS.md) is the next step down: diagrams of what runs when, with the
+specifics the plain-language version leaves out. The three `docs/DESIGN-*.md` files are
+decision records, for anyone changing the kit rather than running it: every rule in the
+code with the reason it exists.
+
+If something is broken rather than unclear, go straight to
+[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+
 ## What you get
 
 Three skills to use inside any session:
@@ -39,13 +49,11 @@ itself stops working, you get a single line saying so and what to do about it, o
 day until it is fixed. Otherwise a broken kit and a healthy one would look exactly the
 same, since both say nothing.
 
-## Try it from a checkout
+## What it looks like
 
-Nothing below writes anything, so a checkout is enough to see what the kit already knows
-about your sessions, installed or not:
+`cs_list` is the kit's view of your sessions:
 
 ```
-$ . core/sessions.sh
 $ cs_list
 7c1e0a4b-...   live   Rewrite the billing importer, split by tenant
 b93f5d21-...   live   documents-41
@@ -53,17 +61,31 @@ b93f5d21-...   live   documents-41
 ```
 
 Three tab-separated columns: the session id, whether a process is still running for it, and
-the best name the kit can find. `documents-41` on the second row is what an unnamed session
-looks like, and is the thing `/rename-session` fixes.
+the best name the kit can find. `documents-41` is what an unnamed session looks like, and is
+what `/rename-session` fixes. `cs_find "billing importer"` finds one by name fragment or id
+prefix. Both only read; nothing here writes.
 
-```bash
-cs_find "billing importer"   # by name fragment, or by id prefix
-```
-
-The titles above are made up. Yours are your own work, so treat `cs_list` output the way you
-would treat a list of your branch names.
+The titles are made up. Yours are your own work, so treat `cs_list` output the way you would
+treat a list of your branch names.
 
 ## Install
+
+**Read this first: the installer edits `~/.claude/settings.json`.** That file is your global
+Claude Code config, shared with every other tool you have installed. The kit writes to it
+because registering a hook is the only way to make the reminders arrive on their own.
+
+Two things make that safe, and neither is good intentions. The test suite runs first and refuses
+to install if anything fails. Then, before anything at all is deployed, your file is checked: if
+it cannot be parsed, or if the part the kit merges into is not the shape it expects, the run
+stops and names the key to fix, with nothing installed and your file untouched. Past that point
+the merge only ever adds. A second run adds nothing, settings unrelated to hooks survive, a hook
+belonging to another tool is reported rather than claimed, an event the kit does not wire is
+never even read, and a run that fails later puts the previous contents back. Add `--dry-run` to
+see the plan before any of it happens.
+
+The exact content added is in [settings.snippet.json](settings.snippet.json).
+[docs/FLOWS.md](docs/FLOWS.md#writing-settingsjson-at-install-time) has the whole sequence as a
+diagram, including what happens at each refusal.
 
 ```bash
 git clone https://github.com/sabilmakbar/claude-session-kit.git ~/claude-session-kit
@@ -164,19 +186,6 @@ That report is built to be published. It carries versions, check names, and the 
 characters of a session id, never a title or a path. The terminal output is deliberately not
 redacted, because seeing the offending title is what makes a failure debuggable on your own
 machine.
-
-## Reading more
-
-- [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) tells the whole story in plain words,
-  and it is the only one you need in order to use the kit.
-- [docs/FLOWS.md](docs/FLOWS.md) is the next step down: diagrams of what runs when,
-  with the specifics the plain-language version leaves out.
-- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) is symptom, check, fix. Start
-  there when something is actually broken.
-- [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) lists what the kit needs. Short
-  version: `jq`.
-- The three `docs/DESIGN-*.md` files are decision records. Read them before
-  changing the kit; every rule in the code has its reason written down there.
 
 ## Good to know
 

@@ -126,3 +126,52 @@ way the kit can stop working without appearing to. Both are throttled to once a 
 fault, and both clear themselves: the jq one when `jq` is back, the self-check one when
 the suite next passes and deletes its report. This is the only thing the hooks will say
 uninvited, and it exists because their silence is otherwise ambiguous.
+
+## Writing settings.json at install time
+
+`~/.claude/settings.json` is the one file the kit shares with every other tool on the
+machine, so it gets the most gates of anything the installer does, and it is written
+last, after everything else is installed and checked.
+
+```mermaid
+flowchart TD
+    A["install.sh"] --> T{"test suite passes?"}
+    T -- no --> TX["refuse; nothing deployed"]
+    T -- yes --> P1{"settings.json parses<br/>as an object?"}
+    P1 -- no --> R1["refuse; name the file<br/>nothing deployed, file untouched"]
+    P1 -- yes --> P2{"`hooks`, and each event<br/>WE wire, the right shape?"}
+    P2 -- no --> R2["refuse; name the key<br/>nothing deployed, file untouched"]
+    P2 -- yes --> D["deploy tree, skills, config"]
+    D --> M["merge on a snapshot,<br/>append only"]
+    M --> V{"result valid JSON,<br/>and no fewer hooks?"}
+    V -- no --> R3["discard the result;<br/>live file left alone"]
+    V -- yes --> C{"would it change<br/>anything?"}
+    C -- no --> N["write nothing at all"]
+    C -- yes --> B["back up, then replace"]
+    B --> F{"a later step fails?"}
+    F -- yes --> RB["restore the backup"]
+    F -- no --> OK["done"]
+```
+
+Both shape gates run *before* anything is deployed, which is the whole point of them:
+a shape discovered mid-merge would mean reporting it after the tree, the skills and
+the config were already on disk.
+
+The second gate is scoped to the event keys in `settings.snippet.json`, not to every
+event in your file. An event the kit does not wire is never read, so a wrong-shaped
+one is not a reason to refuse; it survives install and uninstall untouched, and a test
+says so. The list is derived from the snippet rather than written out, so wiring a new
+event cannot forget to widen the check. Nothing is ever repaired automatically: a
+wrongly-typed key holds something the installer did not write, and guessing at it is
+the same overreach as refusing over it.
+
+Ownership is by **basename plus directory**, `session-kit/hooks/`. Basename alone is
+not enough, because a filename as ordinary as `session-note.sh` can belong to another
+tool; when that happens the installer says so and leaves it, rather than counting it
+as already-wired or removing it later.
+
+Uninstall is the same contract backwards. It takes out only commands under
+`session-kit/hooks/`, drops an event key once it holds nothing, and drops `hooks`
+itself once no events remain, so an emptied file carries no leftover scaffolding. The
+backup at `settings.json.session-kit.bak` is a one-step undo of the installer's last
+real change, not an archive of your pre-kit config.
