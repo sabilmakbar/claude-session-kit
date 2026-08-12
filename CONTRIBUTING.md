@@ -7,16 +7,16 @@ overturning.
 ## Start with what is observed, not with what we decided
 
 This kit reads files Claude Code owns, and Claude Code documents none of them.
-[docs/INTERNALS.md](docs/INTERNALS.md) is the record of what was actually observed: fourteen
+[docs/INTERNALS.md](docs/INTERNALS.md) is the record of what was actually observed: fifteen
 entries, each with the date and version it was seen on, the surface it was read from, how it
 was checked, and what you need to re-run the check yourself.
 
-Read it before proposing a design, because **three of those fourteen replaced an earlier
+Read it before proposing a design, because **three of those fifteen replaced an earlier
 belief within a day or two of being recorded.** They are marked `Supersedes`. A design
 resting on one of those deserves more doubt than one resting on an entry confirmed across
 three versions.
 
-Four of the fourteen cannot be checked automatically at all. They need a live VS Code
+Four of the fifteen cannot be checked automatically at all. They need a live VS Code
 session, because a headless run has no tab to observe.
 
 ## Then the decision record

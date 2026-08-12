@@ -14,7 +14,7 @@ Nothing here is promised by Claude Code. Every entry is an observation with a da
 version, the surface it was read from, and how it was checked, so it can be re-run rather
 than believed.
 
-**Three of the fourteen replaced an earlier belief, and each did so within a day or two of
+**Three of the fifteen replaced an earlier belief, and each did so within a day or two of
 being recorded**: O2, O11 and O13, marked `Supersedes`. Two further reversals landed on
 decisions rather than observations and are recorded in
 [DESIGN-naming.md](DESIGN-naming.md). That rate is what reverse-engineering undocumented
@@ -35,19 +35,25 @@ grep -hoE '2\.1\.[0-9]+' docs/INTERNALS.md | sort -u
 grep -rn '\bO8\b' docs/DESIGN-*.md
 ```
 
-Ten are automated. Four need a live VS Code session, because a headless run has no tab to
+Eleven are automated. Four need a live VS Code session, because a headless run has no tab to
 observe, and nothing automated will ever cover those.
 
-Ten of the fourteen are cited by at least one decision. **O2, O7, O9 and O11 are cited by
-none**, which does not make them dead: each one is the evidence a neighbouring entry was
-derived from, so amending one of those changes what its neighbours rest on even though no
-decision names it. Check both directions before editing.
+Ten of the fifteen are cited by at least one decision. **O2, O7, O9, O11 and O15 are cited by
+none**, which does not make them dead: each is either the evidence a neighbouring entry was
+derived from, or, in O15's case, a property the code relies on without any decision record
+naming it. Amending one changes what its neighbours rest on even though nothing cites it.
+Check both directions before editing.
+
+**Numbers run in discovery order, positions run by surface**, so an entry can sit between two
+lower-numbered neighbours. O15 appearing among the transcript entries is the convention
+working, not a slip: it was found last and belongs to that surface. Numbers are never reused,
+so a citation stays valid however the file is later reorganised.
 
 ## The surfaces
 
 | Surface | Path | Written by | Lifetime |
 |---|---|---|---|
-| Transcript | `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl` | Claude Code, append-only | permanent |
+| Transcript | `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`, with subagent transcripts two levels deeper (O15) | Claude Code, append-only | permanent |
 | pid-file | `~/.claude/sessions/<pid>.json` | Claude Code CLI at session start | one process; pruned |
 | Extension bundle | the VS Code extension's `package.json` and `extension.js` | Anthropic, per release | per release |
 | CLI binary | ships a compiled regex that scrapes titles | Anthropic, per release | per release |
@@ -119,6 +125,31 @@ message is sent.
 
 This is the sharpest trap in this file. See the naming record for what the kit does about
 it.
+
+### O15. Subagent transcripts exist, nested below the session that spawned them
+
+    First observed:     2026-08-12 · 2.1.222
+    Re-verified:        2.1.222
+    Surface:            transcript directory
+    How:                counted on one machine: 24 session transcripts at depth 2, and 16
+                        more at `<encoded-cwd>/<session-uuid>/subagents/agent-<hex>.jsonl`.
+                        Every `<session-uuid>` directory had a real session transcript beside
+                        it at depth 2. A sibling `tool-results/` holds `.txt`, not `.jsonl`
+    Needs:              nothing beyond find
+    Checkable:          automated
+
+A session transcript is named for its session id and sits at depth 2. A subagent transcript
+is named `agent-<hex>` and sits two levels deeper, under the parent session's own uuid.
+
+**A recursive `*.jsonl` glob over `projects/` therefore returns 40 files where 24 are
+sessions.** Depth bounds are what separate them: `find -mindepth 2 -maxdepth 2` yields
+sessions only, because the subagent files are at depth 4. Filtering on the uuid shape rejects
+them a second way, since `agent-<hex>` is not a uuid.
+
+This one was load-bearing in both kits before it was written down anywhere, which is the
+argument for this file existing. It survived only as a depth bound and a regex inside one
+`find` command, so a later simplification of that command would have started reading subagent
+transcripts as sessions and nothing would have failed.
 
 ## The pid-file
 
