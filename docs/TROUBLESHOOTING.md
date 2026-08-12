@@ -23,6 +23,27 @@ so an already-open session will not pick them up.
 The three skills work with no hooks at all. If `/rename-session` works but you never get a
 note or a reminder, this is the reason.
 
+## A session said "claude-session-kit: ..." out of nowhere
+
+Not a bug. The hooks say nothing on a normal day, so the kit tells you when it has
+stopped working, once a day per fault, until it is fixed. There are two of these.
+
+**`jq is missing, so the kit is doing nothing at all`.** Every part of the kit parses
+JSON, so without `jq` all four hooks exit immediately and the skills refuse. Install it
+(`brew install jq`, or your package manager) and everything resumes on the next prompt.
+No re-install is needed. This can only happen after a working install, because
+`install.sh` refuses to run without `jq` in the first place.
+
+**`its last self-check failed`.** The kit re-tested itself after a Claude Code update
+and something it depends on had moved. Read what:
+
+```bash
+bash ~/.claude/session-kit/tests/smoke.sh --report
+```
+
+Then follow the next section, which is about exactly this. The line stops on its own
+once the suite passes again.
+
 ## The doctor reports a failure after a Claude Code update
 
 Expected, and it is what the check exists for. The kit reads undocumented internals, so an
