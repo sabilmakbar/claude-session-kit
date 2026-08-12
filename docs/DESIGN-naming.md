@@ -142,7 +142,7 @@ detection is manual and renaming is buried in the UI.
    the slug habit is ours, not the tool's. Sentence-style is what renders in tabs and
    pickers, which is the only place these names are read.
 
-## Decision record: who renames the current session
+## D1. Who renames the current session
 
 This rule changed **five times on 2026-08-05**. Each position was reasonable given what
 was known at the time, and each failed for a specific, findable reason. The table exists
@@ -185,7 +185,7 @@ than having none. So `rename_apply` takes **no session id at all** (there is no
 parameter to aim wrongly), and the capability returns with handoff, when import can
 assert against its own manifest, which is a genuinely independent source.
 
-### What would reopen this
+### What would reopen D1
 
 - **Claude Code seeding the pid-file `name` from `custom-title` at startup.** That would
   make the registry name durable, restoring position 4's argument in full.
@@ -197,39 +197,73 @@ assert against its own manifest, which is a genuinely independent source.
 - Evidence that appending to a live transcript is unsafe after all, which would push
   back toward position 2, this time for a correct reason.
 
-## Decisions the internals forced
+D2 to D6 follow from [INTERNALS.md](INTERNALS.md) rather than from preference. Each names the
+observation it rests on, so when an observation moves, the decision resting on it is the thing
+to re-examine.
 
-These follow from [INTERNALS.md](INTERNALS.md) rather than from preference. Each names the
-observation it rests on, so when an observation moves, the decision resting on it is the
-thing to re-examine.
+## D2. No sidecar: the durable store is the transcript's `custom-title` entry
 
-**No sidecar. The durable store is the transcript's `custom-title` entry.** Rests on O8 and
-O12. A kit-owned sidecar would survive a process restart too, so durability alone does not
-choose between them. What chooses is **who reads it**: `custom-title` is consumed by Claude
-Code itself, so a name written there shows up in the session picker and the CLI's own
-listings. A sidecar is visible only to this kit. A name nobody but us can see is worth much
-less, and keeping both would mean two sources of truth to reconcile. So: one store, the one
-that already exists. (Reversed 2026-08-05; the sidecar answer recorded earlier that day was
-wrong.)
+Rests on O8 and O12. A kit-owned sidecar would survive a process restart too, so durability
+alone does not choose between them. What chooses is **who reads it**: `custom-title` is
+consumed by Claude Code itself, so a name written there shows up in the session picker and the
+CLI's own listings. A sidecar is visible only to this kit. A name nobody but us can see is
+worth much less, and keeping both would mean two sources of truth to reconcile. So: one store,
+the one that already exists. (Reversed 2026-08-05; the sidecar answer recorded earlier that day
+was wrong.)
 
-**Never write `state.vscdb`.** Rests on O10. It caches the rendered tab after the fact, so
-writing it is both unsupported, against a file VS Code holds open, and pointless for a live
-session whose panel would overwrite it. The scope is CLI-side naming only, which still
-reaches the tab, because the tab reads the transcript (O12). An earlier draft promised a
-statusline instead; withdrawn, and none is built or planned.
+## D3. Never write `state.vscdb`
 
-**Select by entry type, then take the last of that type. Never by file order.** Rests on O4
-and O13. This is the one decision here that a casual test would not catch, because the
-clobbering `ai-title` only lands once another message is sent, so `tests/run.sh` pins it
+Rests on O10. It caches the rendered tab after the fact, so writing it is both unsupported,
+against a file VS Code holds open, and pointless for a live session whose panel would overwrite
+it. The scope is CLI-side naming only, which still reaches the tab, because the tab reads the
+transcript (O12). An earlier draft promised a statusline instead; withdrawn, and none is built
+or planned.
+
+## D4. Select by entry type, then the last of that type, never by file order
+
+Rests on O4 and O13. This is the one decision here that a casual test would not catch, because
+the clobbering `ai-title` only lands once another message is sent, so `tests/run.sh` pins it
 deliberately rather than incidentally.
 
-**Every accessor lives in `core/` behind a version check, with a fail-quiet path.** Rests
-on O14. Version skew between layers is normal, not an anomaly, so an accessor that asserts
-one version is wrong on a machine with long-running sessions. A Claude Code update should
-degrade the kit to "no data" rather than to breakage.
+## D5. Every accessor lives in `core/` behind a version check, failing quiet
 
-**Renaming reaches dead and imported sessions, not just live ones.** Rests on O12.
-Appending `custom-title` gives a session a correct tab title the next time it opens, so the
-imported-session case in [DESIGN-handoff.md](DESIGN-handoff.md) gets real titles rather
-than picker entries alone. The one thing still impossible is retitling a tab that is open,
-in place.
+Rests on O14. Version skew between layers is normal, not an anomaly, so an accessor that
+asserts one version is wrong on a machine with long-running sessions. A Claude Code update
+should degrade the kit to "no data" rather than to breakage.
+
+## D6. Renaming reaches dead and imported sessions, not just live ones
+
+Rests on O12. Appending `custom-title` gives a session a correct tab title the next time it
+opens, so the imported-session case in [DESIGN-handoff.md](DESIGN-handoff.md) gets real titles
+rather than picker entries alone. The one thing still impossible is retitling a tab that is
+open, in place.
+## What would reopen this
+
+D1 carries its own list above, since it is the decision that changed five times. For the rest:
+
+- **D2, if a sidecar gained a reader other than this kit.** The decision turns entirely on who
+  consumes the value, not on durability: a sidecar would survive a restart just as well.
+- **D3, if `state.vscdb` ever became a supported write target.** It is excluded because O10 makes
+  writing it both unsupported and pointless, not because the tab is uninteresting.
+- **D4, if the `ai-title` re-emission in O4 stopped.** Selecting by entry type exists only because
+  a title line arrives after the user's rename. Without that, file order and entry type would
+  agree and the rule would be redundant rather than load-bearing.
+- **D6, if in-place tab refresh became possible.** The decision records what is reachable today,
+  and O12 says a tab re-reads only on reopen.
+
+Every one of D2 to D6 is downstream of an observation, so the more likely trigger is a Claude
+Code release moving one of those rather than anyone changing their mind here. Check
+[INTERNALS.md](INTERNALS.md) first.
+
+## Failure posture
+
+Naming fails toward leaving the existing name alone.
+
+Every write is an append, so a partial or interleaved write cannot destroy the previous title:
+the last entry of the right type wins, and the earlier one is still on disk. Reads fail to "no
+data" rather than to an error, per D5, so a Claude Code change degrades `cs_list` to blank names
+instead of breaking the caller. Resolution never guesses: an ambiguous reference is refused
+rather than resolved to the first match, because O6 says derived names collide.
+
+The one thing this posture does not protect is a name that is present and **stale**, which is
+what the drift check exists for rather than anything here.
