@@ -264,4 +264,6 @@ every rule exists; read them before changing one.
   kit. It keeps the preferences you teach Claude across sessions and machines, where this
   kit looks after the sessions themselves.
 
+Released versions and what changed in each: [CHANGELOG.md](CHANGELOG.md).
+
 MIT licensed, see [LICENSE](LICENSE).
