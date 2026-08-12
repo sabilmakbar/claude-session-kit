@@ -189,11 +189,11 @@ machine.
   yourself warns that internals may have moved and names the check to run. The
   background re-test after an update is silent by design, so if you only ever use
   the hooks, a failure waits until you next run a command.
-- Verified against Claude Code 2.1.222. The real-data suite also passes over
-  transcripts written by 20 versions, 2.1.177 through 2.1.222. Older versions are
-  untested. That is the author's floor; from the first smoke run onwards your machine
-  keeps its own record of the versions it has passed against, and that is what the
-  warning compares you with.
+- Built and verified on Claude Code 2.1.x, with the real-data suite also passing
+  over transcripts written by 20 different 2.1.x versions. Anything older is
+  untested. That is only a starting point though: once the kit has run its check on
+  your machine it keeps its own list of the versions that passed there, and the
+  warning goes by your list.
 
 ## FAQ
 
