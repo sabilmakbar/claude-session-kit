@@ -34,6 +34,11 @@ And four optional background hooks:
 The hooks stay quiet unless they have something useful to say. If anything inside
 them fails, they do nothing. They cannot break a session.
 
+There is one exception to the quiet, and it exists because of the quiet: if the kit
+itself stops working, you get a single line saying so and what to do about it, once a
+day until it is fixed. Otherwise a broken kit and a healthy one would look exactly the
+same, since both say nothing.
+
 ## Try it from a checkout
 
 Nothing below writes anything, so a checkout is enough to see what the kit already knows
@@ -138,9 +143,15 @@ layout
 verified against Claude Code 2.1.222
 ```
 
-`0 failed` is the answer you want, and the last line tells you which Claude Code version
-the kit has been checked against on this machine. A skip is fine; it means a check had no
+`0 failed` is the answer you want, and the last line tells you which Claude Code versions
+the kit has passed against on this machine. A skip is fine; it means a check had no
 data to run against.
+
+Every passing run adds that version to the record, so once you have been through a few
+updates the line grows into a span, `verified against Claude Code 2.1.222 to 2.1.231
+(6 versions)`. The count is there because the ends were tested and the middle was not.
+The kit only speaks up on a version that is not in the record, so keeping several
+sessions open on different versions costs you nothing.
 
 If something fails, [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) works through it by
 symptom. To report it, paste the report rather than your terminal:
@@ -178,11 +189,16 @@ machine.
   every default shown. To change one, uncomment its line and edit the number;
   upgrades never overwrite your edits. If you work from a checkout without
   installing, copy `config.example` to that path yourself.
-- Claude Code's internals are undocumented and can change. The kit is built to
-  fail loudly and safely when they do, and to tell you what to run next.
-- Verified against Claude Code 2.1.222. The real-data suite also passes over
-  transcripts written by 20 versions, 2.1.177 through 2.1.222. Older versions are
-  untested.
+- Claude Code's internals are undocumented and can change. The kit degrades safely
+  when they do: the hooks go quiet instead of erroring, any command you run yourself
+  warns that internals may have moved and names the check to run, and if the
+  background re-test comes back failing you get told in your next session rather than
+  having to go looking.
+- Built and verified on Claude Code 2.1.x, with the real-data suite also passing
+  over transcripts written by 20 different 2.1.x versions. Anything older is
+  untested. That is only a starting point though: once the kit has run its check on
+  your machine it keeps its own list of the versions that passed there, and the
+  warning goes by your list.
 
 ## FAQ
 

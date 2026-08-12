@@ -306,6 +306,27 @@ is "surrounding whitespace is ignored" "2.5.0" "$(cs_verified_version)"
 : >"$FAKE/.claude/session-kit/.verified"
 is "an empty state file falls back, never resolves empty" \
    "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" "$(cs_verified_version)"
+
+# The record is a LIST of versions that passed here, and the single-line file older
+# installs wrote is a one-element list, so no migration is needed.
+printf '2.1.222\n2.1.226\n2.1.9\n' >"$FAKE/.claude/session-kit/.verified"
+is "several recorded versions resolve to the newest" "2.1.226" "$(cs_verified_version)"
+is "version order is numeric, not lexical" "2.1.9" "$(_cs_verified_list | head -1)"
+
+cs_version_verified 2.1.222 && ok "an older recorded version is still verified" \
+    || bad "an older recorded version is still verified" "verified" "not verified"
+cs_version_verified 2.1.224 && bad "an untested version between two passes is NOT verified" \
+    "not verified" "verified" \
+    || ok "an untested version between two passes is NOT verified"
+
+is "the span names both ends and how many were tested" \
+   "2.1.9 to 2.1.226 (3 versions)" "$(cs_verified_span)"
+echo "2.1.222" >"$FAKE/.claude/session-kit/.verified"
+is "a single recorded version reads as itself, not a span" "2.1.222" "$(cs_verified_span)"
+
+# The file is user-visible state, so a hand-edited line must not become a version.
+printf 'not-a-version\n2.1.222\n$(touch /tmp/pwned)\n' >"$FAKE/.claude/session-kit/.verified"
+is "junk lines are dropped rather than treated as versions" "2.1.222" "$(_cs_verified_list)"
 drop_home
 
 # The guard must stay quiet once the running version has been verified here, and
@@ -323,6 +344,21 @@ case "$OUT" in
     *9.9.10*9.9.9*smoke.sh*) ok "warns on a new version and names smoke.sh" ;;
     *) bad "warns on a new version and names smoke.sh" "both versions + smoke.sh" "${OUT:-silence}" ;;
 esac
+
+# Reopening an older session must not reawaken the warning: that version passed here
+# too. Equality against the newest recorded version got this wrong.
+printf '9.9.9\n9.9.10\n' >"$FAKE/.claude/session-kit/.verified"
+jq -n '{pid:1,sessionId:"z",name:"n",version:"9.9.9"}' >"$PIDS/1.json"
+OUT=$(unset _CS_VERSION_WARNED; cs_version_guard 2>&1)
+is "silent on an older version that also passed here" "" "$OUT"
+
+# ...but the warning must still name the whole span when the version is genuinely new.
+jq -n '{pid:1,sessionId:"z",name:"n",version:"9.9.11"}' >"$PIDS/1.json"
+OUT=$(unset _CS_VERSION_WARNED; cs_version_guard 2>&1)
+case "$OUT" in
+    *9.9.11*"9.9.9 to 9.9.10 (2 versions)"*) ok "the warning reports the span, not just the newest" ;;
+    *) bad "the warning reports the span, not just the newest" "span" "${OUT:-silence}" ;;
+esac
 drop_home
 
 # Several sessions can run at once on different versions mid-upgrade; the guard
@@ -332,6 +368,104 @@ new_home
 jq -n '{pid:1,sessionId:"a",name:"n",version:"2.1.9"}'  >"$PIDS/1.json"
 jq -n '{pid:2,sessionId:"b",name:"n",version:"2.1.10"}' >"$PIDS/2.json"
 is "the running version is the highest, version-sorted" "2.1.10" "$(cs_running_version)"
+drop_home
+
+# --- the degraded notice ----------------------------------------------------
+#
+# The kit's healthy state is silence, so both known breakages are invisible: without
+# jq every hook exits 0 printing nothing, and a self-check that failed reaches you
+# only through the commands you type. These cases are the difference between "quiet
+# because all is well" and "quiet because nothing is running".
+#
+# A PATH holding the notice path's tools but NOT jq reproduces the first one honestly,
+# rather than stubbing out the probe and testing the stub.
+
+echo "the degraded notice"
+
+nojq_run() {  # <shell-code> -> run it with a real PATH minus jq
+    local d="$FAKE/nojq" t=""
+    mkdir -p "$d"
+    for t in mkdir date find rm; do ln -sf "$(command -v "$t")" "$d/$t" 2>/dev/null; done
+    env PATH="$d" CLAUDE_SESSION_KIT_HOME="$FAKE" \
+        "$(command -v bash)" -c ". '$ROOT/core/sessions.sh' 2>/dev/null; $1" 2>&1
+}
+
+new_home
+mkdir -p "$FAKE/.claude/session-kit"
+is "a healthy kit says nothing" "" "$(cs_notice_degraded)"
+cs_degraded_reason >/dev/null 2>&1 \
+    && bad "a healthy kit reports no reason" "non-zero" "zero" \
+    || ok "a healthy kit reports no reason"
+
+# The jq fault, reproduced rather than simulated.
+OUT=$(nojq_run 'cs_notice_degraded')
+case "$OUT" in
+    *"claude-session-kit:"*"jq is missing"*"brew install jq"*)
+        ok "a missing jq is reported, and names the fix" ;;
+    *)  bad "a missing jq is reported, and names the fix" "the jq line" "${OUT:-silence}" ;;
+esac
+
+# ...and it must be reported ONCE a day, however many hooks fire.
+OUT=$(nojq_run 'cs_notice_degraded')
+is "the same fault is not repeated the same day" "" "$OUT"
+drop_home
+
+# A failed self-check is the other fault. smoke.sh's report file IS the signal, so it
+# clears itself: a later passing run deletes that file (asserted in failure reporting).
+new_home
+mkdir -p "$FAKE/.claude/session-kit"
+echo "stale report" >"$FAKE/.claude/session-kit/last-failure.md"
+OUT=$(cs_notice_degraded)
+case "$OUT" in
+    *"claude-session-kit:"*"last self-check failed"*"--report"*)
+        ok "a failed self-check is reported, and names the report command" ;;
+    *)  bad "a failed self-check is reported, and names the report command" \
+            "the self-check line" "${OUT:-silence}" ;;
+esac
+is "...and it too is reported only once a day" "" "$(cs_notice_degraded)"
+
+# Two faults on one day must not silence each other, which keying on the fault buys.
+OUT=$(nojq_run 'cs_notice_degraded')
+case "$OUT" in
+    *"jq is missing"*) ok "a second, different fault still gets through the same day" ;;
+    *) bad "a second, different fault still gets through the same day" "the jq line" "${OUT:-silence}" ;;
+esac
+
+# The marker directory must not grow forever.
+mkdir -p "$FAKE/.claude/session-kit/.notices/jq-2020-01-01"
+rm -rf "$FAKE/.claude/session-kit/.notices/selfcheck-$(date +%F)"
+OUT=$(cs_notice_degraded)
+[ -d "$FAKE/.claude/session-kit/.notices/jq-2020-01-01" ] \
+    && bad "markers from other days are swept" "gone" "still there" \
+    || ok "markers from other days are swept"
+drop_home
+
+# The whole point is that this reaches a hooks-only user, so assert it through a real
+# hook: the notice comes out, and the hook still exits 0 and never breaks a prompt.
+new_home
+mkdir -p "$FAKE/.claude/session-kit"
+NOJQ="$FAKE/nojq"; mkdir -p "$NOJQ"
+for t in mkdir date find rm cat; do ln -sf "$(command -v "$t")" "$NOJQ/$t" 2>/dev/null; done
+OUT=$(printf '{"session_id":"x"}' | env PATH="$NOJQ" CLAUDE_SESSION_KIT_HOME="$FAKE" \
+      CLAUDE_SESSION_KIT_ROOT="$ROOT" "$(command -v bash)" "$ROOT/hooks/session-note.sh" 2>&1); RC=$?
+is "the session-note hook still exits 0 with no jq" 0 "$RC"
+case "$OUT" in
+    *"jq is missing"*) ok "...and the notice reaches a hooks-only user" ;;
+    *) bad "...and the notice reaches a hooks-only user" "the jq line" "${OUT:-silence}" ;;
+esac
+drop_home
+
+# smoke.sh must stop calling a broken install a clean run.
+new_home
+NOJQ="$FAKE/nojq"; mkdir -p "$NOJQ"
+for t in mkdir date find rm cat printf; do ln -sf "$(command -v "$t")" "$NOJQ/$t" 2>/dev/null; done
+OUT=$(env PATH="$NOJQ" CLAUDE_SESSION_KIT_HOME="$FAKE" \
+      "$(command -v bash)" "$ROOT/tests/smoke.sh" 2>&1); RC=$?
+is "smoke refuses rather than reporting a clean run with no jq" 1 "$RC"
+case "$OUT" in
+    *"nothing can be checked"*) ok "...and says the kit is not working" ;;
+    *) bad "...and says the kit is not working" "the refusal" "${OUT:-silence}" ;;
+esac
 drop_home
 
 # --- failure reporting ------------------------------------------------------
@@ -402,6 +536,32 @@ bash "$ROOT/tests/smoke.sh" >/dev/null 2>&1
     || ok "a passing run clears a stale report"
 is "a passing run records the verified version" \
    "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" "$(cat "$FAKE/.claude/session-kit/.verified" 2>/dev/null)"
+drop_home
+
+# The record only ever widens. This was a live bug on a machine running several
+# sessions at once: a pass while only OLDER sessions were live overwrote a newer
+# recorded pass, so the record went backwards and the suite re-ran for a version it
+# had already cleared. The pid-file here is deliberately the OLDER version.
+new_home
+ID=77777777-0000-0000-0000-000000000003; transcript "$ID" >/dev/null
+add_ai "$ID" "Perfectly fine"
+jq -n --arg v "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" '{pid:1,sessionId:"z",name:"n",version:$v}' >"$PIDS/1.json"
+mkdir -p "$FAKE/.claude/session-kit"
+printf '99.0.0\n' >"$FAKE/.claude/session-kit/.verified"
+bash "$ROOT/tests/smoke.sh" >/dev/null 2>&1
+is "a pass on an older version does not erase a newer one" "99.0.0" "$(cs_verified_version)"
+is "...and the older version is added alongside it" \
+   "$CLAUDE_SESSION_KIT_VERIFIED_VERSION
+99.0.0" "$(_cs_verified_list)"
+
+# Re-running on a version already recorded must leave the record exactly as it is.
+BEFORE=$(cat "$FAKE/.claude/session-kit/.verified")
+bash "$ROOT/tests/smoke.sh" >/dev/null 2>&1
+is "re-recording a known version changes nothing" "$BEFORE" \
+   "$(cat "$FAKE/.claude/session-kit/.verified")"
+[ -z "$(find "$FAKE/.claude/session-kit" -name '.verified.*' 2>/dev/null)" ] \
+    && ok "the staged write leaves no temp file behind" \
+    || bad "the staged write leaves no temp file behind" "none" "present"
 drop_home
 
 # --- hostile and degenerate input -------------------------------------------
@@ -525,6 +685,15 @@ jq -n '{pid:1,sessionId:"z",name:"n",version:"9.9.10"}' >"$PIDS/1.json"
 CLAUDE_SESSION_KIT_ROOT="$FAKE/kit" bash "$ROOT/hooks/version-check.sh"
 for i in 1 2 3 4 5 6 7 8 9 10; do [ "$(grep -c x "$FAKE/kit/.count" 2>/dev/null)" = "2" ] && break; sleep 0.3; done
 is "a NEW version bypasses the day throttle" 2 "$(grep -c x "$FAKE/kit/.count" 2>/dev/null)"
+
+# Switching back to an older session must not launch anything: that version is in the
+# record. Under the old equality check it did, on every switch, forever.
+printf '9.9.8\n9.9.9\n' >"$FAKE/.claude/session-kit/.verified"
+jq -n '{pid:1,sessionId:"z",name:"n",version:"9.9.8"}' >"$PIDS/1.json"
+CLAUDE_SESSION_KIT_ROOT="$FAKE/kit" bash "$ROOT/hooks/version-check.sh"
+sleep 0.5
+is "switching back to an older recorded version launches nothing" 2 \
+   "$(grep -c x "$FAKE/kit/.count" 2>/dev/null)"
 drop_home
 
 # --- the commit guardrail ------------------------------------------------------

@@ -14,8 +14,14 @@ set -u
 
 ROOT="${CLAUDE_SESSION_KIT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd)}"
 [ -r "${ROOT:-}/core/sessions.sh" ] || exit 0
-command -v jq >/dev/null 2>&1 || exit 0
 . "$ROOT/core/sessions.sh" 2>/dev/null || exit 0
+
+# Before the jq guard, because a missing jq is one of the faults this reports and
+# every line below needs jq. Throttled in core, so the three prompt hooks report a
+# fault once between them rather than once each.
+cs_notice_degraded
+
+command -v jq >/dev/null 2>&1 || exit 0
 
 input=$(cat 2>/dev/null) || exit 0
 sid=$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null | tr -cd 'A-Za-z0-9-')

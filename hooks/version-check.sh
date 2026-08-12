@@ -37,7 +37,10 @@ command -v jq >/dev/null 2>&1   || exit 0
 running=$(cs_running_version 2>/dev/null) || exit 0
 [ -n "$running" ] || exit 0
 
-[ "$running" = "$(cs_verified_version)" ] && exit 0
+# Membership, not equality against the newest: a machine with several sessions open
+# on different versions flips between them, and equality re-ran the suite on every
+# flip for versions it had already cleared.
+cs_version_verified "$running" && exit 0
 
 # One attempt per version per day — borrowed back from claude-memory-kit, which
 # adopted this hook's design and fixed its flaw: a persistently failing suite used
