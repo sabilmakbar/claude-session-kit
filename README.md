@@ -266,10 +266,6 @@ every rule exists; read them before changing one.
 
 ## Related projects
 
-- **[claude-setup-template](https://github.com/sabilmakbar/claude-setup-template)**: one
-  manifest for a whole Claude Code setup. You declare the kits, CLI tools, plugins, and
-  hooks a machine should have, and its `setup.sh` converges the machine onto it. Start
-  there if you are setting up a whole machine rather than adding one piece.
 - **[claude-memory-kit](https://github.com/sabilmakbar/claude-memory-kit)**: the sibling
   kit. It keeps the preferences you teach Claude across sessions and machines, where this
   kit looks after the sessions themselves.
