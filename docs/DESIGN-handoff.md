@@ -9,8 +9,9 @@
     Verified against:  Claude Code 2.1.222
     Supersedes:        (none)
 
-Assumes the three-identity model and the append-only rule from
-[DESIGN-naming.md](DESIGN-naming.md); read that first if this is your entry point.
+Assumes the observed behaviour in [INTERNALS.md](INTERNALS.md), chiefly the three-identity
+model (O1) and the append-only transcript. Read that first if this is your entry point; the
+decisions those observations forced live in [DESIGN-naming.md](DESIGN-naming.md).
 
 ## The problem
 
@@ -252,8 +253,8 @@ pass them for the wrong reason.
   verified 2026-08-05, see DESIGN-naming.md.
 
   **Import is also the right place to normalise titles**, which a live session is not. A
-  running session's auto-titler re-emits `ai-title` after every turn, so anything written
-  there competes with a process that writes more often than we do. No such race exists
+  running session's auto-titler re-emits `ai-title` after every turn (O4), so anything
+  written there competes with a process that writes more often than we do. No such race exists
   around an imported transcript with no process attached. If a bundle carries a malformed
   or missing title, import is where it gets fixed.
 
