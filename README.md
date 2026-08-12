@@ -70,6 +70,23 @@ treat a list of your branch names.
 
 ## Install
 
+**Read this first: the installer edits `~/.claude/settings.json`.** That file is your global
+Claude Code config, shared with every other tool you have installed. The kit writes to it
+because registering a hook is the only way to make the reminders arrive on their own.
+
+Two things make that safe, and neither is good intentions. The test suite runs first and refuses
+to install if anything fails. Then, before anything at all is deployed, your file is checked: if
+it cannot be parsed, or if the part the kit merges into is not the shape it expects, the run
+stops and names the key to fix, with nothing installed and your file untouched. Past that point
+the merge only ever adds. A second run adds nothing, settings unrelated to hooks survive, a hook
+belonging to another tool is reported rather than claimed, an event the kit does not wire is
+never even read, and a run that fails later puts the previous contents back. Add `--dry-run` to
+see the plan before any of it happens.
+
+The exact content added is in [settings.snippet.json](settings.snippet.json).
+[docs/FLOWS.md](docs/FLOWS.md#writing-settingsjson-at-install-time) has the whole sequence as a
+diagram, including what happens at each refusal.
+
 ```bash
 git clone https://github.com/sabilmakbar/claude-session-kit.git ~/claude-session-kit
 ~/claude-session-kit/install.sh     # --dry-run to preview, --uninstall to remove
