@@ -12,10 +12,18 @@
 
 Nothing here is promised by Claude Code. Every entry is an observation with a date, a
 version, the surface it was read from, and how it was checked, so it can be re-run rather
-than believed. **Roughly half of these reversed on first contact**, which is what
-reverse-engineering undocumented software looks like; the ones marked `Supersedes` are the
-ones that moved, and a decision resting on those deserves more scepticism than one resting
-on an entry checked across three versions.
+than believed.
+
+**Three of the fourteen replaced an earlier belief, and each did so within a day or two of
+being recorded**: O2, O11 and O13, marked `Supersedes`. Two further reversals landed on
+decisions rather than observations and are recorded in
+[DESIGN-naming.md](DESIGN-naming.md). That rate is what reverse-engineering undocumented
+software looks like, and it is why a decision resting on a superseded entry deserves more
+scepticism than one resting on an entry confirmed across three versions.
+
+Four entries, O10 through O12 plus the tab half of O9, cannot be checked without a live
+VS Code session, because a headless run has no tab to observe. Nothing automated will ever
+cover those.
 
 ## The surfaces
 

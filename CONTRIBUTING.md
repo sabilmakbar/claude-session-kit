@@ -1,0 +1,63 @@
+# Contributing
+
+The short version: read [docs/INTERNALS.md](docs/INTERNALS.md) first, then the decision
+record for the area you are touching. Both exist so that a change knows what it would be
+overturning.
+
+## Start with what is observed, not with what we decided
+
+This kit reads files Claude Code owns, and Claude Code documents none of them.
+[docs/INTERNALS.md](docs/INTERNALS.md) is the record of what was actually observed: fourteen
+entries, each with the date and version it was seen on, the surface it was read from, how it
+was checked, and what you need to re-run the check yourself.
+
+Read it before proposing a design, because **three of those fourteen replaced an earlier
+belief within a day or two of being recorded.** They are marked `Supersedes`. A design
+resting on one of those deserves more doubt than one resting on an entry confirmed across
+three versions.
+
+Four of the fourteen cannot be checked automatically at all. They need a live VS Code
+session, because a headless run has no tab to observe.
+
+## Then the decision record
+
+The three `docs/DESIGN-*.md` files hold what we chose and why. They cite observations by
+number rather than restating them, so a fact has one home and cannot drift between files.
+
+Each record opens with its status, when it was last revised, and the Claude Code version
+behind it. [docs/DESIGN-naming.md](docs/DESIGN-naming.md) comes first if you are reading
+more than one; the other two assume its model.
+
+## Proposing something different
+
+That is the point of these files, so it is welcome. What helps:
+
+- **Name the observation you are relying on.** If it is not in `INTERNALS.md`, say how you
+  checked it, on which version, and how someone else would re-run it. An observation with
+  no method behind it is a guess, and this kit has been wrong that way before.
+- **Name the decision you would overturn.** The records say why each rule exists, including
+  the ones that look arbitrary. If a reason no longer holds, say which one and why.
+- **Say what would reopen your own proposal.** Every decision here that has been reversed
+  was reversed because someone wrote down the condition that would break it.
+
+## Before you open a pull request
+
+```bash
+bash tests/run.sh      # the fixture suite; install.sh refuses to deploy a tree it rejects
+bash tests/smoke.sh    # the real-data suite, against your own ~/.claude
+```
+
+`run.sh` is the gate. `smoke.sh` passes or skips depending on the machine it runs on, which
+is the point, so it is never a required check.
+
+Point the commit guardrail at your checkout too. It adds one house rule on top of the leak
+checks: no em-dashes on lines added to `README.md` or `docs/*.md`.
+
+```bash
+git -C . config core.hooksPath guardrail
+```
+
+One thing the fixture suite cannot do: notice that Claude Code changed. Fixtures encode what
+we believe the format to be, so they pass forever against a stale belief. That is what
+`smoke.sh` and `INTERNALS.md` are for, and why re-verification is a manual pass rather than
+a green check.
