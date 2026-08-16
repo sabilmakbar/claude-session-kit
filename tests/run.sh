@@ -1513,6 +1513,15 @@ for s in rename-session session-note handoff; do
     [ -f "$IPREFIX/skills/$s/SKILL.md" ] && ok "installs the $s skill" \
         || bad "installs the $s skill" "present" "missing"
 done
+# The deployed tree has no .git, so this file is the only thing that can name the
+# release in a pasted bug report. Asserting it is non-empty rather than matching a
+# shape: "unknown" is a legitimate answer from an archive install, and pinning the
+# format here would fail the moment a tag is cut.
+kvf="$IPREFIX/session-kit/.kit-version"
+[ -s "$kvf" ] && ok "install records the kit version" \
+    || bad "install records the kit version" "non-empty .kit-version" "missing or empty"
+[ "$(tr -d '[:space:]' < "$kvf" 2>/dev/null)" != "" ] \
+    && ok "…and it is not blank" || bad "…and it is not blank" "a value" "whitespace only"
 # A missed path rewrite installs a skill that silently cannot find its libraries.
 is "skills have no un-rewritten relative sources" "" \
    "$(grep -lE '^\. (core|naming|notes)/|^handoff/' "$IPREFIX"/skills/*/SKILL.md 2>/dev/null)"
