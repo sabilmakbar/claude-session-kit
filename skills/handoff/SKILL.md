@@ -37,7 +37,11 @@ conversation; never generate it mechanically. Sections:
   reading ONLY this note. Pick load-bearing facts stated once and briefly — those are
   what get lost. This is the note's quality bar, checked at claim time.
 
-Write it to a temp file, show the user, adjust, then hand the file to the script.
+Write it under `/tmp`, show the user, adjust, then hand that file to the script.
+Not the working directory: the script COPIES the note into the handoff folder, which
+is the permanent record, so the file you drafted is scratch the moment the script
+runs. Left in a repo it becomes an untracked stray that outlives the handoff, and
+seven of them had piled up in one directory before this line said where.
 
 ## 2a. Cross-machine ending
 
