@@ -28,6 +28,18 @@ Each record opens with its status, when it was last revised, and the Claude Code
 behind it. [docs/DESIGN-naming.md](docs/DESIGN-naming.md) comes first if you are reading
 more than one; the other two assume its model.
 
+**Dates belong in two different places, and it is deliberate.** A date recording when
+something about Claude Code was observed goes in `INTERNALS.md`, in that entry's
+`First observed` field. A date marking when we changed our minds stays in the prose of the
+decision record, beside the position it retired.
+
+The second kind looks like a work journal and is not one. "This rule changed five times on
+2026-08-05" tells you the design was tested hard and kept breaking within a single day.
+Five changes across six months would tell you something else entirely: churn, or a question
+nobody could settle. Same table underneath, different meaning, and the date is the only
+thing carrying it. Do not tidy those into the header. The header holds one revision date,
+and a record may retire several positions on several days.
+
 ## Proposing something different
 
 That is the point of these files, so it is welcome. What helps:
