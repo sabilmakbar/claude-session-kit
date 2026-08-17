@@ -9,15 +9,20 @@
 # ask, and the payload tells the agent to stay silent unless something is actually
 # off. A wasted check costs one silent thought, not an interruption.
 #
-# Two gates, one marker file ("<pid> <lines>"):
+# Three gates, one marker file ("<pid> <lines>"). Only A and B advance the marker; C
+# reads nothing and writes nothing, which is what lets it run on every message.
 #
-#   A. New process on a session with real history → wrong-session check on the FIRST
-#      message, which is the only moment it helps: the mistake is caught before the
-#      context is polluted. Suppressed for near-empty sessions, where there is no
-#      established topic to be wrong about.
+#   A. New process on a session with real history → the full wrong-session briefing,
+#      once. Suppressed for near-empty sessions, where there is no established topic
+#      to be wrong about.
 #   B. ~CS_DRIFT_EVERY transcript entries since the last check (default 200) →
 #      rename-or-split self-check. Gradual drift accumulates with volume, so the
 #      cadence is volume, not time.
+#   C. Every other message → the one-line wrong-session check. A used to carry this
+#      duty by asking the agent to keep watch for the rest of the sitting, and issue
+#      #20 is what that cost: an off-topic message arrived several turns in, long
+#      after the single delivery. Off-topic messages do not preferentially arrive
+#      first, so the check has to be present whenever a message is.
 #
 # Same proven plumbing as the other hooks: session id from stdin, plain stdout,
 # every failure path exits 0 and prints nothing.

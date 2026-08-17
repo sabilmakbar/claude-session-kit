@@ -16,9 +16,14 @@ next), your first message brings it back, stamped with how old it is: "written 3
 entries ago". Claude treats an old note with suspicion instead of confidence, which
 is the point of the stamp.
 
-**A wrong-tab check runs once.** If your first message clearly belongs to different
+**A wrong-tab check runs on every message.** If a message clearly belongs to different
 work than this session is about, Claude says so before answering, because answering
-would pollute a clean session. If the message fits, you never hear about the check.
+would pollute a clean session. You get the session that work already lives in, a fresh
+one, or carrying on here if you say so. It never refuses. If the message fits, you
+never hear about the check.
+
+It used to run only on the first message after reopening. That sounded reasonable and
+was not, because an off-topic question does not politely arrive first.
 
 ## While you work
 
@@ -68,11 +73,18 @@ new machine's picker.
 ## When Claude Code updates
 
 The kit reads Claude Code's undocumented internals, so any update might move
-something. A startup hook notices the version change and runs the kit's real-data
-test suite once, in the background. If everything still works, you never hear about
-it. If something moved, the kit warns you every time you use it until a human looks,
-and a redacted failure report sits ready to paste into an issue: version numbers
-and check names only, never your titles or paths.
+something. A startup hook notices a version it has not cleared before and runs the
+kit's real-data test suite once, in the background. If everything still works, you
+never hear about it.
+
+If something moved, you get one line a day saying so, until it passes again. The same
+line is how you find out the kit has stopped working for any other reason, which
+matters because a broken kit and a healthy one are both silent otherwise. A redacted
+failure report sits ready to paste into an issue: versions and check names only,
+never your titles or paths.
+
+Each version it passes against is remembered, so going back to an older session you
+still have open is not treated as news.
 
 ## What it never does
 

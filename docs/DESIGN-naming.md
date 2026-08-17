@@ -30,11 +30,15 @@ Three of those observations are what make the label a problem rather than a deta
   explicitly instead of assuming one hit.
 - An explicit name does not survive a process restart at the pid layer (O8), so the
   obvious place to store a name is the wrong one.
-## Existing behavior rule
 
-The memory `feedback_session_identifiers` (miner P-009) already tells Claude to refer
-to sessions by title, flag drift, and suggest renames. What is missing is tooling:
-detection is manual and renaming is buried in the UI.
+## What already existed, and what was missing
+
+Instructing the agent to refer to sessions by title, notice drift, and suggest renames
+was already possible, and on the machine this was designed on it was already in place.
+That is not what was missing. The gap was tooling: detection stayed manual, and renaming
+was buried in the UI with no command behind it. An instruction with nothing to call is
+a reminder, not a feature, which is why this kit is shell functions first and prompts
+second.
 
 ## The three pieces, and what each one settled
 
@@ -53,11 +57,14 @@ detection is manual and renaming is buried in the UI.
    So `hooks/session-drift.sh` never judges; it decides WHEN to ask, and its payload
    tells the agent to judge silently and speak only if something is off. A wasted
    check costs one silent thought, which is what makes the one remaining mechanical
-   choice (the cadence) low-stakes. Two gates, one marker per session: a new process
-   on a session with ≥20 entries of history gets the wrong-session check on its
+   choice (the cadence) low-stakes. Three gates, one marker per session: a new process
+   on a session with ≥20 entries of history gets the full wrong-session briefing on its
    FIRST message (the latency requirement below, met by construction); every ~200
-   entries after that, the rename-or-split self-check. A session with no real title
-   gets a naming nudge instead of a drift question against a meaningless name.
+   entries after that, the rename-or-split self-check; and every other message carries
+   a one-line version of the wrong-session check, because an off-topic message does not
+   preferentially arrive first (D7, and issue #20 is what the two-gate version cost). A
+   session with no real title gets a naming nudge instead of a drift question against a
+   meaningless name.
 
    The sketch as originally proposed, kept for the record: compare stored title
    against recent content (cheap heuristic first: title words in the last N user
