@@ -336,8 +336,9 @@ cs_list() {
 
 # cs_find <ref> -> matching session ids, one per line.
 #
-# Accepts a full UUID, a short-id prefix, or a case-insensitive name substring. Prints
-# every match; callers needing exactly one must check the count, because derived names
+# Accepts a full UUID, a short-id prefix, a case-insensitive name substring, or, when
+# none of those match, a word from the session's own cwd or conversation. Prints every
+# match; callers needing exactly one must check the count, because derived names
 # genuinely collide (two concurrent sessions have both been observed as documents-7c).
 #
 # Ids are matched from filenames and win outright; names are searched only when no id

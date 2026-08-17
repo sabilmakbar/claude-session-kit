@@ -115,11 +115,12 @@ The hooks start working in your next session. Wiring them is the **last** thing 
 does, after everything else is installed and checked, so a run that breaks earlier never
 reaches `settings.json` at all.
 
-The version from just before the last real change is kept at
-`settings.json.session-kit.bak`, so you can undo that change yourself at any time. It is a
-one-step undo of the installer's edit, not a permanent copy of your pre-kit config:
-ordinary re-installs change nothing and so leave it alone, but when the kit's own set of
-hooks changes, the next install backs up the file as it stood that day, our hooks included.
+`settings.json.session-kit.bak` holds the version from just before the last real change, so
+you can undo that change yourself at any time.
+
+It is a one-step undo, not a permanent copy of your pre-kit config. An ordinary re-install
+changes nothing, so it leaves the backup alone. When the kit's own set of hooks does change,
+the next install backs up the file as it stood that day, our hooks included.
 
 To get your config as it would be without this kit, do not reach for that file. Run
 `./install.sh --uninstall`, which takes out our four hooks and leaves everything else

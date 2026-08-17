@@ -16,8 +16,10 @@ belief within a day or two of being recorded.** They are marked `Supersedes`. A 
 resting on one of those deserves more doubt than one resting on an entry confirmed across
 three versions.
 
-Four of the fifteen cannot be checked automatically at all. They need a live VS Code
-session, because a headless run has no tab to observe.
+Four of the fifteen carry `Checkable: manual`, and not all for the same reason. Two need a
+live VS Code session, because a headless run has no tab to observe. One is deduced from
+another observation rather than read directly, and one is a behaviour whose handler you can
+read in the extension bundle but whose effect you cannot.
 
 ## Then the decision record
 
