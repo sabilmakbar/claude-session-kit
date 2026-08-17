@@ -35,14 +35,21 @@ flowchart TD
 flowchart TD
     M["message arrives"] --> P{"new process for<br/>this session?"}
     P -- yes --> H{"≥ 20 entries<br/>of history?"}
-    H -- yes --> W["wrong-session check, FIRST message:<br/>if clearly unrelated work, stop.<br/>no preliminary tool calls, route via cs_find<br/>+ set the standing watch for this sitting"]
+    H -- yes --> W["full briefing, FIRST message:<br/>if clearly unrelated work, stop.<br/>no preliminary tool calls, route via cs_find"]
     H -- no --> Q["silent (nothing established<br/>to be wrong about)"]
     P -- no --> C{"≥ 200 entries since<br/>last check?"}
     C -- yes --> T{"session has a<br/>real title?"}
     T -- yes --> D["silent self-check:<br/>still matches → say nothing<br/>evolved → offer rename<br/>second topic → offer split"]
     T -- no --> U["naming nudge:<br/>offer to title it"]
-    C -- no --> S["silent"]
+    C -- no --> G["one-line session check:<br/>belongs elsewhere? route it.<br/>otherwise say nothing"]
 ```
+
+The one-line check on the last branch is there because an off-topic message does not
+politely arrive first. The full briefing is delivered once per opening, and for a long
+sitting that is one delivery competing with everything that comes after it. The short
+version repeats instead, so the check is present whenever a message is. It is still only
+a hint: it offers the session `cs_find` found, a fresh session, or staying here, and the
+user decides. The reasoning is D7 in [DESIGN-naming.md](DESIGN-naming.md).
 
 The numbers (20 entries of history, a check every 200 entries) are deliberately
 low-stakes. A check that finds nothing costs one silent thought, not an

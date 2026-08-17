@@ -208,6 +208,36 @@ is "short-id prefix finds one" 1 "$(cs_find cccccccc | wc -l | tr -d ' ')"
 is "name substring is case-insensitive" 2 "$(cs_find DOCUMENTS-7C | wc -l | tr -d ' ')"
 drop_home
 
+# Routing to a WELL-NAMED session, which is the case that failed in issue #20. The
+# rename skill requires a title to name the arc of the work, so a good title shares no
+# word with a specific question about it. This fixture is built that way on purpose:
+# the title says nothing the query says, and the topic appears only in the conversation.
+new_home
+C=eeeeeeee-0000-0000-0000-000000000003; transcript "$C" >/dev/null
+add_custom "$C" "Ship the release pipeline end to end"
+add_user "$C" "the dev-pipeline plugin is not wiring its hooks"
+is "the title genuinely shares no word with the query" "" "$(cs_find dev-pipeline | grep -v "$C")"
+is "a well-named session is still found by its topic" "$C" "$(cs_find dev-pipeline)"
+is "…and by another word from the conversation" "$C" "$(cs_find 'wiring its hooks')"
+is "…case-insensitively, like the name search" "$C" "$(cs_find DEV-PIPELINE)"
+
+# The fallback must not fire when the NAME already matched: same session, a word that is
+# in the title. One result, not two, and no scan of anything else.
+is "a name match still short-circuits the content search" "$C" "$(cs_find pipeline)"
+
+# A term nobody used matches nothing, so the fallback cannot turn every query into a hit.
+is "an absent term still finds nothing" "" "$(cs_find zzzz-nobody-said-this)"
+is "…and cs_find still exits 0 on an empty result" 0 "$(cs_find zzzz-nobody-said-this >/dev/null 2>&1; echo $?)"
+
+# Tool output is NOT the session's own words. A path or a command result mentioning the
+# term must not make the session a routing candidate, or every session that ever grepped
+# for something becomes one.
+D=ffffffff-0000-0000-0000-000000000004; transcript "$D" >/dev/null
+add_custom "$D" "Something else entirely"
+add_line "$D" "$(jq -cn '{type:"user",message:{role:"user",content:[{type:"tool_result",content:"/repos/dev-pipeline/plugin.json"}]}}')"
+is "a term seen only in tool output does not match" "$C" "$(cs_find dev-pipeline)"
+drop_home
+
 # --- title validation -------------------------------------------------------
 
 echo "title validation"
@@ -1253,10 +1283,18 @@ fill "$ID" 10
 OUT=$(drift "$ID")   # same pid — gate A cannot re-fire; gate B: 11-1=10 >= 10
 case "$OUT" in *Drift\ check*Fixing\ the\ tokenizer*rename-session*handoff*) ok "the cadence check names the title and both remedies" ;;
     *) bad "the cadence check names the title and both remedies" "drift payload" "${OUT:-silence}";; esac
-is "…and immediately after, it is quiet again" "" "$(drift "$ID")"
+# Between the cadence checks the hook is NOT silent any more, and that is issue #20.
+# What it carries is the one-line session check, never a second drift payload.
+OUT=$(drift "$ID")
+case "$OUT" in
+    *Drift\ check*) bad "between cadences, the drift payload does not repeat" "no drift payload" "$OUT" ;;
+    *Session\ check*Fixing\ the\ tokenizer*) ok "between cadences, the drift payload does not repeat" ;;
+    *) bad "between cadences, the drift payload does not repeat" "the session check" "${OUT:-silence}" ;;
+esac
 
 fill "$ID" 4
-is "below the cadence, still quiet" "" "$(drift "$ID")"
+case "$(drift "$ID")" in *Session\ check*) ok "below the cadence, the session check still arrives" ;;
+    *) bad "below the cadence, the session check still arrives" "the session check" "silence";; esac
 fill "$ID" 6
 case "$(drift "$ID")" in *Drift\ check*) ok "at the cadence, it asks again" ;;
     *) bad "at the cadence, it asks again" "drift payload" "silence";; esac
@@ -1267,10 +1305,15 @@ rm -f "$PIDS/$$.json"; pidfile "$DPID" "$ID" "documents-1" derived
 OUT=$(drift "$ID")
 case "$OUT" in *Wrong-session\ check*Fixing\ the\ tokenizer*) ok "a reopened session gets the wrong-session check first" ;;
     *) bad "a reopened session gets the wrong-session check first" "wrong-session payload" "${OUT:-silence}";; esac
-# The same payload sets the session-long standing watch — the initiative lives in
-# the kit, delivered once per opening, not in any per-user memory.
-case "$OUT" in *Standing\ watch*split*rename-session*) ok "…and sets the standing health watch" ;;
-    *) bad "…and sets the standing health watch" "standing-watch instruction" "${OUT:-silence}";; esac
+# The briefing used to close by asking the agent to keep watch for the rest of the
+# sitting. Issue #20 is what that cost: the off-topic message arrived several turns
+# later, long after the one delivery. The duty now lives in a per-message line, so the
+# briefing says so instead of asking anyone to remember.
+case "$OUT" in *Standing\ watch*)
+        bad "the briefing no longer delegates the watch to memory" "no standing-watch clause" "$OUT" ;;
+    *every\ message*) ok "the briefing no longer delegates the watch to memory" ;;
+    *) bad "the briefing no longer delegates the watch to memory" "a pointer to the per-message line" "${OUT:-silence}" ;;
+esac
 # A live trial showed an agent flagging the mismatch and then running a locate
 # anyway, dumping unrelated directory listings into the session. The payload must
 # forbid preliminary work outright, allow cs_find as the one routing lookup, and
@@ -1279,7 +1322,43 @@ case "$OUT" in *NO\ tool\ calls*nothing\ preliminary*) ok "…and forbids prelim
     *) bad "…and forbids preliminary work on an off-topic ask" "a no-preliminary clause" "${OUT:-silence}";; esac
 case "$OUT" in *cs_find*explicitly*) ok "…and routes via cs_find with override gated on explicit consent" ;;
     *) bad "…and routes via cs_find with override gated on explicit consent" "cs_find + explicit override" "${OUT:-silence}";; esac
-is "…exactly once — the next message is quiet" "" "$(drift "$ID")"
+# The FULL briefing still arrives exactly once per opening; only the short line repeats.
+OUT2=$(drift "$ID")
+case "$OUT2" in *Wrong-session\ check*)
+        bad "the full briefing arrives exactly once per opening" "no second briefing" "$OUT2" ;;
+    *Session\ check*) ok "the full briefing arrives exactly once per opening" ;;
+    *) bad "the full briefing arrives exactly once per opening" "the session check" "${OUT2:-silence}" ;;
+esac
+
+# The core of issue #20: an off-topic message that arrives LATE must still be met with
+# the check. Deliberately kept BELOW the drift cadence, because that gap is the whole
+# defect: the sitting continues, gate A cannot re-fire, gate B is not due, and the old
+# hook said nothing at exactly the moment the wrong message could arrive.
+fill "$ID" 5
+OUT3=$(drift "$ID")
+case "$OUT3" in *Session\ check*Fixing\ the\ tokenizer*)
+        ok "mid-sitting, below the cadence, the check is still delivered (issue #20)" ;;
+    *) bad "mid-sitting, below the cadence, the check is still delivered (issue #20)" "the session check" "${OUT3:-silence}" ;;
+esac
+
+# It must stay a HINT. Never a refusal, and it still ends at the user's choice.
+case "$OUT3" in *cs_find*"(1)"*"(2)"*"(3)"*"only if the user says so"*)
+        ok "…still offering all three routes, never refusing" ;;
+    *) bad "…still offering all three routes, never refusing" "three options, user decides" "$OUT3" ;;
+esac
+case "$OUT3" in *refus*|*"do not answer"*|*forbidden*)
+        bad "…and never uses refusal language" "a hint" "$OUT3" ;;
+    *) ok "…and never uses refusal language" ;;
+esac
+is "the hook still exits 0 while doing all this" 0 \
+   "$(printf '{"session_id":"%s"}' "$ID" | bash "$ROOT/hooks/session-drift.sh" >/dev/null 2>&1; echo $?)"
+
+# A near-empty session stays exempt: nothing established to be wrong about.
+NEW=44444444-0000-0000-0000-00000000000c; transcript "$NEW" >/dev/null
+add_ai "$NEW" "Brand new"
+pidfile "$DPID" "$NEW" "documents-9" derived
+drift "$NEW" >/dev/null   # gate A lays the marker
+is "a near-empty session gets no per-message check either" "" "$(drift "$NEW")"
 { kill "$DPID" && wait "$DPID"; } 2>/dev/null
 drop_home
 

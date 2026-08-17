@@ -67,7 +67,7 @@ if [ "$pid" != "$seen_pid" ]; then
     # failure cannot repeat the check on every prompt.
     mark || exit 0
     [ "$lines" -ge "$MIN_HISTORY" ] || exit 0
-    printf 'Wrong-session check (first message after reopening): this session is about "%s" (%s entries of history). If the user'\''s message clearly belongs to different work, STOP before answering: run NO tool calls toward that question — no locating, no scanning, nothing preliminary; even a directory listing pollutes this session. The only permitted lookup is routing: `. %s/core/sessions.sh && cs_find "<topic words>"` to find an existing session for it. Then offer, in order: (1) the existing session, by title, if cs_find found one; (2) a fresh session, offering to carry the question over via the handoff skill; (3) doing it here — only if the user explicitly says so after seeing 1 and 2. If the message fits this session, answer normally and do not mention this check. Standing watch for the rest of this session, on your own initiative: if a distinct NEW arc of work starts, offer to split it into a fresh session (handoff skill) before it grows; if the same work evolves past the title, offer the rename-session skill; stay silent while the session is healthy.\n' \
+    printf 'Wrong-session check (first message after reopening): this session is about "%s" (%s entries of history). If the user'\''s message clearly belongs to different work, STOP before answering: run NO tool calls toward that question — no locating, no scanning, nothing preliminary; even a directory listing pollutes this session. The only permitted lookup is routing: `. %s/core/sessions.sh && cs_find "<topic words>"` to find an existing session for it. Then offer, in order: (1) the existing session, by title, if cs_find found one; (2) a fresh session, offering to carry the question over via the handoff skill; (3) doing it here — only if the user explicitly says so after seeing 1 and 2. If the message fits this session, answer normally and do not mention this check. This is the full briefing, delivered once; a one-line version of it now arrives on every message, so nothing here depends on you remembering it.\n' \
         "$name" "$lines" "$ROOT"
     exit 0
 fi
@@ -82,5 +82,24 @@ if [ $((lines - seen_lines)) -ge "$EVERY" ]; then
             printf 'Drift check (runs every ~%s entries — judge silently, mention it ONLY if something is off): this session is titled "%s". If the recent conversation still matches, say nothing. If it is the same work evolved past that title, offer the rename-session skill. If a distinct second topic has grown here, offer to split it into a fresh session via the handoff skill.\n' \
                 "$EVERY" "$name" ;;
     esac
+    exit 0
 fi
+
+# Gate C: the standing wrong-session check, on EVERY message.
+#
+# Gate A used to carry this duty in a closing sentence asking the agent to keep watch
+# for the rest of the sitting. That failed in the way asking anyone to remember fails
+# (issue #20): the off-topic message arrived several turns in, by which time the one
+# delivery had been pushed down by the work in between, and the session absorbed a
+# repository inspection, a read of the global settings file, and an edit to a handoff
+# note owned by a different session.
+#
+# Off-topic messages do not preferentially arrive first, so a check that only fires on
+# the first message is not aimed at the problem. This one is present whenever a message
+# is, which is the only cadence that matches when the fault can occur. It is kept to one
+# short line precisely because it repeats, and it stays a hint: it never refuses, and it
+# still ends at the user's choice (D7 in DESIGN-naming.md).
+[ "$lines" -ge "$MIN_HISTORY" ] || exit 0
+printf 'Session check (every message; judge silently, say nothing when the message fits): this session is "%s". If this message belongs to different work, do not begin it here, not even a lookup. Route first with `. %s/core/sessions.sh && cs_find "<topic words>"`, then offer, in order: (1) the session it found, by title; (2) a fresh session, carrying the question over via the handoff skill; (3) doing it here, only if the user says so after seeing 1 and 2.\n' \
+    "$name" "$ROOT"
 exit 0

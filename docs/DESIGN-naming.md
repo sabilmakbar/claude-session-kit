@@ -237,6 +237,39 @@ Rests on O12. Appending `custom-title` gives a session a correct tab title the n
 opens, so the imported-session case in [DESIGN-handoff.md](DESIGN-handoff.md) gets real titles
 rather than picker entries alone. The one thing still impossible is retitling a tab that is
 open, in place.
+
+## D7. The wrong-session check hints, and never blocks
+
+The question was asked during the original build and answered then, but the answer was never
+written down, so it was re-argued from scratch when the check failed in issue #20. Recording
+it: **the check stays a hint.**
+
+A block would have to decide, mechanically, that a message belongs elsewhere. That is the
+same semantic judgement D-nothing-mechanical already refuses to make for drift, and it is
+harder here, because the evidence is a single message rather than a whole conversation. The
+failure modes are not symmetric. A hint that fires wrongly costs one sentence the user
+ignores. A block that fires wrongly stops the user working in their own session, and the only
+recovery is to argue with a shell script. People route around that by turning the thing off,
+and then it protects nothing at all.
+
+So the hook states the case, offers three routes in order, and ends at the user's choice:
+the session `cs_find` located, a fresh session via the handoff skill, or here if the user says
+so after seeing the other two. Option three exists on purpose. The user may know something the
+check cannot: that the two topics are genuinely the same work, or that they want it here
+anyway.
+
+**What changed after issue #20 is frequency, not force.** The check now arrives on every
+message rather than once per opening, because an off-topic message does not preferentially
+arrive first and the old cadence left the rest of the sitting uncovered. The briefing is still
+delivered once; only a one-line version repeats. Making it louder was never the answer, since
+the incident's cost came from the check being absent, not from it being too gentle.
+
+**What would reopen this.** Evidence that hinting is not enough: repeated incidents where the
+check was present, correct, and ignored. That is a different failure from issue #20, where the
+check could not have worked even if followed, and it would deserve a different remedy. Look
+first at whether the routing step actually finds the right session, because a hint that cannot
+name a destination is not really an offer.
+
 ## What would reopen this
 
 D1 carries its own list above, since it is the decision that changed five times. For the rest:
