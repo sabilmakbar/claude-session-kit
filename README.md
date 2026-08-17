@@ -66,7 +66,9 @@ b93f5d21-...   live   documents-41
 Three tab-separated columns: the session id, whether a process is still running for it, and
 the best name the kit can find. `documents-41` is what an unnamed session looks like, and is
 what `/rename-session` fixes. `cs_find "billing importer"` finds one by name fragment or id
-prefix. Both only read; nothing here writes.
+prefix, and if neither matches, by what the session actually contains, so a session whose
+title describes the whole arc of the work is still findable by a specific thing you did in
+it. Both only read; nothing here writes.
 
 The titles are made up. Yours are your own work, so treat `cs_list` output the way you would
 treat a list of your branch names.

@@ -360,7 +360,67 @@ cs_find() {
     lower=$(printf '%s' "$ref" | tr '[:upper:]' '[:lower:]')
     while IFS=$'\t' read -r id live name; do
         case "$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')" in
-            *"$lower"*) printf '%s\n' "$id";;
+            *"$lower"*) printf '%s\n' "$id"; hit=1;;
         esac
     done < <(cs_list)
+    [ -n "$hit" ] && return 0
+
+    # Stage 4, and it exists because two of this kit's own rules pull against each
+    # other. The rename skill requires a title to name the ARC of the work rather than
+    # either endpoint, which is right for a title and makes it a poor routing key: the
+    # better the name describes the whole arc, the less likely any word from a specific
+    # question appears in it. Routing then returns nothing exactly when sessions are
+    # well named, which is the state the kit is trying to produce (issue #20, where a
+    # live, well-named session was missed by both `cs_find dev-pipeline` and
+    # `cs_find plugin`).
+    #
+    # So when the NAME matches nothing, fall back to what the session actually holds:
+    # the directory it runs in and the user's own words. Neither is subject to the
+    # arc-naming rule. Ordered after the name search and skipped entirely when that
+    # succeeded, so nothing about the existing behaviour changes; this only rescues the
+    # empty result.
+    cs_have_deps || return 0
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        id=$(basename "$f" .jsonl)
+        _cs_content_match "$lower" "$f" && printf '%s\n' "$id"
+    done < <(_cs_find_files "$(_cs_projects_dir)" 2 2 '*.jsonl')
+    # Explicit, because the loop's last content probe decides the exit status otherwise
+    # and a total miss would start returning 1. Callers read stdout and several run
+    # under `set -e`, so a silent status change here would abort them on an empty result.
+    return 0
+}
+
+# Does this session's own content mention the term? Two sources, both outside the
+# arc-naming rule: the cwd, which Claude Code encodes into the project directory name,
+# and the prose of the conversation.
+#
+# `text` blocks only, from either speaker. That filter is the whole design:
+#
+#   - tool_result blocks are excluded, and they are the reason a naive grep of the raw
+#     file is wrong. They carry role "user" in this format while holding command output,
+#     file contents and paths, so raw matching would find every session that ever ran
+#     `grep` on the word.
+#   - tool_use blocks are excluded for the same reason, from the other side.
+#   - thinking blocks are excluded: private reasoning is not what the session was about.
+#   - the assistant's own text IS included, on evidence. Sampling a real 8000-entry
+#     transcript found 10 user text blocks against 26 assistant ones in the same window;
+#     user turns run to "yes" and "do it", so the vocabulary a routing query would use
+#     mostly sits in the replies. Restricting to user turns finds almost nothing.
+#
+# The tail is bounded at 400 entries because this runs once per session on the machine
+# and transcripts reach tens of thousands. The first prompt is added back explicitly: it
+# is the one old entry that reliably says what the session was FOR.
+_cs_content_match() {  # <lower-term> <transcript-path>
+    local term="$1" f="$2" dir=""
+    dir=$(basename "$(dirname "$f")" | tr '[:upper:]' '[:lower:]')
+    case "$dir" in *"$term"*) return 0;; esac
+    {
+        cs_first_prompt "$f" 2>/dev/null
+        tail -n 400 "$f" 2>/dev/null \
+            | jq -r '.message.content
+                     | if type == "array" then [.[]? | select(.type == "text") | .text] | join(" ")
+                       elif type == "string" then .
+                       else empty end' 2>/dev/null
+    } | tr '[:upper:]' '[:lower:]' | grep -qF -- "$term"
 }
