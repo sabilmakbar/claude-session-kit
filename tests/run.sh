@@ -1566,6 +1566,71 @@ ours() { jq '[.hooks[]?[]?.hooks[]?.command // ""
               | select(test("[/](version-check|session-note|session-guard|session-drift)[.]sh"))]
              | length' "$SETT" 2>/dev/null; }
 
+# --- the installer ships everything the repo ships --------------------------
+#
+# install.sh names its files by hand TWICE: once in the preflight existence check and
+# again in the copy statements below it. Neither list is derived from anything, so
+# adding a file to the repo and forgetting one of them installs a kit that is silently
+# incomplete. The failure is quiet by construction, which is the kind this suite exists
+# to convert into a red line.
+#
+# The expectation is DERIVED FROM THE REPO, never restated here. A hand-written list in
+# the test would be a third copy of the same list, and three copies drift faster than
+# two: the test would pass while agreeing with itself and nothing else.
+#
+# What ships is every *.sh under the library directories, every skill, and the four
+# loose files. tests/run.sh is deliberately NOT shipped (the gate stays in the checkout;
+# the deployed tree gets smoke.sh, the real-data suite), and guardrail/ is a development
+# hook, so both are asserted absent rather than merely unlisted.
+new_home
+IPREFIX="$FAKE/.claude"
+inst; is "a clean install exits 0" 0 $?
+
+missing=""
+for f in $(cd "$ROOT" && find core naming notes hooks handoff -name '*.sh' -type f | sort); do
+    [ -f "$IPREFIX/session-kit/$f" ] || missing="$missing $f"
+done
+is "every library script in the repo was installed" "" "$missing"
+
+missing=""
+for d in $(cd "$ROOT" && ls -d skills/*/ | sed 's|/$||'); do
+    [ -f "$IPREFIX/${d#skills/}/SKILL.md" ] || [ -f "$IPREFIX/skills/${d#skills/}/SKILL.md" ] \
+        || missing="$missing $d"
+done
+is "every skill in the repo was installed" "" "$missing"
+
+missing=""
+for f in tests/smoke.sh config.example settings.snippet.json; do
+    [ -f "$IPREFIX/session-kit/$f" ] || missing="$missing $f"
+done
+is "the loose shipped files were installed" "" "$missing"
+is "…and config was seeded from the example" 0 \
+   "$(cmp -s "$ROOT/config.example" "$IPREFIX/session-kit/config"; echo $?)"
+
+# The other half of "complete": things that must NOT be deployed. Shipping the gate or
+# the developer guardrail would put files on a user's machine that only make sense in a
+# checkout.
+[ -e "$IPREFIX/session-kit/tests/run.sh" ] \
+    && bad "the fixture suite is not deployed" "absent" "present" \
+    || ok "the fixture suite is not deployed"
+[ -e "$IPREFIX/session-kit/guardrail" ] \
+    && bad "the development guardrail is not deployed" "absent" "present" \
+    || ok "the development guardrail is not deployed"
+
+# Both hand-maintained lists must agree with each other too. A file the preflight
+# demands but no copy statement writes passes the checks above only by accident of
+# ordering, so compare the preflight's own list against what landed.
+missing=""
+for f in $(sed -n '/^for f in core\/sessions.sh/,/^done$/p' "$ROOT/install.sh" \
+           | tr ' \\' '\n\n' | grep -E '^[a-z]+/.+\.(sh|md|json)$|^config\.example$|^settings\.snippet\.json$'); do
+    case "$f" in
+        skills/*) [ -f "$IPREFIX/${f#skills/}" ] || [ -f "$IPREFIX/$f" ] || missing="$missing $f" ;;
+        *)        [ -f "$IPREFIX/session-kit/$f" ] || missing="$missing $f" ;;
+    esac
+done
+is "everything the preflight demands is also copied" "" "$missing"
+drop_home
+
 new_home
 IPREFIX="$FAKE/.claude"; SETT="$IPREFIX/settings.json"
 # Seed a pre-existing config so the backup assertions below have something to back
