@@ -26,6 +26,19 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 PASS=0; FAIL=0; SKIP=0
 
+# Which release is this? Two homes, because this suite runs from both trees. The
+# deployed copy has no .git, so install.sh writes .kit-version beside it; a checkout
+# has no .kit-version, so ask git directly. Neither is authoritative on its own.
+# Answers "unknown" rather than guessing, since a wrong version in a bug report
+# sends the reader somewhere that never had the bug.
+cs_kit_version() {
+    if [ -r "$ROOT/.kit-version" ]; then
+        tr -d '\n' < "$ROOT/.kit-version"
+    else
+        git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || printf 'unknown'
+    fi
+}
+
 FAILED=""; SUSPECT=""
 
 ok()   { PASS=$((PASS+1)); printf '  ok   %s\n' "$1"; }
@@ -82,6 +95,7 @@ write_report() {
         echo
         printf -- '- claude code running: `%s`\n' "${running:-unknown}"
         printf -- '- last verified against: `%s`\n' "${verified:-unknown}"
+        printf -- '- kit version: `%s`\n' "$(cs_kit_version)"
         printf -- '- kit verified for: `%s`\n' "$CLAUDE_SESSION_KIT_VERIFIED_VERSION"
         printf -- '- os: `%s`\n' "$(uname -sr 2>/dev/null)"
         printf -- '- bash: `%s`\n' "$(bash --version 2>/dev/null | head -1 | sed 's/.*version //;s/ .*//')"

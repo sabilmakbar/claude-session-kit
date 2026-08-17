@@ -457,6 +457,25 @@ if [ "$DRY" -eq 0 ]; then
     echo "verified: installed copy loads"
 fi
 
+# --- record which release this is --------------------------------------------
+#
+# The deployed tree is a file copy with no .git, so `git describe` works in the
+# checkout and returns nothing here. Without this the failure report names the
+# Claude Code version, the shell and jq, and cannot name the kit, which is the one
+# thing the reader of a bug report needs.
+#
+# Derived rather than maintained: a tracked VERSION file fails by lying the first
+# time a tag ships without a bump, and a confident wrong version is worse than an
+# absent one. Installing from a downloaded archive rather than a clone records
+# "unknown", which is the honest answer for a tree whose provenance is unknowable.
+if [ "$DRY" -eq 1 ]; then
+    printf '  would: record the kit version in %s\n' "$DEST_LIB/.kit-version"
+else
+    kv=$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null) || kv=""
+    printf '%s\n' "${kv:-unknown}" > "$DEST_LIB/.kit-version"
+    echo "kit version: ${kv:-unknown}"
+fi
+
 # --- hooks -------------------------------------------------------------------
 #
 # Deliberately the LAST thing the installer does. Everything above writes only
