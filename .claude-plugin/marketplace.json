@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "session-kit",
+  "description": "Sessions that know what they are about: real titles, working notes that survive a restart, and clean handoffs between sessions and machines.",
+  "owner": {
+    "name": "sabilmakbar",
+    "url": "https://github.com/sabilmakbar"
+  },
+  "plugins": [
+    {
+      "name": "session-kit",
+      "description": "Name sessions, keep resumable notes, and hand work off between sessions or machines.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

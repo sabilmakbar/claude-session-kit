@@ -51,7 +51,7 @@ offers a three-way fork: *rename* (work evolved), *split* (topic changed), or *w
 session* (the user opened the wrong tab and asked something unrelated). Only **split**
 reaches this doc. The wrong-session case produces no bundle at all: nothing has evolved
 and nothing needs carrying over, so the remedy is an early warning, not a handoff.
-Wiring: detector pings → user picks → `/handoff` drafts the note, for split only.
+Wiring: detector pings → user picks → `/session-kit:handoff` drafts the note, for split only.
 
 ### Same-machine splits do not produce a bundle
 
@@ -223,7 +223,7 @@ pass them for the wrong reason.
 
 ## Pieces
 
-**Shipped**, all three: `handoff/export.sh`, `handoff/import.sh`, and the `/handoff` skill.
+**Shipped**, all three: `handoff/export.sh`, `handoff/import.sh`, and the `/session-kit:handoff` skill.
 
 1. **`handoff/export.sh <session-ref>… [files…]`**: resolve refs via `core/` (title
    substring or id), validate each transcript (valid JSON tail), write manifest,
@@ -233,7 +233,7 @@ pass them for the wrong reason.
    machine's project dir; append each session's manifest `title` as a `custom-title`
    line in its transcript (DESIGN-naming.md) so the name survives the move and appears
    in the target machine's session picker; print the HANDOFF.md note.
-3. **Skill `/handoff`**, an interactive wrapper: pick sessions, draft the HANDOFF.md from
+3. **Skill `/session-kit:handoff`**, an interactive wrapper: pick sessions, draft the HANDOFF.md from
    the current session's state, run export, tell the user where the bundle is.
 
 ## Non-goals

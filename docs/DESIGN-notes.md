@@ -24,7 +24,7 @@ Each decision below carries its reason, so a change knows what it is overturning
 
 bash + jq cannot summarise a conversation; only the model can say what was agreed.
 Any attempt to generate the note mechanically (last N messages, keyword scraping)
-produces confident nonsense. Same split as `/rename-session`: the skill decides the
+produces confident nonsense. Same split as `/session-kit:rename-session`: the skill decides the
 content, the shell function performs the write.
 
 ## D2. Write side is current-session only

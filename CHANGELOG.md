@@ -20,6 +20,17 @@ says nothing about the other.
 
 ## Unreleased
 
+### Changed
+
+- Skills now ship as a Claude Code plugin and are invoked with the `session-kit` namespace
+  (`/session-kit:rename-session`), so they cannot be shadowed by a skill of the same name from
+  another kit or from your own `~/.claude/skills`. `install.sh` no longer writes that folder; a
+  re-run retires copies an older version left there, and reports rather than deletes anything it
+  does not recognise as its own. Both install steps are now required: the plugin carries the
+  skills, `install.sh` still carries the hooks and the libraries those skills source.
+
+## Unreleased
+
 Nothing yet.
 
 ## 0.2.0

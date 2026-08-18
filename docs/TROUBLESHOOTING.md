@@ -20,7 +20,7 @@ jq '.hooks | tostring | test("session-kit")' ~/.claude/settings.json
 **Fix.** Re-run `./install.sh`, then start a new session. Hooks are read at session start,
 so an already-open session will not pick them up.
 
-The three skills work with no hooks at all. If `/rename-session` works but you never get a
+The three skills work with no hooks at all. If `/session-kit:rename-session` works but you never get a
 note or a reminder, this is the reason.
 
 ## A session said "claude-session-kit: ..." out of nowhere
@@ -43,6 +43,28 @@ bash ~/.claude/session-kit/tests/smoke.sh --report
 
 Then follow the next section, which is about exactly this. The line stops on its own
 once the suite passes again.
+
+## A skill is missing, or fails the moment it runs
+
+**Check.** The skills come from the plugin, the libraries they source come from `install.sh`,
+and neither half works alone. Run `claude plugin list` and look for `session-kit@session-kit`,
+then check that `~/.claude/session-kit/core/sessions.sh` exists.
+
+**Fix.** Whichever half is missing:
+
+```bash
+claude plugin marketplace add sabilmakbar/claude-session-kit
+claude plugin install session-kit@session-kit    # skills
+~/claude-session-kit/install.sh                  # hooks and libraries
+```
+
+A skill that appears in the list and then fails on its first command is the second half
+missing: each one sources a library under `~/.claude/session-kit/`, which only the installer
+puts there. Plugins load at session start, so start a new session after installing.
+
+**If you see each skill twice,** once bare and once as `session-kit:`, an older version of this
+kit left a copy in `~/.claude/skills`. Re-run `install.sh`: it retires copies it recognises as
+its own, and names any it will not touch.
 
 ## The installer refuses because of `settings.json`
 

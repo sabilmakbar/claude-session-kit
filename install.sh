@@ -411,45 +411,44 @@ for h in export import split claim release; do
     run chmod +x "$DEST_LIB/handoff/$h.sh"
 done
 
-# --- skill ------------------------------------------------------------------
+# --- skills -----------------------------------------------------------------
 #
-# The checked-in SKILL.md already names its libraries by absolute path, so this is a
-# plain copy. It used to be a sed that rewrote relative paths at install time, which
-# made the repo file and the installed file differ. That blocked shipping the skills
-# as a Claude Code plugin: a plugin is cloned verbatim with no shell step, so the
-# relative form would have resolved against whatever project the agent was in and
-# either errored or sourced a same-named file from an unrelated repo.
+# Skills ship as a Claude Code plugin now, invoked /session-kit:<skill>, so this
+# installer no longer writes ~/.claude/skills. A bare copy left there by an older
+# version of this script registers under its un-namespaced name and shadows the
+# plugin's, so each skill would exist twice.
+#
+# The checked-in SKILL.md names its libraries by absolute path rather than having them
+# rewritten at copy time, which is what makes shipping them verbatim possible: a plugin
+# is cloned with no shell step, so whatever the repo file says is what runs.
 #
 # The paths use $HOME rather than an expanded prefix, so one spelling serves both
-# install paths. Consequence worth knowing: a CLAUDE_SESSION_KIT_PREFIX install now
-# gets skills pointing at ~/.claude/session-kit regardless of the prefix. That
-# variable exists for the test harness, which never sources a skill.
+# install paths. Consequence worth knowing: a CLAUDE_SESSION_KIT_PREFIX install gets
+# skills pointing at ~/.claude/session-kit regardless of the prefix. That variable
+# exists for the test harness, which never sources a skill.
 
 for pair in "rename-session|$DEST_SKILL" "session-note|$DEST_SKILL_NOTE" "handoff|$DEST_SKILL_HANDOFF"; do
     name="${pair%%|*}"; dest="${pair##*|}"
-    echo "installing skill to $dest"
-    run mkdir -p "$dest"
-    if [ "$DRY" -eq 1 ]; then
-        printf '  would: write %s/SKILL.md\n' "$dest"
-        continue
-    fi
-    # Never clobber a skill this kit did not write. Ours always name a library under
-    # .../session-kit/, which is now true in the checked-in file itself rather than
-    # produced by a rewrite; a pre-existing SKILL.md without that marker belongs to
-    # the user or another tool.
-    if [ -f "$dest/SKILL.md" ] && ! grep -q 'session-kit' "$dest/SKILL.md"; then
-        echo "install.sh: $dest/SKILL.md exists and was not written by this kit — refusing to overwrite" >&2
-        echo "  move it aside (or delete it) and re-run" >&2
-        exit 1
-    fi
-    run cp "$ROOT/skills/$name/SKILL.md" "$dest/SKILL.md"
 
-    # A relative source here installs a skill that silently cannot find its libraries.
-    # Kept after deleting the rewrite, because the failure it catches did not go away:
-    # it just moved from "the sed missed a line" to "someone added a relative line".
-    if grep -qE '^\. (core|naming|notes)/|^handoff/' "$dest/SKILL.md"; then
+    # A relative source path ships a skill that silently cannot find its libraries.
+    # Checked against the repo copy now rather than an installed one, because nothing is
+    # installed here any more. The failure did not go away, it moved from "the rewrite
+    # missed a line" to "someone added a relative line".
+    if grep -qE '^\. (core|naming|notes)/|^handoff/' "$ROOT/skills/$name/SKILL.md"; then
         echo "install.sh: $name has a relative source path; it must be absolute" >&2
         exit 1
+    fi
+
+    [ -f "$dest/SKILL.md" ] || continue
+    # Ours always name a library under .../session-kit/. A copy without that marker
+    # belongs to the user or another tool: report it and leave it. Losing someone else's
+    # file is worse than the shadowing, so say what the shadowing costs instead.
+    if grep -q 'session-kit' "$dest/SKILL.md"; then
+        run rm -rf "$dest"
+        echo "retired the bare copy at $dest — the plugin supersedes it as /session-kit:$name"
+    else
+        echo "install.sh: $dest/SKILL.md was not written by this kit — left alone" >&2
+        echo "  while it is there it shadows the plugin's /session-kit:$name" >&2
     fi
 done
 
@@ -495,7 +494,10 @@ echo "wiring hooks"
 hooks_wire
 
 echo
-echo "done. /rename-session, /session-note and /handoff are available in new sessions."
+echo "done. hooks and libraries are in place."
+echo "  the skills come from the plugin: claude plugin marketplace add sabilmakbar/claude-session-kit"
+echo "  then: claude plugin install session-kit@session-kit"
+echo "  they appear as /session-kit:rename-session, /session-kit:session-note, /session-kit:handoff"
 echo "timing knobs (drift cadence, pickup window) live in $DEST_LIB/config —"
 echo "  uncomment a line to change one; upgrades never overwrite your edits."
 echo "the libraries are usable directly too:"

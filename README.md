@@ -32,9 +32,9 @@ Three skills to use inside any session:
 
 | Skill | What it does |
 |---|---|
-| `/rename-session` | Writes a proper title for the current session. Shows up in the tab and the session picker. |
-| `/session-note` | Saves a short "decided / done / next" note. It greets you when you reopen the session. |
-| `/handoff` | Moves sessions to another machine, or splits an overgrown session into a fresh one. |
+| `/session-kit:rename-session` | Writes a proper title for the current session. Shows up in the tab and the session picker. |
+| `/session-kit:session-note` | Saves a short "decided / done / next" note. It greets you when you reopen the session. |
+| `/session-kit:handoff` | Moves sessions to another machine, or splits an overgrown session into a fresh one. |
 
 And four optional background hooks:
 
@@ -65,7 +65,7 @@ b93f5d21-...   live   documents-41
 
 Three tab-separated columns: the session id, whether a process is still running for it, and
 the best name the kit can find. `documents-41` is what an unnamed session looks like, and is
-what `/rename-session` fixes. `cs_find "billing importer"` finds one by name fragment or id
+what `/session-kit:rename-session` fixes. `cs_find "billing importer"` finds one by name fragment or id
 prefix, and if neither matches, by what the session actually contains, so a session whose
 title describes the whole arc of the work is still findable by a specific thing you did in
 it. Both only read; nothing here writes.
@@ -98,6 +98,23 @@ git clone https://github.com/sabilmakbar/claude-session-kit.git ~/claude-session
 ~/claude-session-kit/install.sh     # --dry-run to preview, --uninstall to remove
 ```
 
+Then add the skills, which ship as a Claude Code plugin:
+
+```bash
+claude plugin marketplace add sabilmakbar/claude-session-kit
+claude plugin install session-kit@session-kit
+```
+
+**Both steps are needed, and neither works alone.** The plugin gives you the skills, namespaced
+`/session-kit:rename-session` and so on, so they cannot collide with a skill of the same name from
+somewhere else. `install.sh` gives you the hooks and the libraries those skills source: install
+only the plugin and the skills appear but fail on first use, because the library they source is
+not there yet. Order does not matter.
+
+If an older version of this kit installed the skills into `~/.claude/skills`, a re-run of
+`install.sh` retires those copies, because a bare copy shadows the namespaced one. It only removes
+a copy it recognises as its own; anything written by another tool is reported and left alone.
+
 After the suite passes, the installer checks that the copy it just installed loads. Re-running
 it is safe.
 
@@ -110,7 +127,7 @@ To confirm it works, run the same listing against the installed copy:
 You should get the three columns shown above. If nothing prints, or the name column comes
 back empty, the usual cause is a missing `jq` (see
 [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)). The three skills are available in any new
-session; `/rename-session` is the quickest one to try.
+session; `/session-kit:rename-session` is the quickest one to try.
 
 The hooks start working in your next session. Wiring them is the **last** thing the installer
 does, after everything else is installed and checked, so a run that breaks earlier never
@@ -132,10 +149,17 @@ run `./install.sh --uninstall`.
 
 ## Upgrading
 
-Re-run the installer. That is the whole upgrade path:
+Two halves, matching the two halves of the install. Re-run the installer for the hooks
+and the libraries:
 
 ```bash
 git -C ~/claude-session-kit pull && ~/claude-session-kit/install.sh
+```
+
+Then update the plugin for the skills:
+
+```
+/plugin update session-kit@session-kit
 ```
 
 It runs the test suite first and refuses to install if anything fails, so a tree the tests
@@ -226,7 +250,8 @@ line. The newest title wins, cleanly, whichever tool wrote it.
 No. The installer wires all four, but each works alone, so delete the lines you do not
 want from `settings.json`. Re-running the installer puts them back, so use
 `./install.sh --uninstall` if you want them gone for good. The skills work with no hooks
-at all; you just lose the automatic reminders.
+at all; you just lose the automatic reminders. They do still need `install.sh`, for the
+libraries they source.
 
 **Does anything leave my machine?**
 No. There is no network code. Even the failure report is written locally and
@@ -243,8 +268,10 @@ warns you until it is looked at.
 ./install.sh --uninstall
 ```
 
-Removes the installed libraries, the three skills, and the knobs config (it
-configures nothing once the kit is gone). It leaves your notes
+Removes the installed libraries and the knobs config (it configures nothing once
+the kit is gone), along with any bare skill copy an older version of the kit left
+in `~/.claude/skills`. The skills themselves come from the plugin, so remove that
+separately with `claude plugin uninstall session-kit@session-kit`. It leaves your notes
 (`~/.claude/session-notes/`), your handoff folders (`~/.claude/session-handoffs/`),
 and every transcript exactly where they are. The kit never owned those. It also
 takes its four hooks back out of `settings.json`, backing the file up first, so
