@@ -12,7 +12,7 @@ is involved.
 ## 1. Read the arc
 
 ```bash
-. core/sessions.sh
+. "$HOME/.claude/session-kit/core/sessions.sh"
 tr=$(cs_transcript_path "$CLAUDE_CODE_SESSION_ID")
 cs_resolve_name "$CLAUDE_CODE_SESSION_ID"      # the name it has now
 ```
@@ -68,7 +68,7 @@ Then:
 Apply it directly. No paste, no follow-up step:
 
 ```bash
-. naming/rename.sh
+. "$HOME/.claude/session-kit/naming/rename.sh"
 rename_apply "<title>"
 ```
 
@@ -95,7 +95,7 @@ not do that yet and why — it is waiting on handoff import, not an oversight.
 Restoring a previous name is another append, never an edit:
 
 ```bash
-. naming/rename.sh
+. "$HOME/.claude/session-kit/naming/rename.sh"
 rename_current_title            # what it is now — capture this BEFORE renaming
 rename_apply "<old title>"      # append the old value back
 ```

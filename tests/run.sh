@@ -1666,9 +1666,20 @@ kvf="$IPREFIX/session-kit/.kit-version"
     || bad "install records the kit version" "non-empty .kit-version" "missing or empty"
 [ "$(tr -d '[:space:]' < "$kvf" 2>/dev/null)" != "" ] \
     && ok "…and it is not blank" || bad "…and it is not blank" "a value" "whitespace only"
-# A missed path rewrite installs a skill that silently cannot find its libraries.
-is "skills have no un-rewritten relative sources" "" \
+# A relative source installs a skill that silently cannot find its libraries.
+is "skills have no relative sources" "" \
    "$(grep -lE '^\. (core|naming|notes)/|^handoff/' "$IPREFIX"/skills/*/SKILL.md 2>/dev/null)"
+
+# The installed skill must be BYTE-IDENTICAL to the checked-in one. install.sh used to
+# sed relative paths into absolute ones at copy time, so the two differed by design, and
+# that is exactly what blocked shipping the skills as a Claude Code plugin: a plugin is
+# cloned verbatim with no shell step, so whatever the repo file says is what runs.
+# Asserting equality here is what stops a rewrite creeping back and breaking that again.
+skdiff=""
+for sk in rename-session session-note handoff; do
+    cmp -s "$ROOT/skills/$sk/SKILL.md" "$IPREFIX/skills/$sk/SKILL.md" || skdiff="$skdiff $sk"
+done
+is "installed skills are byte-identical to the repo" "" "$skdiff"
 
 # --- the config file, seeded once ---
 [ -f "$IPREFIX/session-kit/config" ] && ok "a fresh install seeds the config" \
