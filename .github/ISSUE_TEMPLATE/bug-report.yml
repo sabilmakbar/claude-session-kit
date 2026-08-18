@@ -1,0 +1,75 @@
+name: Bug report
+description: Something the kit does wrong on your machine
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, check [docs/TROUBLESHOOTING.md](https://github.com/sabilmakbar/claude-session-kit/blob/main/docs/TROUBLESHOOTING.md).
+        It is organised by symptom, so look for what you are seeing rather than for a cause.
+
+  - type: textarea
+    id: report
+    attributes:
+      label: Output of `bash tests/smoke.sh --report`
+      description: >
+        Run it from your checkout and paste the whole thing. Use `--report`, not the plain run:
+        the report is built to be published, while the terminal output deliberately is not. It
+        carries versions, check names, which Claude Code releases the kit has passed against, and
+        the first eight characters of a session id. It never carries a session title or a path,
+        and those are the two things that name your work.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, and what the kit did instead of what you wanted.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      description: Best guess is fine. Pick "not sure" rather than guessing wrong.
+      options:
+        - not sure
+        - install or uninstall
+        - wiring hooks into settings.json
+        - naming or renaming a session
+        - the session note handed back on reopen
+        - the wrong-session or drift check
+        - handoff between machines
+        - splitting a session on this machine
+        - a skill
+        - something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce it
+      description: >
+        If you cannot reproduce it, say so and describe what you were doing when it happened.
+        An unreproducible report is still worth having.
+
+  - type: checkboxes
+    id: no-titles
+    attributes:
+      label: Before you submit
+      options:
+        - label: >
+            I have not pasted a session title, a transcript, or a project path. The `--report`
+            output is safe to share, but anything I typed by hand above may not be.
+          required: true
