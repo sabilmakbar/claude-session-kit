@@ -149,10 +149,17 @@ run `./install.sh --uninstall`.
 
 ## Upgrading
 
-Re-run the installer. That is the whole upgrade path:
+Two halves, matching the two halves of the install. Re-run the installer for the hooks
+and the libraries:
 
 ```bash
 git -C ~/claude-session-kit pull && ~/claude-session-kit/install.sh
+```
+
+Then update the plugin for the skills:
+
+```
+/plugin update session-kit@session-kit
 ```
 
 It runs the test suite first and refuses to install if anything fails, so a tree the tests
@@ -243,7 +250,8 @@ line. The newest title wins, cleanly, whichever tool wrote it.
 No. The installer wires all four, but each works alone, so delete the lines you do not
 want from `settings.json`. Re-running the installer puts them back, so use
 `./install.sh --uninstall` if you want them gone for good. The skills work with no hooks
-at all; you just lose the automatic reminders.
+at all; you just lose the automatic reminders. They do still need `install.sh`, for the
+libraries they source.
 
 **Does anything leave my machine?**
 No. There is no network code. Even the failure report is written locally and
@@ -260,8 +268,10 @@ warns you until it is looked at.
 ./install.sh --uninstall
 ```
 
-Removes the installed libraries, the three skills, and the knobs config (it
-configures nothing once the kit is gone). It leaves your notes
+Removes the installed libraries and the knobs config (it configures nothing once
+the kit is gone), along with any bare skill copy an older version of the kit left
+in `~/.claude/skills`. The skills themselves come from the plugin, so remove that
+separately with `claude plugin uninstall session-kit@session-kit`. It leaves your notes
 (`~/.claude/session-notes/`), your handoff folders (`~/.claude/session-handoffs/`),
 and every transcript exactly where they are. The kit never owned those. It also
 takes its four hooks back out of `settings.json`, backing the file up first, so

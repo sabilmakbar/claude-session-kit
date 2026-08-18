@@ -150,7 +150,7 @@ flowchart TD
     P1 -- no --> R1["refuse; name the file<br/>nothing deployed, file untouched"]
     P1 -- yes --> P2{"`hooks`, and each event<br/>WE wire, the right shape?"}
     P2 -- no --> R2["refuse; name the key<br/>nothing deployed, file untouched"]
-    P2 -- yes --> D["deploy tree, skills, config"]
+    P2 -- yes --> D["deploy tree and config<br/>(skills come from the plugin)"]
     D --> M["merge on a snapshot,<br/>append only"]
     M --> V{"result valid JSON,<br/>and no fewer hooks?"}
     V -- no --> R3["discard the result;<br/>live file left alone"]
