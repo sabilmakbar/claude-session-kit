@@ -2,18 +2,19 @@
 # hooks/version-check.sh — SessionStart hook. Re-verifies the kit after Claude Code
 # updates, so nobody has to remember to.
 #
-# Wire it up with:
-#   "$HOME/.claude/session-kit/hooks/version-check.sh" 2>/dev/null || true
+# install.sh wires it; settings.snippet.json holds the exact command and is the single
+# source of truth for it. Not repeated here: a second copy drifts, and claude-setup
+# currently dedups against that string byte for byte.
 #
 # Cost in the normal case is one directory scan and one file read, then it exits.
 # The expensive path only happens when the version actually moved, which is roughly
 # monthly, and even then the work is backgrounded so session start never waits.
 #
-# It reports nothing, on purpose. On success smoke.sh records the version and the
-# in-session warning stops. On failure it records nothing, so the warning keeps
-# appearing every time you use the kit. The missing write is the report — a hook
-# that printed its own failures would either be ignored or would spam a session
-# the user is trying to start.
+# It reports nothing, on purpose. On success smoke.sh records the version. On failure
+# it records nothing and leaves its report behind, which is what cs_notice_degraded
+# reads to tell the user once a day until the suite passes again. A hook that printed
+# its own failures would either be ignored or would spam a session the user is
+# trying to start.
 #
 # Everything here is /usr/bin: bash, find, jq. Hooks run with a minimal PATH, which
 # is why hooks depending on node fail with "command not found" while this does not.
