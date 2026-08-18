@@ -69,6 +69,10 @@ which is where 0.1.0 was weakest.
   doc that already explained it properly.
 - **A convention for which dates belong in a header and which stay in prose** ([#18]), settling
   a judgement call that had sat open for four days because it read as a style nit.
+- **Issue forms and a pull request template** ([#28]). The bug form asks for
+  `tests/smoke.sh --report` first, not the plain run: the report is built to be published and
+  the terminal output deliberately is not. The kit has said that since 0.1.0 without ever saying
+  where to send it. Nothing about the installed kit changes.
 - **One duplicated wiring string removed** ([#25]). `settings.snippet.json` owns that command,
   and a second copy in a comment is a drift risk rather than a convenience.
 
@@ -90,6 +94,7 @@ for the test harness, which never sources a skill.
 [#24]: https://github.com/sabilmakbar/claude-session-kit/pull/24
 [#25]: https://github.com/sabilmakbar/claude-session-kit/pull/25
 [#26]: https://github.com/sabilmakbar/claude-session-kit/pull/26
+[#28]: https://github.com/sabilmakbar/claude-session-kit/pull/28
 
 ## 0.1.0
 
