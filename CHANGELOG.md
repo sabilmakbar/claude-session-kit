@@ -18,7 +18,7 @@ that was tagged, and the tag is what you check out to go back to it. Versions mo
 from claude-memory-kit: the two share conventions, neither depends on the other, and a bump in one
 says nothing about the other.
 
-## Unreleased
+## 0.3.0
 
 ### Changed
 
@@ -28,10 +28,6 @@ says nothing about the other.
   re-run retires copies an older version left there, and reports rather than deletes anything it
   does not recognise as its own. Both install steps are now required: the plugin carries the
   skills, `install.sh` still carries the hooks and the libraries those skills source.
-
-## Unreleased
-
-Nothing yet.
 
 ## 0.2.0
 
