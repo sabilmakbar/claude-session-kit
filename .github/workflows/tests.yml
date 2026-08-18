@@ -57,9 +57,12 @@ jobs:
           ./install.sh
           ./install.sh                     # second run must be a no-op, not an error
           test -r "$CLAUDE_SESSION_KIT_PREFIX/session-kit/core/sessions.sh"
-          test -r "$CLAUDE_SESSION_KIT_PREFIX/skills/rename-session/SKILL.md"
-          test -r "$CLAUDE_SESSION_KIT_PREFIX/skills/session-note/SKILL.md"
-          test -r "$CLAUDE_SESSION_KIT_PREFIX/skills/handoff/SKILL.md"
+
+          # Skills come from the plugin now. A copy here would register under its bare,
+          # un-namespaced name and shadow the plugin's, so the installer must write none.
+          test ! -e "$CLAUDE_SESSION_KIT_PREFIX/skills/rename-session"
+          test ! -e "$CLAUDE_SESSION_KIT_PREFIX/skills/session-note"
+          test ! -e "$CLAUDE_SESSION_KIT_PREFIX/skills/handoff"
           test -x "$CLAUDE_SESSION_KIT_PREFIX/session-kit/hooks/session-note.sh"
           test -x "$CLAUDE_SESSION_KIT_PREFIX/session-kit/hooks/session-guard.sh"
           test -x "$CLAUDE_SESSION_KIT_PREFIX/session-kit/hooks/session-drift.sh"
@@ -71,26 +74,39 @@ jobs:
           test -r "$CLAUDE_SESSION_KIT_PREFIX/session-kit/tests/smoke.sh"
           bash "$CLAUDE_SESSION_KIT_PREFIX/session-kit/tests/smoke.sh"
 
-          # A missed rewrite installs a skill that silently cannot find its libraries.
+          # A relative source ships a skill that silently cannot find its libraries.
+          # Checked against the repo, which is the only copy there is: the plugin ships
+          # these files verbatim. Pointing this at an install prefix would make grep fail
+          # on missing files, and the leading ! would read that error as a pass.
           ! grep -qE '^\. (core|naming|notes)/|^handoff/' \
-            "$CLAUDE_SESSION_KIT_PREFIX/skills/rename-session/SKILL.md" \
-            "$CLAUDE_SESSION_KIT_PREFIX/skills/session-note/SKILL.md" \
-            "$CLAUDE_SESSION_KIT_PREFIX/skills/handoff/SKILL.md"
+            skills/rename-session/SKILL.md \
+            skills/session-note/SKILL.md \
+            skills/handoff/SKILL.md
+
+          # A bare copy an older version of the installer wrote carries the session-kit
+          # marker in its absolute library paths, so it is recognisable as ours and a
+          # re-run retires it.
+          mkdir -p "$CLAUDE_SESSION_KIT_PREFIX/skills/rename-session"
+          cp skills/rename-session/SKILL.md \
+             "$CLAUDE_SESSION_KIT_PREFIX/skills/rename-session/SKILL.md"
+          ./install.sh
+          test ! -e "$CLAUDE_SESSION_KIT_PREFIX/skills/rename-session"
 
           ./install.sh --uninstall
           test ! -d "$CLAUDE_SESSION_KIT_PREFIX/session-kit"
-          test ! -d "$CLAUDE_SESSION_KIT_PREFIX/skills/rename-session"
-          test ! -d "$CLAUDE_SESSION_KIT_PREFIX/skills/session-note"
 
-      # A skill dir the user already owned must never be clobbered — install refuses
-      # and the foreign content survives.
-      - name: Installer refuses to clobber a foreign skill
+      # A skill dir the user already owned must never be touched. It used to make the
+      # install refuse outright; now that nothing is written there, refusing would block
+      # an install over a file that is merely in the way, so the run warns and continues
+      # and the foreign content survives either way.
+      - name: Installer leaves a foreign skill alone
         run: |
           export CLAUDE_SESSION_KIT_PREFIX="$RUNNER_TEMP/claude-foreign"
           mkdir -p "$CLAUDE_SESSION_KIT_PREFIX/skills/session-note"
           echo "someone elses skill" > "$CLAUDE_SESSION_KIT_PREFIX/skills/session-note/SKILL.md"
-          ! ./install.sh
+          OUT=$(./install.sh 2>&1)
           grep -q "someone elses skill" "$CLAUDE_SESSION_KIT_PREFIX/skills/session-note/SKILL.md"
+          printf '%s' "$OUT" | grep -q "shadows the plugin"
 
       # Not a gate: it needs a real ~/.claude and a runner has none, so it skips here.
       # Running it proves the skip path stays healthy.
