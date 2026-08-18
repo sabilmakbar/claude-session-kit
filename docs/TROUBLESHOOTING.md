@@ -20,7 +20,7 @@ jq '.hooks | tostring | test("session-kit")' ~/.claude/settings.json
 **Fix.** Re-run `./install.sh`, then start a new session. Hooks are read at session start,
 so an already-open session will not pick them up.
 
-The three skills work with no hooks at all. If `/rename-session` works but you never get a
+The three skills work with no hooks at all. If `/session-kit:rename-session` works but you never get a
 note or a reminder, this is the reason.
 
 ## A session said "claude-session-kit: ..." out of nowhere

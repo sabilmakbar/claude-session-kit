@@ -108,7 +108,7 @@ Importing the same bundle twice is safe and does nothing.
 
 ```mermaid
 flowchart LR
-    W["agent writes the note<br/>at a milestone<br/>(/session-note)"] --> S["stored per session,<br/>outside the code tree;<br/>uninstall never touches it"]
+    W["agent writes the note<br/>at a milestone<br/>(/session-kit:session-note)"] --> S["stored per session,<br/>outside the code tree;<br/>uninstall never touches it"]
     S --> R["on reopen, first message:<br/>injected once, age-stamped"]
     R --> J{"agent: does the note<br/>still match reality?"}
     J -- yes --> U["use it as seed context"]
