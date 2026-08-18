@@ -22,6 +22,75 @@ says nothing about the other.
 
 Nothing yet.
 
+## 0.2.0
+
+Released on 2026-08-18.
+
+A hardening release. Nothing in the interface changed: the same three skills, the same four
+hooks, the same install command. What changed is how the kit behaves when something is wrong,
+which is where 0.1.0 was weakest.
+
+### Fixed
+
+- **The wrong-session check failed in both halves it was made of** ([#21]). Routing could not
+  reach a well-named session, because it matched only the resolved title while the rename skill
+  requires a title to name the arc of the work rather than the topic asked about. It now falls
+  back to the session's own directory and conversation when the title misses. Separately, the
+  check reached the agent once per opening and never again that sitting, which is not when
+  off-topic messages arrive; a one-line version now comes with every message. It still offers
+  three routes and never refuses, and that decision is now recorded rather than assumed.
+
+### Added
+
+- **The kit can name its own release** ([#19]). The failure report and smoke output carry the
+  installed version, so a pasted report says which build it came from instead of leaving the
+  reader to guess.
+- **A test that fails when the installer's file list falls behind the repo** ([#22]). The list
+  is maintained by hand in two places, so a forgotten file used to install silently incomplete.
+  The expectation is derived from the repo rather than restated, and the test also asserts what
+  must *not* ship.
+
+### Changed
+
+- **Skills name their libraries by absolute path in the repo itself** ([#26]). The installer
+  used to rewrite relative paths at copy time, so the checked-in file and the installed file
+  differed by design. They are now byte-identical, pinned by a test. This is what a future
+  plugin release needs, since a plugin is cloned verbatim with no install step to run.
+- **The handoff skill says where to draft a note** ([#17]), which stops working copies of
+  handoff notes accumulating in whatever directory the session happened to be in.
+
+### Documentation
+
+- **Every doc and inline comment reconciled against the code** ([#24]). Six real drifts, three
+  of them introduced by [#21] in the same week. The user-facing guide was still describing the
+  bug [#21] had just fixed.
+- **The install section says two things and means two** ([#23]). It promised two safety
+  properties then listed seven, in one sentence of 58 words, most of it duplicating a reference
+  doc that already explained it properly.
+- **A convention for which dates belong in a header and which stay in prose** ([#18]), settling
+  a judgement call that had sat open for four days because it read as a style nit.
+- **One duplicated wiring string removed** ([#25]). `settings.snippet.json` owns that command,
+  and a second copy in a comment is a drift risk rather than a convenience.
+
+### Compatibility
+
+No migration. Re-run `install.sh`; it is the upgrade path. Existing installs keep working
+unchanged, and the skill paths are rewritten in place by the re-install.
+
+One behaviour change worth knowing: an install to a custom `CLAUDE_SESSION_KIT_PREFIX` now
+writes skills that name `~/.claude/session-kit` regardless of the prefix. That variable exists
+for the test harness, which never sources a skill.
+
+[#17]: https://github.com/sabilmakbar/claude-session-kit/pull/17
+[#18]: https://github.com/sabilmakbar/claude-session-kit/pull/18
+[#19]: https://github.com/sabilmakbar/claude-session-kit/pull/19
+[#21]: https://github.com/sabilmakbar/claude-session-kit/pull/21
+[#22]: https://github.com/sabilmakbar/claude-session-kit/pull/22
+[#23]: https://github.com/sabilmakbar/claude-session-kit/pull/23
+[#24]: https://github.com/sabilmakbar/claude-session-kit/pull/24
+[#25]: https://github.com/sabilmakbar/claude-session-kit/pull/25
+[#26]: https://github.com/sabilmakbar/claude-session-kit/pull/26
+
 ## 0.1.0
 
 Released on 2026-08-12.
