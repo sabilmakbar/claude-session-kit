@@ -413,35 +413,42 @@ done
 
 # --- skill ------------------------------------------------------------------
 #
-# The checked-in SKILL.md sources core/ and naming/ by relative path so it works
-# from a checkout. Installed, cwd is whatever project the user is in, so rewrite
-# those to absolute paths at copy time.
+# The checked-in SKILL.md already names its libraries by absolute path, so this is a
+# plain copy. It used to be a sed that rewrote relative paths at install time, which
+# made the repo file and the installed file differ. That blocked shipping the skills
+# as a Claude Code plugin: a plugin is cloned verbatim with no shell step, so the
+# relative form would have resolved against whatever project the agent was in and
+# either errored or sourced a same-named file from an unrelated repo.
+#
+# The paths use $HOME rather than an expanded prefix, so one spelling serves both
+# install paths. Consequence worth knowing: a CLAUDE_SESSION_KIT_PREFIX install now
+# gets skills pointing at ~/.claude/session-kit regardless of the prefix. That
+# variable exists for the test harness, which never sources a skill.
 
 for pair in "rename-session|$DEST_SKILL" "session-note|$DEST_SKILL_NOTE" "handoff|$DEST_SKILL_HANDOFF"; do
     name="${pair%%|*}"; dest="${pair##*|}"
     echo "installing skill to $dest"
     run mkdir -p "$dest"
     if [ "$DRY" -eq 1 ]; then
-        printf '  would: rewrite source paths and write %s/SKILL.md\n' "$dest"
+        printf '  would: write %s/SKILL.md\n' "$dest"
         continue
     fi
-    # Never clobber a skill this kit did not write. Ours always source a library
-    # under .../session-kit/ (the rewrite below guarantees it); a pre-existing
-    # SKILL.md without that marker belongs to the user or another tool.
+    # Never clobber a skill this kit did not write. Ours always name a library under
+    # .../session-kit/, which is now true in the checked-in file itself rather than
+    # produced by a rewrite; a pre-existing SKILL.md without that marker belongs to
+    # the user or another tool.
     if [ -f "$dest/SKILL.md" ] && ! grep -q 'session-kit' "$dest/SKILL.md"; then
         echo "install.sh: $dest/SKILL.md exists and was not written by this kit — refusing to overwrite" >&2
         echo "  move it aside (or delete it) and re-run" >&2
         exit 1
     fi
-    sed -e "s|^\. core/sessions\.sh|. \"$DEST_LIB/core/sessions.sh\"|" \
-        -e "s|^\. naming/rename\.sh|. \"$DEST_LIB/naming/rename.sh\"|" \
-        -e "s|^\. notes/note\.sh|. \"$DEST_LIB/notes/note.sh\"|" \
-        -e "s|^handoff/|$DEST_LIB/handoff/|" \
-        "$ROOT/skills/$name/SKILL.md" >"$dest/SKILL.md"
+    run cp "$ROOT/skills/$name/SKILL.md" "$dest/SKILL.md"
 
-    # A missed rewrite installs a skill that silently cannot find its libraries.
+    # A relative source here installs a skill that silently cannot find its libraries.
+    # Kept after deleting the rewrite, because the failure it catches did not go away:
+    # it just moved from "the sed missed a line" to "someone added a relative line".
     if grep -qE '^\. (core|naming|notes)/|^handoff/' "$dest/SKILL.md"; then
-        echo "install.sh: some source paths were not rewritten in $name" >&2
+        echo "install.sh: $name has a relative source path; it must be absolute" >&2
         exit 1
     fi
 done

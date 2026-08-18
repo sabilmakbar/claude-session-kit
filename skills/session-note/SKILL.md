@@ -36,7 +36,7 @@ never ships (backlogs, wip lists) has its own rule and stays out of git either w
 ## How to write it
 
 ```bash
-. notes/note.sh
+. "$HOME/.claude/session-kit/notes/note.sh"
 note_write <<'EOF'
 ## Decided
 - ...

@@ -46,7 +46,7 @@ seven of them had piled up in one directory before this line said where.
 ## 2a. Cross-machine ending
 
 ```bash
-handoff/export.sh -n <note.md> "<session ref or id>" [more refs...] [-- <loose files>]
+"$HOME/.claude/session-kit/handoff/export.sh" -n <note.md> "<session ref or id>" [more refs...] [-- <loose files>]
 ```
 
 Ambiguous refs refuse with candidates — pick with the user, never guess. Tell the
@@ -57,7 +57,7 @@ touching anything and prints this note at the end.
 ## 2b. Split ending
 
 ```bash
-handoff/split.sh -n <note.md> -t "<short topic label>"
+"$HOME/.claude/session-kit/handoff/split.sh" -n <note.md> -t "<short topic label>"
 ```
 
 This writes the folder and puts a pending guard on the CURRENT session. Then tell
