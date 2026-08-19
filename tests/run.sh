@@ -2120,6 +2120,37 @@ printf '%s' "$OUT" | grep -q 'shadows the plugin' \
     || bad "…and the run says it shadows the plugin" "a shadowing warning" "$OUT"
 drop_home
 
+# --- the installer names the right plugin action for each state ---------------
+#
+# Four states need four different actions, so a check that cannot tell them apart would
+# send people to the wrong command. Each case is seeded and asserted, including the two
+# that look alike from the outside: not installed at all, and installed but behind.
+plug_case() {   # <label> <expected substring> [seed commands]
+    local lbl="$1" want="$2" seed="${3:-true}"
+    new_home; P="$FAKE/.claude"; mkdir -p "$P"
+    eval "$seed"
+    OUT=$(CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$P" bash "$ROOT/install.sh" 2>&1)
+    printf '%s' "$OUT" | grep -q "$want" \
+        && ok "installer, $lbl" || bad "installer, $lbl" "$want" "$(printf '%s' "$OUT" | tail -4)"
+    drop_home
+}
+WANT=$(jq -r .version "$ROOT/.claude-plugin/plugin.json")
+plug_case "no plugin and no marketplace: both commands" "claude plugin marketplace add"
+plug_case "marketplace known, plugin missing: one command left" "One command left" \
+    'printf "{\"extraKnownMarketplaces\":{\"session-kit\":{\"source\":{\"source\":\"github\",\"repo\":\"x/y\"}}}}" > "$P/settings.json"'
+plug_case "installed but behind: offers /plugin update" "/plugin update session-kit@session-kit" \
+    'mkdir -p "$P/plugins/cache/session-kit/session-kit/0.0.1"; printf "{\"enabledPlugins\":{\"session-kit@session-kit\":true}}" > "$P/settings.json"'
+plug_case "installed and current: nothing to do" "nothing to do" \
+    'mkdir -p "$P/plugins/cache/session-kit/session-kit/'"$WANT"'"; printf "{\"enabledPlugins\":{\"session-kit@session-kit\":true}}" > "$P/settings.json"'
+# The state read is read-only, so --dry-run must still report it. A preview that omits the
+# half you are missing is the least useful moment to omit it.
+new_home; P="$FAKE/.claude"; mkdir -p "$P"
+OUT=$(CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$P" bash "$ROOT/install.sh" --dry-run 2>&1)
+printf '%s' "$OUT" | grep -q "claude plugin install session-kit@session-kit" \
+    && ok "installer, --dry-run still reports the plugin state" \
+    || bad "installer, --dry-run reports plugin state" "the install command" "$(printf '%s' "$OUT" | tail -3)"
+drop_home
+
 # --- the plugin manifests ----------------------------------------------------
 PJ="$ROOT/.claude-plugin/plugin.json"; MJ="$ROOT/.claude-plugin/marketplace.json"
 for f in "$PJ" "$MJ"; do

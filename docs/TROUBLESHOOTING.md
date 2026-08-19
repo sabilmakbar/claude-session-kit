@@ -46,6 +46,11 @@ once the suite passes again.
 
 ## A skill is missing, or fails the moment it runs
 
+**Quickest check.** Re-run `install.sh`. It reads the plugin's installed version and says
+which of four cases you are in: not installed, marketplace added but plugin missing,
+installed and current, or installed behind this checkout with the update command to run.
+`--dry-run` reports the same without touching anything.
+
 **Check.** The skills come from the plugin, the libraries they source come from `install.sh`,
 and neither half works alone. Run `claude plugin list` and look for `session-kit@session-kit`,
 then check that `~/.claude/session-kit/core/sessions.sh` exists.
