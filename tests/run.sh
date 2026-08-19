@@ -2120,6 +2120,20 @@ printf '%s' "$OUT" | grep -q 'shadows the plugin' \
     || bad "…and the run says it shadows the plugin" "a shadowing warning" "$OUT"
 drop_home
 
+# --- a skill that needs the kit half must name install.sh -------------------
+#
+# Installing only the plugin is the one state install.sh cannot report, because it only
+# speaks while it runs. The skill is the only thing present, so it has to say what a
+# missing path means. Without this the failure is a bare "no such file or directory".
+for d in "$ROOT"/skills/*/; do
+    n=$(basename "$d")
+    if grep -q 'session-kit/' "$d/SKILL.md"; then
+        grep -q 'install\.sh' "$d/SKILL.md" \
+            && ok "$n names install.sh for a missing library" \
+            || bad "$n names install.sh" "a mention of install.sh" "none, yet it uses a kit path"
+    fi
+done
+
 # --- the installer names the right plugin action for each state ---------------
 #
 # Four states need four different actions, so a check that cannot tell them apart would

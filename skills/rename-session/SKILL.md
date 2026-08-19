@@ -17,6 +17,10 @@ tr=$(cs_transcript_path "$CLAUDE_CODE_SESSION_ID")
 cs_resolve_name "$CLAUDE_CODE_SESSION_ID"      # the name it has now
 ```
 
+> **If that path does not exist**, this kit's libraries are not installed. The plugin ships
+> this skill; `install.sh` ships what the skill runs. Say so plainly and name the fix:
+> `install.sh` from the kit checkout, then a new session. Do not work around it.
+
 For the current session you already have the conversation in context — use it, and
 read the transcript only to recover earlier parts that have been compacted away.
 
