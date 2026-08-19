@@ -494,9 +494,20 @@ echo "wiring hooks"
 hooks_wire
 
 echo
+# This installer is one half of a working install. Reporting whether the other half is
+# present turns a half-install from something the user meets when a skill fails on first
+# use into something this run names.
 echo "done. hooks and libraries are in place."
-echo "  the skills come from the plugin: claude plugin marketplace add sabilmakbar/claude-session-kit"
-echo "  then: claude plugin install session-kit@session-kit"
+if [ "$DRY" -eq 0 ] && [ -f "$SETTINGS" ] \
+   && jq -e '.enabledPlugins["session-kit@session-kit"] // false' "$SETTINGS" >/dev/null 2>&1; then
+  echo "  the session-kit plugin is installed, so the skills are there too"
+else
+  echo "  the skills are NOT installed yet — they come from the plugin:"
+  echo "      claude plugin marketplace add sabilmakbar/claude-session-kit"
+  echo "      claude plugin install session-kit@session-kit"
+  echo "  without it the skills are missing; installed without this script they fail on"
+  echo "  first use, because the libraries they source are not there."
+fi
 echo "  they appear as /session-kit:rename-session, /session-kit:session-note, /session-kit:handoff"
 echo "timing knobs (drift cadence, pickup window) live in $DEST_LIB/config —"
 echo "  uncomment a line to change one; upgrades never overwrite your edits."
