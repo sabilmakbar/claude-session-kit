@@ -2128,12 +2128,16 @@ drop_home
 H="$ROOT/plugin-hooks/kit-present.sh"
 [ -x "$H" ] && ok "the plugin ships an executable kit-presence hook" \
     || bad "plugin kit-presence hook is executable" "executable" "missing or not +x"
+# The hook resolves ${CLAUDE_SESSION_KIT_PREFIX:-$HOME/.claude}, so setting HOME alone does
+# not isolate it: an ambient prefix wins and the test reads whatever that points at. CI sets
+# that variable for its round-trip, which is how this passed locally and failed there.
 new_home; mkdir -p "$FAKE/.claude/session-kit/core"
 : >"$FAKE/.claude/session-kit/core/sessions.sh"
-is "kit present: the hook says nothing" "" "$(HOME="$FAKE" bash "$H" 2>&1)"
+is "kit present: the hook says nothing" "" \
+   "$(HOME="$FAKE" CLAUDE_SESSION_KIT_PREFIX="$FAKE/.claude" bash "$H" 2>&1)"
 drop_home
 new_home
-OUT=$(HOME="$FAKE" bash "$H" 2>&1)
+OUT=$(HOME="$FAKE" CLAUDE_SESSION_KIT_PREFIX="$FAKE/.claude" bash "$H" 2>&1)
 printf '%s' "$OUT" | jq -e . >/dev/null 2>&1 \
     && ok "kit absent: the hook emits valid JSON" || bad "kit absent: valid JSON" "an object" "$OUT"
 printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null | grep -q 'install\.sh' \
