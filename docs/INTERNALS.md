@@ -5,16 +5,16 @@
 > live in the `DESIGN-*.md` records, which cite these by number. For how the kit behaves,
 > read [FLOWS.md](FLOWS.md).
 
-    Observed against:   Claude Code 2.1.220, 2.1.221, 2.1.222 · 2.1.234 (O16–O22)
+    Observed against:   Claude Code 2.1.220, 2.1.221, 2.1.222 · 2.1.234 (O16–O22) · 2.1.237 (O23)
     Platform:           macOS, VS Code extension
-    Last re-verified:   2026-08-12 · 2026-08-19 (O16–O20) · 2026-08-20 (O21–O22)
+    Last re-verified:   2026-08-12 · 2026-08-19 (O16–O20) · 2026-08-20 (O21–O23)
     Needs to re-run:    jq, a live VS Code session, read access to the extension bundle
 
 Nothing here is promised by Claude Code. Every entry is an observation with a date, a
 version, the surface it was read from, and how it was checked, so it can be re-run rather
 than believed.
 
-**Four of the twenty-two replaced an earlier belief, and each did so within a day or two of
+**Four of the twenty-three replaced an earlier belief, and each did so within a day or two of
 being recorded**: O2, O11 and O13, marked `Supersedes`. Two further reversals landed on
 decisions rather than observations and are recorded in
 [DESIGN-naming.md](DESIGN-naming.md). That rate is what reverse-engineering undocumented
@@ -35,12 +35,12 @@ grep -hoE '2\.1\.[0-9]+' docs/INTERNALS.md | sort -u
 grep -rn '\bO8\b' docs/DESIGN-*.md
 ```
 
-Seventeen are automated. Five are manual: four because a headless run has no tab to observe or
+Eighteen are automated. Five are manual: four because a headless run has no tab to observe or
 the live behaviour is not readable in the bundle, and O18 because it takes a live session to see
 a plugin-declared hook fire. Nothing automated will ever cover those.
 
-Eleven of the twenty-two are cited by at least one decision. **O2, O9, O11, O15 and the plugin
-entries O16-O22 are cited by none**, which does not make them dead: each is either the evidence a neighbouring entry was
+Eleven of the twenty-three are cited by at least one decision. **O2, O9, O11, O15 and the plugin
+entries O16-O23 are cited by none**, which does not make them dead: each is either the evidence a neighbouring entry was
 derived from, or, in O15's case, a property the code relies on without any decision record
 naming it. Amending one changes what its neighbours rest on even though nothing cites it.
 Check both directions before editing, using the third command above.
@@ -431,6 +431,25 @@ auto-installed dependencies, not for orphans. And uninstall has a required order
 out before the marketplace, because `uninstall` resolves the plugin through the registry and
 cannot find it once the registry entry is gone. Reversing the order is not recoverable through
 the CLI.
+
+### O23. The VS Code extension installs plugins by command and URI, not by a slash command
+
+    First observed:     2026-08-20 · extension 2.1.237
+    Surface:            the extension manifest and bundle
+    How:                `claude-vscode.installPlugin` is one of the 23 declared commands, titled
+                        "Claude Code: Install Plugin" and gated on `claude-vscode.updateSupported`.
+                        The bundle registers a URI handler whose `/install-plugin` path reads
+                        `plugin` and `marketplace` query parameters and defaults the marketplace to
+                        `anthropics/claude-plugins-official`. Typing `/plugin` in a session here
+                        answers "isn't available in this environment", and that string is not in
+                        the extension bundle, so it comes from the CLI layer
+    Needs:              jq
+    Checkable:          automated
+
+So `/plugin` is not a safe instruction to publish: this host does not have it, and which hosts do
+was not established. The CLI form works wherever the binary does, which is why the docs lead with
+it. `/install-plugin` is a deep-link path, not a chat command, and the two are easy to conflate
+from a grep alone.
 
 ## Evidence summary
 
