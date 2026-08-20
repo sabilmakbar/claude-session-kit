@@ -163,8 +163,8 @@ flowchart TD
 ```
 
 Both shape gates run *before* anything is deployed, which is the whole point of them:
-a shape discovered mid-merge would mean reporting it after the tree, the skills and
-the config were already on disk.
+a shape discovered mid-merge would mean reporting it after the tree and the config were
+already on disk.
 
 The second gate is scoped to the event keys in `settings.snippet.json`, not to every
 event in your file. An event the kit does not wire is never read, so a wrong-shaped
