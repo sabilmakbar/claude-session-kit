@@ -291,7 +291,12 @@ if [ "$UNINSTALL" -eq 1 ]; then
     # Note DATA (~/.claude/session-notes) is deliberately left alone: it is user
     # content, not kit code, which is also why it lives outside $DEST_LIB.
     run rm -rf "$DEST_LIB" "$DEST_SKILL" "$DEST_SKILL_NOTE" "$DEST_SKILL_HANDOFF"
-    echo "removed $DEST_LIB and the three skills"
+    echo "removed $DEST_LIB and any bare skill copy an older version left behind"
+    echo "  the skills themselves come from the plugin. Remove it in this order:"
+    echo "      claude plugin uninstall session-kit@session-kit"
+    echo "      claude plugin marketplace remove session-kit"
+    echo "  reversed, the uninstall cannot resolve the plugin and fails. Neither command"
+    echo "  removes ~/.claude/plugins/cache/session-kit/ — delete that by hand if you want it gone."
     echo "(the knobs config went with it — it configures nothing once the kit is gone)"
     exit 0
 fi
@@ -494,9 +499,65 @@ echo "wiring hooks"
 hooks_wire
 
 echo
+# This installer is one half of a working install, so it has to say which half is missing
+# and which command fixes it. Four states are distinguishable and they need different
+# actions, so reporting a bare "installed / not installed" would send people to the wrong
+# one. Read-only, so it runs under --dry-run too: previewing an install is exactly when
+# knowing the plugin state is useful.
+PLUG_MKT=session-kit; PLUG_NAME=session-kit
+PLUG_WANT=$(jq -r .version "$ROOT/.claude-plugin/plugin.json" 2>/dev/null)
+PLUG_CACHE="${CLAUDE_SESSION_KIT_PREFIX:-$HOME/.claude}/plugins/cache/$PLUG_MKT/$PLUG_NAME"
+plugin_state() {
+    [ -f "$SETTINGS" ] || { printf 'absent'; return; }
+    if ! jq -e --arg k "$PLUG_NAME@$PLUG_MKT" '.enabledPlugins[$k] // false' "$SETTINGS" >/dev/null 2>&1; then
+        if jq -e --arg m "$PLUG_MKT" '.extraKnownMarketplaces[$m] // false' "$SETTINGS" >/dev/null 2>&1
+        then printf 'marketplace-only'; else printf 'absent'; fi
+        return
+    fi
+    local have
+    have=$(ls -d "$PLUG_CACHE"/*/ 2>/dev/null | while read -r d; do basename "$d"; done | sort -V | tail -1)
+    if [ -z "$have" ]; then printf 'absent'
+    elif [ "$have" = "$PLUG_WANT" ]; then printf 'current'
+    else printf 'stale:%s' "$have"; fi
+}
 echo "done. hooks and libraries are in place."
-echo "  the skills come from the plugin: claude plugin marketplace add sabilmakbar/claude-session-kit"
-echo "  then: claude plugin install session-kit@session-kit"
+PLUG_STATE=$(plugin_state)
+case "$PLUG_STATE" in
+  absent)
+    echo "  the skills are NOT installed — they come from the plugin:"
+    echo "      claude plugin marketplace add sabilmakbar/claude-session-kit"
+    echo "      claude plugin install $PLUG_NAME@$PLUG_MKT"
+    echo "  without it the skills are missing; installed without this script they fail on"
+    echo "  first use, because the libraries they source are not there." ;;
+  marketplace-only)
+    echo "  the marketplace is known but the plugin is not installed. One command left:"
+    echo "      claude plugin install $PLUG_NAME@$PLUG_MKT" ;;
+  current)
+    echo "  the plugin is installed at $PLUG_WANT, matching this checkout — nothing to do" ;;
+  stale:*)
+    echo "  the plugin is installed at ${PLUG_STATE#stale:} but this checkout is $PLUG_WANT:"
+    echo "      /plugin update $PLUG_NAME@$PLUG_MKT      (restart to apply)"
+    echo "  a version behind means the skills are the older copy, even though the hooks and"
+    echo "  libraries this run just deployed are current." ;;
+esac
+# Whether this checkout is itself behind, from refs already fetched — no network call, so
+# an offline install is unaffected. The plugin lives in its own clone under
+# plugins/marketplaces, independent of this one, so a stale checkout and a stale plugin are
+# two separate facts and each gets its own line.
+kit_behind() {
+    local up n
+    up=$(git -C "$ROOT" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null)
+    [ -n "$up" ] || up=$(git -C "$ROOT" rev-parse --verify --quiet origin/main >/dev/null 2>&1 && echo origin/main)
+    [ -n "$up" ] || return 1
+    n=$(git -C "$ROOT" rev-list --count "HEAD..$up" 2>/dev/null) || return 1
+    [ "${n:-0}" -gt 0 ] || return 1
+    printf '%s %s' "$n" "$up"
+}
+if BEHIND=$(kit_behind); then
+    echo "  this checkout is ${BEHIND%% *} commit(s) behind ${BEHIND##* } as of your last fetch:"
+    echo "      git -C \"$ROOT\" pull   then re-run this script"
+    echo "  the plugin is a separate clone, so update it as well once the checkout is current."
+fi
 echo "  they appear as /session-kit:rename-session, /session-kit:session-note, /session-kit:handoff"
 echo "timing knobs (drift cadence, pickup window) live in $DEST_LIB/config —"
 echo "  uncomment a line to change one; upgrades never overwrite your edits."

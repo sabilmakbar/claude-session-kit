@@ -49,6 +49,10 @@ note_write <<'EOF'
 EOF
 ```
 
+> **If that path does not exist**, this kit's libraries are not installed. The plugin ships
+> this skill; `install.sh` ships what the skill runs. Say so plainly and name the fix:
+> `install.sh` from the kit checkout, then a new session. Do not work around it.
+
 Quote the heredoc delimiter (`<<'EOF'`) so nothing in the note gets expanded by the
 shell. Writing **replaces** the previous note — that is correct; the transcript keeps
 every old version, so never append or accumulate.

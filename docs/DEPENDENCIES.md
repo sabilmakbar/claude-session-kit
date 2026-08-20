@@ -16,6 +16,17 @@ when it is missing; everything else degrades to a clear error at the point of us
   and `tests/smoke.sh` refuses with an error rather than reporting a clean run. Nothing
   needs re-installing; everything picks up again as soon as `jq` is back.
 
+## Required for the other half of the install
+
+- **the `claude` CLI**, to install the plugin that carries the skills. `install.sh` gives you
+  the hooks and the libraries; the skills come from `claude plugin marketplace add` and
+  `claude plugin install`, and neither half works alone. Nothing at runtime needs the CLI: it
+  is an install-time requirement only, and `install.sh` reports which half is missing rather
+  than assuming.
+
+  If the CLI is not on `PATH` it ships inside the VS Code extension, at
+  `~/.vscode/extensions/anthropic.claude-code-*/resources/native-binary/claude`.
+
 ## Used when you use the feature
 - **tar**, and **shasum** or **sha256sum** (one of the two, both stock on macOS and
   Linux). Only for cross-machine handoff bundles. Export and import refuse up front

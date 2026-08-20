@@ -5,16 +5,16 @@
 > live in the `DESIGN-*.md` records, which cite these by number. For how the kit behaves,
 > read [FLOWS.md](FLOWS.md).
 
-    Observed against:   Claude Code 2.1.220, 2.1.221, 2.1.222
+    Observed against:   Claude Code 2.1.220, 2.1.221, 2.1.222 · 2.1.234 (O16–O22)
     Platform:           macOS, VS Code extension
-    Last re-verified:   2026-08-12
+    Last re-verified:   2026-08-12 · 2026-08-19 (O16–O20) · 2026-08-20 (O21–O22)
     Needs to re-run:    jq, a live VS Code session, read access to the extension bundle
 
 Nothing here is promised by Claude Code. Every entry is an observation with a date, a
 version, the surface it was read from, and how it was checked, so it can be re-run rather
 than believed.
 
-**Three of the fifteen replaced an earlier belief, and each did so within a day or two of
+**Four of the twenty-two replaced an earlier belief, and each did so within a day or two of
 being recorded**: O2, O11 and O13, marked `Supersedes`. Two further reversals landed on
 decisions rather than observations and are recorded in
 [DESIGN-naming.md](DESIGN-naming.md). That rate is what reverse-engineering undocumented
@@ -35,11 +35,12 @@ grep -hoE '2\.1\.[0-9]+' docs/INTERNALS.md | sort -u
 grep -rn '\bO8\b' docs/DESIGN-*.md
 ```
 
-Eleven are automated. Four need a live VS Code session, because a headless run has no tab to
-observe, and nothing automated will ever cover those.
+Seventeen are automated. Five are manual: four because a headless run has no tab to observe or
+the live behaviour is not readable in the bundle, and O18 because it takes a live session to see
+a plugin-declared hook fire. Nothing automated will ever cover those.
 
-Eleven of the fifteen are cited by at least one decision. **O2, O9, O11 and O15 are cited by
-none**, which does not make them dead: each is either the evidence a neighbouring entry was
+Eleven of the twenty-two are cited by at least one decision. **O2, O9, O11, O15 and the plugin
+entries O16-O22 are cited by none**, which does not make them dead: each is either the evidence a neighbouring entry was
 derived from, or, in O15's case, a property the code relies on without any decision record
 naming it. Amending one changes what its neighbours rest on even though nothing cites it.
 Check both directions before editing, using the third command above.
@@ -307,6 +308,129 @@ then take the last of that type.
     Checkable:          automated
 
 Not an anomaly. Accessors must tolerate skew rather than assert a single version.
+
+## The plugin surface
+
+### O16. A marketplace is a registry entry; a remote source is cloned, a path is not
+
+    First observed:     2026-08-19 · 2.1.234
+    Surface:            ~/.claude/plugins/marketplaces/<name>/
+    How:                `git -C ~/.claude/plugins/marketplaces/session-kit remote get-url origin`
+                        returns this repo; the directory holds `.claude-plugin/marketplace.json`
+    Needs:              git
+    Checkable:          automated
+
+`plugin marketplace add` records the source in `extraKnownMarketplaces` and reads which plugins
+it offers. It is a registry pointing at sources, not a store and not an updater.
+
+**How it is stored depends on the source.** `add <owner>/<repo>` clones into
+`~/.claude/plugins/marketplaces/<name>/`, which is a second copy of the repo: `/plugin update`
+refreshes that clone and never touches your checkout, and `git pull` in your checkout never
+touches the plugin. Two stale states, unrelated. `add <path>` creates no clone at all and
+references the directory in place, so there the "second copy" reasoning does not apply and the
+marketplace tracks whatever that working tree currently holds, including an unmerged branch.
+An earlier version of this entry claimed the clone unconditionally; it was written from a
+GitHub-sourced install and only checked against one.
+
+### O17. The plugin cache is keyed by the version in plugin.json
+
+    First observed:     2026-08-18 · 2.1.234
+    Surface:            ~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/
+    How:                ponytail cached as `4.8.4` and dev-pipeline as `0.1.0`, both declaring a
+                        version; caveman cached as `0d95a81d35a9`, and its plugin.json has no
+                        version field
+    Needs:              nothing
+    Checkable:          automated
+
+Omit `version` and the cache is keyed by commit SHA instead, which makes "which version is
+installed" unanswerable and gives `/plugin update` no version change to react to.
+
+### O18. Nothing runs at plugin install; hooks are the only execution surface
+
+    First observed:     2026-08-18 · 2.1.234
+    Surface:            plugin install, and plugin-declared hooks
+    How:                installing a plugin clones and reads the manifest, with no shell step;
+                        a plugin that declares `hooks` has its commands run on session events,
+                        which is how caveman and ponytail activate
+    Needs:              nothing
+    Checkable:          needs a live session
+
+A plugin can execute arbitrary commands, but only on a hook event, never during install. So a
+plugin cannot run an installer for the half it does not ship. `plugin install --help` refers to
+"a plugin installed by running a marketplace-declared command", so some install-command path
+exists; the `$schema` URL in marketplace.json returns a 404 page, none of the five marketplaces
+installed here declare such a field, and its shape is unverified.
+
+### O19. Removing a marketplace disables its plugin and orphans the cache
+
+    First observed:     2026-08-19 · 2.1.234
+    Surface:            settings.json and the plugin cache
+    How:                in a sandbox HOME: after install, one marketplace and one enabled plugin;
+                        `plugin uninstall` left the marketplace (mkt=1 plugin=0); `plugin
+                        marketplace remove` left neither (mkt=0 plugin=0) with the cache directory
+                        still on disk
+    Needs:              jq
+    Checkable:          automated
+
+So "plugin installed without its marketplace" is not a reachable state, which is why the
+installer's state check treats `enabledPlugins` as authoritative and reads the marketplace only
+to tell "nothing installed" from "one command left". An orphaned cache directory is not evidence
+of an installed plugin.
+
+### O20. `plugin install` cannot pin a version or ref
+
+    First observed:     2026-08-18 · 2.1.234
+    Surface:            plugin install, plugin marketplace add
+    How:                `--help` on both: install takes `--config`, `--scope`, `--yes`; marketplace
+                        add takes `--scope`, `--sparse`. Neither accepts a ref, tag or version
+    Needs:              nothing
+    Checkable:          automated
+
+The marketplace clone tracks the repo's default branch, so a release tag cannot change what the
+plugin path delivers. `plugin tag` creates a `<name>--v<version>` tag and validates that
+plugin.json agrees with the marketplace entry, but nothing on the install side consumes that tag.
+
+### O21. `marketplace add` and `plugin install` are a lookup, not a chain
+
+    First observed:     2026-08-20 · 2.1.234
+    Surface:            plugin marketplace add, plugin install
+    How:                in a sandbox HOME, `marketplace add <path>` alone left
+                        `extraKnownMarketplaces` at 1 with `enabledPlugins` at 0 and no cache
+                        directory; `plugin install session-kit@session-kit` with no marketplace
+                        added failed with "not found in marketplace"; `plugin install <path>`
+                        failed with "not found in any configured marketplace"
+    Needs:              jq
+    Checkable:          automated
+
+Neither command runs the other. `add` writes the registry and installs nothing; `install` only
+resolves names inside registries already configured, and will not take a repo or path to
+bootstrap itself. `plugin@marketplace` is a lookup key, not a source. That is why both commands
+appear in every install instruction, and why the installer distinguishes "nothing installed" from
+"one command left".
+
+Refreshing has two rungs, and they are separate commands: `marketplace update [name]` re-fetches
+the registry clone, so a newly published plugin becomes visible, while `plugin update
+<plugin>@<marketplace>` moves an installed plugin to what that clone now offers. For a
+single-plugin marketplace the first rarely matters, because the plugin list never changes. The
+failure message for a missing plugin points at `marketplace update`, not at `add`.
+
+### O22. Nothing removes a plugin's cache, and removal order decides whether you can
+
+    First observed:     2026-08-20 · 2.1.234
+    Surface:            plugins/cache, plugin uninstall, marketplace remove, plugin prune
+    How:                in a sandbox HOME: after install, cache=1. `plugin uninstall` left
+                        cache=1. `plugin marketplace remove` left cache=1. `plugin prune`
+                        answered "Nothing to prune (no auto-installed plugins at user scope)".
+                        Removing the marketplace first made `plugin uninstall` fail with
+                        "Plugin not found", leaving the cache with no command able to remove it
+    Needs:              jq
+    Checkable:          automated
+
+Two consequences. Cache directories accumulate and are only ever cleaned by hand; `prune` is for
+auto-installed dependencies, not for orphans. And uninstall has a required order: take the plugin
+out before the marketplace, because `uninstall` resolves the plugin through the registry and
+cannot find it once the registry entry is gone. Reversing the order is not recoverable through
+the CLI.
 
 ## Evidence summary
 

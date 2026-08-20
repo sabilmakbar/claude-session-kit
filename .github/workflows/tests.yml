@@ -49,6 +49,12 @@ jobs:
       - name: Run tests under zsh
         run: zsh tests/run.sh
 
+      # Needs the real claude CLI, which a runner does not have, so it skips itself with
+      # exit 0. Wired in anyway: the day a runner image ships the CLI, this starts covering
+      # the platform assumptions in INTERNALS O16-O22 without anyone remembering to add it.
+      - name: Plugin integration (skips without the CLI)
+        run: bash tests/integration-plugin.sh
+
       # One prefix through the whole lifecycle: install, install again, then uninstall.
       # Separate prefixes per assertion only proved each step works from clean.
       - name: Installer round-trip

@@ -162,6 +162,11 @@ Then update the plugin for the skills:
 /plugin update session-kit@session-kit
 ```
 
+You do not have to remember which half is behind. The installer reads the plugin's
+installed version and says which of the four cases you are in: not installed at all,
+marketplace added but plugin missing, installed and matching this checkout, or installed
+at an older version with the update command to run. `--dry-run` reports it too.
+
 It runs the test suite first and refuses to install if anything fails, so a tree the tests
 reject never reaches `~/.claude/session-kit`. Only kit code is replaced: your notes, handoff
 folders, transcripts, and your edited `config` are left as they are. In `settings.json` it
@@ -271,7 +276,17 @@ warns you until it is looked at.
 Removes the installed libraries and the knobs config (it configures nothing once
 the kit is gone), along with any bare skill copy an older version of the kit left
 in `~/.claude/skills`. The skills themselves come from the plugin, so remove that
-separately with `claude plugin uninstall session-kit@session-kit`. It leaves your notes
+separately, and **order matters**:
+
+```bash
+claude plugin uninstall session-kit@session-kit    # first
+claude plugin marketplace remove session-kit       # only after
+```
+
+Reversed, the uninstall fails: it resolves the plugin through the marketplace and cannot find it
+once that entry is gone. Neither command removes the plugin's cache directory under
+`~/.claude/plugins/cache/session-kit/`, and `claude plugin prune` does not either, since it only
+handles auto-installed dependencies. Delete it by hand if you want the disk space back. It leaves your notes
 (`~/.claude/session-notes/`), your handoff folders (`~/.claude/session-handoffs/`),
 and every transcript exactly where they are. The kit never owned those. It also
 takes its four hooks back out of `settings.json`, backing the file up first, so

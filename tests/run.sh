@@ -2120,6 +2120,144 @@ printf '%s' "$OUT" | grep -q 'shadows the plugin' \
     || bad "…and the run says it shadows the plugin" "a shadowing warning" "$OUT"
 drop_home
 
+# --- the plugin's own SessionStart hook reports a missing kit ------------------
+#
+# The one state install.sh cannot report, so the plugin reports it. Both directions are
+# asserted: silent when the kit is there, and a valid object naming install.sh when it is
+# not. A hook that cannot stay quiet is as bad as one that cannot speak.
+H="$ROOT/plugin-hooks/kit-present.sh"
+[ -x "$H" ] && ok "the plugin ships an executable kit-presence hook" \
+    || bad "plugin kit-presence hook is executable" "executable" "missing or not +x"
+# The hook resolves ${CLAUDE_SESSION_KIT_PREFIX:-$HOME/.claude}, so setting HOME alone does
+# not isolate it: an ambient prefix wins and the test reads whatever that points at. CI sets
+# that variable for its round-trip, which is how this passed locally and failed there.
+new_home; mkdir -p "$FAKE/.claude/session-kit/core"
+: >"$FAKE/.claude/session-kit/core/sessions.sh"
+is "kit present: the hook says nothing" "" \
+   "$(HOME="$FAKE" CLAUDE_SESSION_KIT_PREFIX="$FAKE/.claude" bash "$H" 2>&1)"
+drop_home
+new_home
+OUT=$(HOME="$FAKE" CLAUDE_SESSION_KIT_PREFIX="$FAKE/.claude" bash "$H" 2>&1)
+printf '%s' "$OUT" | jq -e . >/dev/null 2>&1 \
+    && ok "kit absent: the hook emits valid JSON" || bad "kit absent: valid JSON" "an object" "$OUT"
+printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null | grep -q 'install\.sh' \
+    && ok "…and it names install.sh" || bad "hook names install.sh" "a mention" "$OUT"
+# It reports that kit files are missing, so it must not need one to say so, and must not
+# need jq either — the rule the health hook in the sibling kit already follows. Testing a
+# path with [ -r ] is the point, so only INVOCATION counts: comments and the existence check
+# are fine, sourcing a kit library or piping through jq is not.
+BODY=$(sed 's/#.*//' "$H")
+printf '%s' "$BODY" | grep -qwE 'jq|node' \
+    || printf '%s' "$BODY" | grep -qE '^[[:space:]]*\.[[:space:]]|source[[:space:]]' \
+    && bad "the hook invokes nothing it reports on" "no jq, node, or sourcing" "it invokes one" \
+    || ok "the hook invokes nothing it reports on"
+drop_home
+
+# --- a skill that needs the kit half must name install.sh -------------------
+#
+# Installing only the plugin is the one state install.sh cannot report, because it only
+# speaks while it runs. The skill is the only thing present, so it has to say what a
+# missing path means. Without this the failure is a bare "no such file or directory".
+for d in "$ROOT"/skills/*/; do
+    n=$(basename "$d")
+    if grep -q 'session-kit/' "$d/SKILL.md"; then
+        grep -q 'install\.sh' "$d/SKILL.md" \
+            && ok "$n names install.sh for a missing library" \
+            || bad "$n names install.sh" "a mention of install.sh" "none, yet it uses a kit path"
+    fi
+done
+
+# --- the installer names the right plugin action for each state ---------------
+#
+# Four states need four different actions, so a check that cannot tell them apart would
+# send people to the wrong command. Each case is seeded and asserted, including the two
+# that look alike from the outside: not installed at all, and installed but behind.
+plug_case() {   # <label> <expected substring> [seed commands]
+    local lbl="$1" want="$2" seed="${3:-true}"
+    new_home; P="$FAKE/.claude"; mkdir -p "$P"
+    eval "$seed"
+    OUT=$(CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$P" bash "$ROOT/install.sh" 2>&1)
+    printf '%s' "$OUT" | grep -q "$want" \
+        && ok "installer, $lbl" || bad "installer, $lbl" "$want" "$(printf '%s' "$OUT" | tail -4)"
+    drop_home
+}
+WANT=$(jq -r .version "$ROOT/.claude-plugin/plugin.json")
+plug_case "no plugin and no marketplace: both commands" "claude plugin marketplace add"
+plug_case "marketplace known, plugin missing: one command left" "One command left" \
+    'printf "{\"extraKnownMarketplaces\":{\"session-kit\":{\"source\":{\"source\":\"github\",\"repo\":\"x/y\"}}}}" > "$P/settings.json"'
+plug_case "installed but behind: offers /plugin update" "/plugin update session-kit@session-kit" \
+    'mkdir -p "$P/plugins/cache/session-kit/session-kit/0.0.1"; printf "{\"enabledPlugins\":{\"session-kit@session-kit\":true}}" > "$P/settings.json"'
+plug_case "installed and current: nothing to do" "nothing to do" \
+    'mkdir -p "$P/plugins/cache/session-kit/session-kit/'"$WANT"'"; printf "{\"enabledPlugins\":{\"session-kit@session-kit\":true}}" > "$P/settings.json"'
+# The state read is read-only, so --dry-run must still report it. A preview that omits the
+# half you are missing is the least useful moment to omit it.
+new_home; P="$FAKE/.claude"; mkdir -p "$P"
+OUT=$(CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$P" bash "$ROOT/install.sh" --dry-run 2>&1)
+printf '%s' "$OUT" | grep -q "claude plugin install session-kit@session-kit" \
+    && ok "installer, --dry-run still reports the plugin state" \
+    || bad "installer, --dry-run reports plugin state" "the install command" "$(printf '%s' "$OUT" | tail -3)"
+drop_home
+
+# --- integration: install.sh against a git checkout and a full uninstall ----------
+#
+# These drive the real installer end to end rather than a function. Everything here is
+# filesystem and git only, no `claude` CLI, so it runs on a CI runner. The plugin-side
+# behaviours that need the real CLI live in tests/integration-plugin.sh, which skips itself
+# when the binary is absent.
+
+# A checkout behind its tracking branch. Built by advancing a temp branch and pointing
+# origin/main at it, never by `reset HEAD~1`, because actions/checkout clones at depth 1 and
+# there is no parent to reset to.
+CB_C=$(mktemp -d)/c
+git clone -q "$ROOT" "$CB_C" 2>/dev/null
+git -C "$CB_C" checkout -q -B main 2>/dev/null
+git -C "$CB_C" checkout -q -b upstream-probe 2>/dev/null
+git -C "$CB_C" -c user.email=t@e -c user.name=t commit -q --allow-empty -m "upstream moved" 2>/dev/null
+git -C "$CB_C" update-ref refs/remotes/origin/main upstream-probe
+git -C "$CB_C" checkout -q main 2>/dev/null
+git -C "$CB_C" branch -q --set-upstream-to=origin/main main 2>/dev/null
+# The clone carries COMMITTED install.sh, so a working-tree change would not be under test.
+# Copy the one being tested over it; only its own logic is exercised here, and the gate is off.
+cp "$ROOT/install.sh" "$CB_C/install.sh"
+new_home; CBP="$FAKE/.claude"; mkdir -p "$CBP"
+OUT=$( cd "$CB_C" && CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$CBP" \
+        bash install.sh 2>&1 </dev/null )
+printf '%s' "$OUT" | grep -q 'commit(s) behind' \
+    && ok "integration: a behind checkout is reported" \
+    || bad "integration: behind checkout reported" "a behind line" "$(printf '%s' "$OUT" | tail -3)"
+printf '%s' "$OUT" | grep -q 'git -C' \
+    && ok "…naming git pull for the checkout" || bad "behind line names git pull" "git -C ... pull" "absent"
+drop_home
+# Control: the same clone, level with its upstream, must say nothing.
+git -C "$CB_C" update-ref refs/remotes/origin/main main
+cp "$ROOT/install.sh" "$CB_C/install.sh"
+new_home; CBP="$FAKE/.claude"; mkdir -p "$CBP"
+OUT=$( cd "$CB_C" && CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$CBP" \
+        bash install.sh 2>&1 </dev/null )
+is "integration: a current checkout says nothing about being behind" "" \
+   "$(printf '%s' "$OUT" | grep 'commit(s) behind')"
+drop_home
+rm -rf "$(dirname "$CB_C")"
+
+# Uninstall states the plugin order. Removing the marketplace before the plugin makes
+# `plugin uninstall` unable to resolve it, so listing the two commands in either order is
+# not good enough — the order itself is the instruction.
+new_home; UP="$FAKE/.claude"; mkdir -p "$UP"
+CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$UP" bash "$ROOT/install.sh" >/dev/null 2>&1
+OUT=$(CLAUDE_SESSION_KIT_PREFIX="$UP" bash "$ROOT/install.sh" --uninstall 2>&1)
+printf '%s' "$OUT" | grep -q 'claude plugin uninstall' \
+    && ok "integration: uninstall names the plugin command" || bad "uninstall names plugin cmd" "present" "absent"
+printf '%s' "$OUT" | awk '/plugin uninstall/{u=NR} /marketplace remove/{m=NR} END{exit !(u&&m&&u<m)}' \
+    && ok "…with uninstall before marketplace remove" \
+    || bad "uninstall order" "plugin uninstall first" "wrong order or one missing"
+# The installer must not delete the plugin cache: it does not own it, and a wrong-order
+# removal already leaves it unreachable. Deleting someone else's directory is worse.
+mkdir -p "$UP/plugins/cache/session-kit/session-kit/9.9.9"
+CLAUDE_SESSION_KIT_PREFIX="$UP" bash "$ROOT/install.sh" --uninstall >/dev/null 2>&1
+[ -d "$UP/plugins/cache/session-kit/session-kit/9.9.9" ] \
+    && ok "integration: uninstall leaves the plugin cache alone" || bad "cache preserved" "kept" "deleted"
+drop_home
+
 # --- the plugin manifests ----------------------------------------------------
 PJ="$ROOT/.claude-plugin/plugin.json"; MJ="$ROOT/.claude-plugin/marketplace.json"
 for f in "$PJ" "$MJ"; do

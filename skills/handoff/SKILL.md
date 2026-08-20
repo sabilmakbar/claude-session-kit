@@ -49,6 +49,10 @@ seven of them had piled up in one directory before this line said where.
 "$HOME/.claude/session-kit/handoff/export.sh" -n <note.md> "<session ref or id>" [more refs...] [-- <loose files>]
 ```
 
+> **If that path does not exist**, this kit's libraries are not installed. The plugin ships
+> this skill; `install.sh` ships what the skill runs. Say so plainly and name the fix:
+> `install.sh` from the kit checkout, then a new session. Do not work around it.
+
 Ambiguous refs refuse with candidates — pick with the user, never guess. Tell the
 user where the bundle is and that they move it themselves (scp, drive, anything).
 On the other machine: `handoff/import.sh <bundle>` — it verifies checksums before
