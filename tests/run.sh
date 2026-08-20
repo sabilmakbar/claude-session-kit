@@ -2198,6 +2198,17 @@ printf '%s' "$OUT" | grep -q "claude plugin install session-kit@session-kit" \
     || bad "installer, --dry-run reports plugin state" "the install command" "$(printf '%s' "$OUT" | tail -3)"
 drop_home
 
+# --- the documented update command must work in every host ------------------------
+#
+# `/plugin update` is not available in the VS Code extension, so an instruction that offers
+# only the slash form sends people to a command they cannot run. The CLI form works wherever
+# the binary does, so it has to be the one named first.
+grep -q 'claude plugin update' "$ROOT/install.sh" \
+    && ok "the installer names the CLI update command" \
+    || bad "installer names claude plugin update" "present" "absent"
+grep -q 'claude plugin update' "$ROOT/README.md" \
+    && ok "the README names the CLI update command" || bad "README names it" "present" "absent"
+
 # --- integration: install.sh against a git checkout and a full uninstall ----------
 #
 # These drive the real installer end to end rather than a function. Everything here is

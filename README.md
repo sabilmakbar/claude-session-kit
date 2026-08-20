@@ -158,9 +158,20 @@ git -C ~/claude-session-kit pull && ~/claude-session-kit/install.sh
 
 Then update the plugin for the skills:
 
+```bash
+claude plugin update session-kit@session-kit      # restart to apply
 ```
-/plugin update session-kit@session-kit
+
+`/plugin update session-kit@session-kit` does the same thing, but only in hosts that provide the
+slash command. It is **not available in the VS Code extension**, which is why the CLI form is
+given first. If `claude` is not on your `PATH` it ships inside the extension:
+
+```bash
+~/.vscode/extensions/anthropic.claude-code-*/resources/native-binary/claude plugin update session-kit@session-kit
 ```
+
+Use `~/.vscode-server/extensions/...` on a remote or WSL host. If your host has a plugins UI,
+that works too; the point is that the slash command alone is not a safe instruction.
 
 You do not have to remember which half is behind. The installer reads the plugin's
 installed version and says which of the four cases you are in: not installed at all,
