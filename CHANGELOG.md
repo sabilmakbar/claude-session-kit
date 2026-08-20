@@ -68,6 +68,15 @@ says nothing about the other.
   that carries the skills. It was listed only as a runtime dependency, or not at all.
 - `docs/FLOWS.md` no longer says the shape gates run before "the tree, the skills and the
   config" are on disk. The skills have not been part of that since they moved to the plugin.
+- The documented update command is `claude plugin update`, not `/plugin update`. The slash form
+  is not available in every host — the VS Code extension does not provide it — so an
+  instruction offering only that form named a command the reader could not run. The slash form
+  stays as a parenthetical, and the docs say where the binary lives when it is not on `PATH`.
+  Which hosts do provide the slash command was not established, and the docs say that rather
+  than implying otherwise. VS Code offers two other routes, both read from the extension
+  manifest: the command palette entry "Claude Code: Install Plugin", and a URI handler at
+  `vscode://anthropic.claude-code/install-plugin?plugin=&marketplace=`. Recorded in INTERNALS.
+
 ### Fixed
 
 - A skill now names the fix when the kit half is missing. Installing only the plugin left the
