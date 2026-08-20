@@ -291,7 +291,12 @@ if [ "$UNINSTALL" -eq 1 ]; then
     # Note DATA (~/.claude/session-notes) is deliberately left alone: it is user
     # content, not kit code, which is also why it lives outside $DEST_LIB.
     run rm -rf "$DEST_LIB" "$DEST_SKILL" "$DEST_SKILL_NOTE" "$DEST_SKILL_HANDOFF"
-    echo "removed $DEST_LIB and the three skills"
+    echo "removed $DEST_LIB and any bare skill copy an older version left behind"
+    echo "  the skills themselves come from the plugin. Remove it in this order:"
+    echo "      claude plugin uninstall session-kit@session-kit"
+    echo "      claude plugin marketplace remove session-kit"
+    echo "  reversed, the uninstall cannot resolve the plugin and fails. Neither command"
+    echo "  removes ~/.claude/plugins/cache/session-kit/ — delete that by hand if you want it gone."
     echo "(the knobs config went with it — it configures nothing once the kit is gone)"
     exit 0
 fi

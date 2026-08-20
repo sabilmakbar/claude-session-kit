@@ -5,16 +5,16 @@
 > live in the `DESIGN-*.md` records, which cite these by number. For how the kit behaves,
 > read [FLOWS.md](FLOWS.md).
 
-    Observed against:   Claude Code 2.1.220, 2.1.221, 2.1.222 · 2.1.234 (O16–O21)
+    Observed against:   Claude Code 2.1.220, 2.1.221, 2.1.222 · 2.1.234 (O16–O22)
     Platform:           macOS, VS Code extension
-    Last re-verified:   2026-08-12 · 2026-08-19 (O16–O20) · 2026-08-20 (O21)
+    Last re-verified:   2026-08-12 · 2026-08-19 (O16–O20) · 2026-08-20 (O21–O22)
     Needs to re-run:    jq, a live VS Code session, read access to the extension bundle
 
 Nothing here is promised by Claude Code. Every entry is an observation with a date, a
 version, the surface it was read from, and how it was checked, so it can be re-run rather
 than believed.
 
-**Three of the twenty-one replaced an earlier belief, and each did so within a day or two of
+**Four of the twenty-two replaced an earlier belief, and each did so within a day or two of
 being recorded**: O2, O11 and O13, marked `Supersedes`. Two further reversals landed on
 decisions rather than observations and are recorded in
 [DESIGN-naming.md](DESIGN-naming.md). That rate is what reverse-engineering undocumented
@@ -35,12 +35,12 @@ grep -hoE '2\.1\.[0-9]+' docs/INTERNALS.md | sort -u
 grep -rn '\bO8\b' docs/DESIGN-*.md
 ```
 
-Sixteen are automated. Five are manual: four because a headless run has no tab to observe or
+Seventeen are automated. Five are manual: four because a headless run has no tab to observe or
 the live behaviour is not readable in the bundle, and O18 because it takes a live session to see
 a plugin-declared hook fire. Nothing automated will ever cover those.
 
-Eleven of the twenty-one are cited by at least one decision. **O2, O9, O11, O15 and the plugin
-entries O16-O21 are cited by none**, which does not make them dead: each is either the evidence a neighbouring entry was
+Eleven of the twenty-two are cited by at least one decision. **O2, O9, O11, O15 and the plugin
+entries O16-O22 are cited by none**, which does not make them dead: each is either the evidence a neighbouring entry was
 derived from, or, in O15's case, a property the code relies on without any decision record
 naming it. Amending one changes what its neighbours rest on even though nothing cites it.
 Check both directions before editing, using the third command above.
@@ -311,7 +311,7 @@ Not an anomaly. Accessors must tolerate skew rather than assert a single version
 
 ## The plugin surface
 
-### O16. A marketplace is a git clone, independent of your working checkout
+### O16. A marketplace is a registry entry; a remote source is cloned, a path is not
 
     First observed:     2026-08-19 · 2.1.234
     Surface:            ~/.claude/plugins/marketplaces/<name>/
@@ -320,10 +320,17 @@ Not an anomaly. Accessors must tolerate skew rather than assert a single version
     Needs:              git
     Checkable:          automated
 
-`plugin marketplace add <owner>/<repo>` clones the repo and reads which plugins it offers from
-that clone. It is a registry pointing at git sources, not a store and not an updater. The clone
-is a second copy of the same repo, so `/plugin update` refreshes it and never touches your
-checkout, and `git pull` in your checkout never touches the plugin. Two stale states, unrelated.
+`plugin marketplace add` records the source in `extraKnownMarketplaces` and reads which plugins
+it offers. It is a registry pointing at sources, not a store and not an updater.
+
+**How it is stored depends on the source.** `add <owner>/<repo>` clones into
+`~/.claude/plugins/marketplaces/<name>/`, which is a second copy of the repo: `/plugin update`
+refreshes that clone and never touches your checkout, and `git pull` in your checkout never
+touches the plugin. Two stale states, unrelated. `add <path>` creates no clone at all and
+references the directory in place, so there the "second copy" reasoning does not apply and the
+marketplace tracks whatever that working tree currently holds, including an unmerged branch.
+An earlier version of this entry claimed the clone unconditionally; it was written from a
+GitHub-sourced install and only checked against one.
 
 ### O17. The plugin cache is keyed by the version in plugin.json
 
@@ -406,6 +413,24 @@ the registry clone, so a newly published plugin becomes visible, while `plugin u
 <plugin>@<marketplace>` moves an installed plugin to what that clone now offers. For a
 single-plugin marketplace the first rarely matters, because the plugin list never changes. The
 failure message for a missing plugin points at `marketplace update`, not at `add`.
+
+### O22. Nothing removes a plugin's cache, and removal order decides whether you can
+
+    First observed:     2026-08-20 · 2.1.234
+    Surface:            plugins/cache, plugin uninstall, marketplace remove, plugin prune
+    How:                in a sandbox HOME: after install, cache=1. `plugin uninstall` left
+                        cache=1. `plugin marketplace remove` left cache=1. `plugin prune`
+                        answered "Nothing to prune (no auto-installed plugins at user scope)".
+                        Removing the marketplace first made `plugin uninstall` fail with
+                        "Plugin not found", leaving the cache with no command able to remove it
+    Needs:              jq
+    Checkable:          automated
+
+Two consequences. Cache directories accumulate and are only ever cleaned by hand; `prune` is for
+auto-installed dependencies, not for orphans. And uninstall has a required order: take the plugin
+out before the marketplace, because `uninstall` resolves the plugin through the registry and
+cannot find it once the registry entry is gone. Reversing the order is not recoverable through
+the CLI.
 
 ## Evidence summary
 
