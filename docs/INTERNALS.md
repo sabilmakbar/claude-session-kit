@@ -5,16 +5,16 @@
 > live in the `DESIGN-*.md` records, which cite these by number. For how the kit behaves,
 > read [FLOWS.md](FLOWS.md).
 
-    Observed against:   Claude Code 2.1.220, 2.1.221, 2.1.222 · 2.1.234 (O16–O20)
+    Observed against:   Claude Code 2.1.220, 2.1.221, 2.1.222 · 2.1.234 (O16–O21)
     Platform:           macOS, VS Code extension
-    Last re-verified:   2026-08-12 · 2026-08-19 (O16–O20)
+    Last re-verified:   2026-08-12 · 2026-08-19 (O16–O20) · 2026-08-20 (O21)
     Needs to re-run:    jq, a live VS Code session, read access to the extension bundle
 
 Nothing here is promised by Claude Code. Every entry is an observation with a date, a
 version, the surface it was read from, and how it was checked, so it can be re-run rather
 than believed.
 
-**Three of the twenty replaced an earlier belief, and each did so within a day or two of
+**Three of the twenty-one replaced an earlier belief, and each did so within a day or two of
 being recorded**: O2, O11 and O13, marked `Supersedes`. Two further reversals landed on
 decisions rather than observations and are recorded in
 [DESIGN-naming.md](DESIGN-naming.md). That rate is what reverse-engineering undocumented
@@ -35,12 +35,12 @@ grep -hoE '2\.1\.[0-9]+' docs/INTERNALS.md | sort -u
 grep -rn '\bO8\b' docs/DESIGN-*.md
 ```
 
-Fifteen are automated. Five are manual: four because a headless run has no tab to observe or
+Sixteen are automated. Five are manual: four because a headless run has no tab to observe or
 the live behaviour is not readable in the bundle, and O18 because it takes a live session to see
 a plugin-declared hook fire. Nothing automated will ever cover those.
 
-Eleven of the twenty are cited by at least one decision. **O2, O9, O11, O15 and the plugin
-entries O16-O20 are cited by none**, which does not make them dead: each is either the evidence a neighbouring entry was
+Eleven of the twenty-one are cited by at least one decision. **O2, O9, O11, O15 and the plugin
+entries O16-O21 are cited by none**, which does not make them dead: each is either the evidence a neighbouring entry was
 derived from, or, in O15's case, a property the code relies on without any decision record
 naming it. Amending one changes what its neighbours rest on even though nothing cites it.
 Check both directions before editing, using the third command above.
@@ -382,6 +382,30 @@ of an installed plugin.
 The marketplace clone tracks the repo's default branch, so a release tag cannot change what the
 plugin path delivers. `plugin tag` creates a `<name>--v<version>` tag and validates that
 plugin.json agrees with the marketplace entry, but nothing on the install side consumes that tag.
+
+### O21. `marketplace add` and `plugin install` are a lookup, not a chain
+
+    First observed:     2026-08-20 · 2.1.234
+    Surface:            plugin marketplace add, plugin install
+    How:                in a sandbox HOME, `marketplace add <path>` alone left
+                        `extraKnownMarketplaces` at 1 with `enabledPlugins` at 0 and no cache
+                        directory; `plugin install session-kit@session-kit` with no marketplace
+                        added failed with "not found in marketplace"; `plugin install <path>`
+                        failed with "not found in any configured marketplace"
+    Needs:              jq
+    Checkable:          automated
+
+Neither command runs the other. `add` writes the registry and installs nothing; `install` only
+resolves names inside registries already configured, and will not take a repo or path to
+bootstrap itself. `plugin@marketplace` is a lookup key, not a source. That is why both commands
+appear in every install instruction, and why the installer distinguishes "nothing installed" from
+"one command left".
+
+Refreshing has two rungs, and they are separate commands: `marketplace update [name]` re-fetches
+the registry clone, so a newly published plugin becomes visible, while `plugin update
+<plugin>@<marketplace>` moves an installed plugin to what that clone now offers. For a
+single-plugin marketplace the first rarely matters, because the plugin list never changes. The
+failure message for a missing plugin points at `marketplace update`, not at `add`.
 
 ## Evidence summary
 
