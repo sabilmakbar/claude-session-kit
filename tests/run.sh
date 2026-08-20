@@ -2120,6 +2120,35 @@ printf '%s' "$OUT" | grep -q 'shadows the plugin' \
     || bad "…and the run says it shadows the plugin" "a shadowing warning" "$OUT"
 drop_home
 
+# --- the plugin's own SessionStart hook reports a missing kit ------------------
+#
+# The one state install.sh cannot report, so the plugin reports it. Both directions are
+# asserted: silent when the kit is there, and a valid object naming install.sh when it is
+# not. A hook that cannot stay quiet is as bad as one that cannot speak.
+H="$ROOT/plugin-hooks/kit-present.sh"
+[ -x "$H" ] && ok "the plugin ships an executable kit-presence hook" \
+    || bad "plugin kit-presence hook is executable" "executable" "missing or not +x"
+new_home; mkdir -p "$FAKE/.claude/session-kit/core"
+: >"$FAKE/.claude/session-kit/core/sessions.sh"
+is "kit present: the hook says nothing" "" "$(HOME="$FAKE" bash "$H" 2>&1)"
+drop_home
+new_home
+OUT=$(HOME="$FAKE" bash "$H" 2>&1)
+printf '%s' "$OUT" | jq -e . >/dev/null 2>&1 \
+    && ok "kit absent: the hook emits valid JSON" || bad "kit absent: valid JSON" "an object" "$OUT"
+printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null | grep -q 'install\.sh' \
+    && ok "…and it names install.sh" || bad "hook names install.sh" "a mention" "$OUT"
+# It reports that kit files are missing, so it must not need one to say so, and must not
+# need jq either — the rule the health hook in the sibling kit already follows. Testing a
+# path with [ -r ] is the point, so only INVOCATION counts: comments and the existence check
+# are fine, sourcing a kit library or piping through jq is not.
+BODY=$(sed 's/#.*//' "$H")
+printf '%s' "$BODY" | grep -qwE 'jq|node' \
+    || printf '%s' "$BODY" | grep -qE '^[[:space:]]*\.[[:space:]]|source[[:space:]]' \
+    && bad "the hook invokes nothing it reports on" "no jq, node, or sourcing" "it invokes one" \
+    || ok "the hook invokes nothing it reports on"
+drop_home
+
 # --- a skill that needs the kit half must name install.sh -------------------
 #
 # Installing only the plugin is the one state install.sh cannot report, because it only

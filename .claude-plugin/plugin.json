@@ -4,5 +4,18 @@
   "description": "Session skills for Claude Code: name a session from what it became, keep a resumable working note, and hand work off cleanly between sessions or machines. Hooks and libraries install separately via the kit's install.sh.",
   "author": {
     "name": "sabilmakbar"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/plugin-hooks/kit-present.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
   }
 }
