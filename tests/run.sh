@@ -2194,6 +2194,66 @@ printf '%s' "$OUT" | grep -q "claude plugin install session-kit@session-kit" \
     || bad "installer, --dry-run reports plugin state" "the install command" "$(printf '%s' "$OUT" | tail -3)"
 drop_home
 
+# --- integration: install.sh against a git checkout and a full uninstall ----------
+#
+# These drive the real installer end to end rather than a function. Everything here is
+# filesystem and git only, no `claude` CLI, so it runs on a CI runner. The plugin-side
+# behaviours that need the real CLI live in tests/integration-plugin.sh, which skips itself
+# when the binary is absent.
+
+# A checkout behind its tracking branch. Built by advancing a temp branch and pointing
+# origin/main at it, never by `reset HEAD~1`, because actions/checkout clones at depth 1 and
+# there is no parent to reset to.
+CB_C=$(mktemp -d)/c
+git clone -q "$ROOT" "$CB_C" 2>/dev/null
+git -C "$CB_C" checkout -q -B main 2>/dev/null
+git -C "$CB_C" checkout -q -b upstream-probe 2>/dev/null
+git -C "$CB_C" -c user.email=t@e -c user.name=t commit -q --allow-empty -m "upstream moved" 2>/dev/null
+git -C "$CB_C" update-ref refs/remotes/origin/main upstream-probe
+git -C "$CB_C" checkout -q main 2>/dev/null
+git -C "$CB_C" branch -q --set-upstream-to=origin/main main 2>/dev/null
+# The clone carries COMMITTED install.sh, so a working-tree change would not be under test.
+# Copy the one being tested over it; only its own logic is exercised here, and the gate is off.
+cp "$ROOT/install.sh" "$CB_C/install.sh"
+new_home; CBP="$FAKE/.claude"; mkdir -p "$CBP"
+OUT=$( cd "$CB_C" && CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$CBP" \
+        bash install.sh 2>&1 </dev/null )
+printf '%s' "$OUT" | grep -q 'commit(s) behind' \
+    && ok "integration: a behind checkout is reported" \
+    || bad "integration: behind checkout reported" "a behind line" "$(printf '%s' "$OUT" | tail -3)"
+printf '%s' "$OUT" | grep -q 'git -C' \
+    && ok "…naming git pull for the checkout" || bad "behind line names git pull" "git -C ... pull" "absent"
+drop_home
+# Control: the same clone, level with its upstream, must say nothing.
+git -C "$CB_C" update-ref refs/remotes/origin/main main
+cp "$ROOT/install.sh" "$CB_C/install.sh"
+new_home; CBP="$FAKE/.claude"; mkdir -p "$CBP"
+OUT=$( cd "$CB_C" && CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$CBP" \
+        bash install.sh 2>&1 </dev/null )
+is "integration: a current checkout says nothing about being behind" "" \
+   "$(printf '%s' "$OUT" | grep 'commit(s) behind')"
+drop_home
+rm -rf "$(dirname "$CB_C")"
+
+# Uninstall states the plugin order. Removing the marketplace before the plugin makes
+# `plugin uninstall` unable to resolve it, so listing the two commands in either order is
+# not good enough — the order itself is the instruction.
+new_home; UP="$FAKE/.claude"; mkdir -p "$UP"
+CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$UP" bash "$ROOT/install.sh" >/dev/null 2>&1
+OUT=$(CLAUDE_SESSION_KIT_PREFIX="$UP" bash "$ROOT/install.sh" --uninstall 2>&1)
+printf '%s' "$OUT" | grep -q 'claude plugin uninstall' \
+    && ok "integration: uninstall names the plugin command" || bad "uninstall names plugin cmd" "present" "absent"
+printf '%s' "$OUT" | awk '/plugin uninstall/{u=NR} /marketplace remove/{m=NR} END{exit !(u&&m&&u<m)}' \
+    && ok "…with uninstall before marketplace remove" \
+    || bad "uninstall order" "plugin uninstall first" "wrong order or one missing"
+# The installer must not delete the plugin cache: it does not own it, and a wrong-order
+# removal already leaves it unreachable. Deleting someone else's directory is worse.
+mkdir -p "$UP/plugins/cache/session-kit/session-kit/9.9.9"
+CLAUDE_SESSION_KIT_PREFIX="$UP" bash "$ROOT/install.sh" --uninstall >/dev/null 2>&1
+[ -d "$UP/plugins/cache/session-kit/session-kit/9.9.9" ] \
+    && ok "integration: uninstall leaves the plugin cache alone" || bad "cache preserved" "kept" "deleted"
+drop_home
+
 # --- the plugin manifests ----------------------------------------------------
 PJ="$ROOT/.claude-plugin/plugin.json"; MJ="$ROOT/.claude-plugin/marketplace.json"
 for f in "$PJ" "$MJ"; do
