@@ -837,6 +837,10 @@ cp "$ROOT"/guardrail/kit-drift.sh "$ROOT"/guardrail/post-merge \
    "$ROOT"/guardrail/post-checkout "$ROOT"/guardrail/post-rewrite "$DRC/guardrail/"
 drg add -A >/dev/null 2>&1; drg commit -q --no-verify -m "hooks under test" >/dev/null 2>&1
 drg config core.hooksPath guardrail
+# The starting point is recorded as a SHA, never as a branch name. CI clones at depth 1 with
+# a detached HEAD, so this fixture's clone may have no `main` at all, and every "go back to
+# main" here failed there while the local run stayed green.
+DRBASE=$(drg rev-parse HEAD)
 # stamp <rev> — record a deployed version, the way install.sh does
 stamp(){ drg describe --tags --always "$1" >"$DRH/session-kit/.kit-version"; }
 drift(){ ( cd "$DRC" && CLAUDE_SESSION_KIT_PREFIX="$DRH" bash guardrail/kit-drift.sh 2>&1 ); }
@@ -878,32 +882,31 @@ printf '%s' "$(drift)" | grep -q 'does not match' \
 stamp HEAD
 drg checkout -q -b drift-feature
 printf '\n' >>"$DRC/core/sessions.sh"; drg add -A; drg commit -q --no-verify -m featlib
-drg checkout -q main 2>/dev/null
+drg checkout -q "$DRBASE" 2>/dev/null
 OUT=$( cd "$DRC" && CLAUDE_SESSION_KIT_PREFIX="$DRH" git checkout -q drift-feature 2>&1 )
 printf '%s' "$OUT" | grep -q 'does not match this checkout' \
     && ok "post-checkout: a branch switch runs the check" \
     || bad "post-checkout fires" "a mismatch notice" "${OUT:-silence}"
 OUT=$( cd "$DRC" && CLAUDE_SESSION_KIT_PREFIX="$DRH" git checkout -q -- README.md 2>&1 )
 is "post-checkout: a file checkout does not (arg 3 is 0)" "" "$OUT"
-drg checkout -q main 2>/dev/null
+drg checkout -q "$DRBASE" 2>/dev/null
 
 # post-merge, driven by a real pull between two local clones. No network: the upstream is
 # another clone on disk, which is also why this runs on a CI runner.
 DRU="$DR/up"
 git clone -q "$DRC" "$DRU" 2>/dev/null
-git -C "$DRU" checkout -q main 2>/dev/null
 drg remote add up "$DRU" 2>/dev/null
 printf '\n' >>"$DRU/core/sessions.sh"
 git -C "$DRU" -c user.email=t@e -c user.name=t commit -q --no-verify -am uplib
 stamp HEAD
 OUT=$( cd "$DRC" && CLAUDE_SESSION_KIT_PREFIX="$DRH" \
-        git -c user.email=t@e -c user.name=t pull -q --no-rebase up main 2>&1 )
+        git -c user.email=t@e -c user.name=t pull -q --no-rebase up HEAD 2>&1 )
 printf '%s' "$OUT" | grep -q 'does not match this checkout' \
     && ok "post-merge: a pull that changes a deployed file runs the check" \
     || bad "post-merge fires" "a mismatch notice" "${OUT:-silence}"
 stamp HEAD
 OUT=$( cd "$DRC" && CLAUDE_SESSION_KIT_PREFIX="$DRH" \
-        git -c user.email=t@e -c user.name=t pull -q --no-rebase up main 2>&1 )
+        git -c user.email=t@e -c user.name=t pull -q --no-rebase up HEAD 2>&1 )
 is "post-merge: an up-to-date pull says nothing" "" "$OUT"
 
 # post-rewrite takes the rewrite kind as arg 1. Exercised directly rather than through a
