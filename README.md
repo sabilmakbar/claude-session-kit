@@ -182,6 +182,16 @@ installed version and says which of the four cases you are in: not installed at 
 marketplace added but plugin missing, installed and matching this checkout, or installed
 at an older version with the update command to run. `--dry-run` reports it too.
 
+You do not have to remember to re-run it either. A pull only updates the checkout, and the
+deployed tree at `~/.claude/session-kit` stays on whatever the last install put there, which
+used to go unnoticed until something behaved like the old version. From a development
+checkout the kit now says so at the moment the gap opens: `git pull`, a branch switch and
+`git pull --rebase` each check whether the files the installer deploys have changed since the
+deployed commit, and print the differing files and `bash install.sh` if they have. It compares
+content rather than version labels, so a pull that only touched docs or the test suite stays
+quiet. Nothing to enable: the hooks live in `guardrail/`, which `install.sh` already points
+`core.hooksPath` at, so they arrive with the pull that brings them.
+
 It runs the test suite first and refuses to install if anything fails, so a tree the tests
 reject never reaches `~/.claude/session-kit`. Only kit code is replaced: your notes, handoff
 folders, transcripts, and your edited `config` are left as they are. In `settings.json` it

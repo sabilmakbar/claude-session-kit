@@ -18,6 +18,28 @@ that was tagged, and the tag is what you check out to go back to it. Versions mo
 from claude-memory-kit: the two share conventions, neither depends on the other, and a bump in one
 says nothing about the other.
 
+## Unreleased
+
+### Added
+
+- A pull that leaves the deployed tree behind now says so, at the moment the gap opens.
+  `git pull`, a branch switch and `git pull --rebase` compare the files `install.sh` deploys
+  against the deployed commit and name the differing files and the command to fix them. The
+  check runs in the checkout rather than in the deployed tree, because the deployed tree has
+  no `.git` and records no path back to its source, while the checkout knows where the
+  installer deploys. It compares content rather than version labels: every commit moves
+  `git describe`, so a label comparison would fire through all of normal development, and a
+  pull touching only docs or the test suite is silent. Wired through the `core.hooksPath` the
+  commit guardrail already uses, so the hooks arrive with the pull that brings them.
+
+### Tested
+
+- The drift check across both halves: the reporting cases each paired with a control that
+  must stay silent, and the three wrappers driven by real git operations, including a pull
+  between two local clones, so a dead wrapper file cannot pass. The watched path list is
+  checked against what the installer actually deploys into a sandbox, so a file added to the
+  installer and not to the list fails the suite instead of going unwatched.
+
 ## 0.3.1
 
 ### Added
