@@ -813,6 +813,116 @@ is "an em-dash outside README/docs passes (scope is the path, not the extension)
    "$(cd "$GR" && bash "$GR/guardrail/pre-commit" >/dev/null 2>&1; echo $?)"
 rm -rf "$GR"
 
+# --- the deploy-drift hooks ----------------------------------------------------
+#
+# guardrail/kit-drift.sh reports that the deployed tree and the checkout have parted
+# company, and the three wrappers are how git delivers that: install.sh already points
+# core.hooksPath at guardrail/, so post-merge, post-checkout and post-rewrite arrive with
+# a pull. Both halves are tested: the script's decision, and that git actually runs it.
+#
+# Every fixture repo gets the WORKING-TREE copy of the hooks copied in. A clone carries
+# the committed ones, so without that these cases would test the last commit, not the edit
+# under review — a trap this suite has already been caught by once.
+
+echo "the deploy-drift hooks"
+
+DR=$(mktemp -d); DRC="$DR/c"; DRH="$DR/home/.claude"
+git clone -q "$ROOT" "$DRC" 2>/dev/null
+mkdir -p "$DRH/session-kit"
+# Every fixture git call carries the sandbox prefix. Without it the hooks git fires here
+# resolve the deploy as $HOME/.claude and read the developer's own installed tree, which
+# leaks a real notice into the suite output and makes the fixture non-hermetic.
+drg(){ CLAUDE_SESSION_KIT_PREFIX="$DRH" git -C "$DRC" -c user.email=t@e -c user.name=t "$@"; }
+cp "$ROOT"/guardrail/kit-drift.sh "$ROOT"/guardrail/post-merge \
+   "$ROOT"/guardrail/post-checkout "$ROOT"/guardrail/post-rewrite "$DRC/guardrail/"
+drg add -A >/dev/null 2>&1; drg commit -q --no-verify -m "hooks under test" >/dev/null 2>&1
+drg config core.hooksPath guardrail
+# stamp <rev> — record a deployed version, the way install.sh does
+stamp(){ drg describe --tags --always "$1" >"$DRH/session-kit/.kit-version"; }
+drift(){ ( cd "$DRC" && CLAUDE_SESSION_KIT_PREFIX="$DRH" bash guardrail/kit-drift.sh 2>&1 ); }
+
+stamp HEAD
+is "deploy matches the checkout: silent" "" "$(drift)"
+
+# A docs commit and a library commit, so the pair below differs only in WHAT changed.
+printf '\n' >>"$DRC/docs/INTERNALS.md"; drg add -A; drg commit -q --no-verify -m docs
+is "only non-deployed paths changed since the deploy: silent" "" "$(drift)"
+
+printf '\n' >>"$DRC/core/sessions.sh"; drg add -A; drg commit -q --no-verify -m lib
+printf '%s' "$(drift)" | grep -q 'does not match this checkout' \
+    && ok "a deployed file changed since the deploy: reported" \
+    || bad "lib change reported" "a mismatch notice" "silence"
+printf '%s' "$(drift)" | grep -q 'core/sessions.sh' \
+    && ok "…naming the file that differs" || bad "names the file" "core/sessions.sh" "absent"
+printf '%s' "$(drift)" | grep -q 'bash install.sh' \
+    && ok "…and the command that fixes it" || bad "names install.sh" "bash install.sh" "absent"
+
+# Unknowable state is silence, never a guess: a git hook must not break a pull over an
+# advisory. Each of these is paired with the reporting case above, which shares every
+# other input, so a script that had simply stopped working could not pass both.
+rm -f "$DRH/session-kit/.kit-version"
+is "no .kit-version (kit not installed): silent" "" "$(drift)"
+printf 'unknown\n' >"$DRH/session-kit/.kit-version"
+is "an archive install records unknown: silent" "" "$(drift)"
+printf 'v9.9.9-1-gdeadbee\n' >"$DRH/session-kit/.kit-version"
+is "a version from some other clone: silent" "" "$(drift)"
+# Deployed from a dirty tree. The -dirty suffix is stripped and the commit still anchors it,
+# so this must report rather than fall into the silence above.
+printf '%s-dirty\n' "$(drg describe --tags --always HEAD~2)" >"$DRH/session-kit/.kit-version"
+printf '%s' "$(drift)" | grep -q 'does not match' \
+    && ok "a -dirty deploy label still resolves to its commit" \
+    || bad "-dirty label resolves" "a mismatch notice" "silence"
+
+# git actually runs them. Without these the wrappers could be dead files and every case
+# above would still pass.
+stamp HEAD
+drg checkout -q -b drift-feature
+printf '\n' >>"$DRC/core/sessions.sh"; drg add -A; drg commit -q --no-verify -m featlib
+drg checkout -q main 2>/dev/null
+OUT=$( cd "$DRC" && CLAUDE_SESSION_KIT_PREFIX="$DRH" git checkout -q drift-feature 2>&1 )
+printf '%s' "$OUT" | grep -q 'does not match this checkout' \
+    && ok "post-checkout: a branch switch runs the check" \
+    || bad "post-checkout fires" "a mismatch notice" "${OUT:-silence}"
+OUT=$( cd "$DRC" && CLAUDE_SESSION_KIT_PREFIX="$DRH" git checkout -q -- README.md 2>&1 )
+is "post-checkout: a file checkout does not (arg 3 is 0)" "" "$OUT"
+drg checkout -q main 2>/dev/null
+
+# post-merge, driven by a real pull between two local clones. No network: the upstream is
+# another clone on disk, which is also why this runs on a CI runner.
+DRU="$DR/up"
+git clone -q "$DRC" "$DRU" 2>/dev/null
+git -C "$DRU" checkout -q main 2>/dev/null
+drg remote add up "$DRU" 2>/dev/null
+printf '\n' >>"$DRU/core/sessions.sh"
+git -C "$DRU" -c user.email=t@e -c user.name=t commit -q --no-verify -am uplib
+stamp HEAD
+OUT=$( cd "$DRC" && CLAUDE_SESSION_KIT_PREFIX="$DRH" \
+        git -c user.email=t@e -c user.name=t pull -q --no-rebase up main 2>&1 )
+printf '%s' "$OUT" | grep -q 'does not match this checkout' \
+    && ok "post-merge: a pull that changes a deployed file runs the check" \
+    || bad "post-merge fires" "a mismatch notice" "${OUT:-silence}"
+stamp HEAD
+OUT=$( cd "$DRC" && CLAUDE_SESSION_KIT_PREFIX="$DRH" \
+        git -c user.email=t@e -c user.name=t pull -q --no-rebase up main 2>&1 )
+is "post-merge: an up-to-date pull says nothing" "" "$OUT"
+
+# post-rewrite takes the rewrite kind as arg 1. Exercised directly rather than through a
+# rebase: the gate is the whole logic, and a real rebase also fires post-checkout, which
+# would make the result ambiguous about which hook spoke.
+stamp HEAD~1
+OUT=$( cd "$DRC" && CLAUDE_SESSION_KIT_PREFIX="$DRH" bash guardrail/post-rewrite amend 2>&1 )
+is "post-rewrite: amend is ignored" "" "$OUT"
+OUT=$( cd "$DRC" && CLAUDE_SESSION_KIT_PREFIX="$DRH" bash guardrail/post-rewrite rebase 2>&1 )
+printf '%s' "$OUT" | grep -q 'does not match this checkout' \
+    && ok "post-rewrite: rebase runs the check (git pull --rebase)" \
+    || bad "post-rewrite on rebase" "a mismatch notice" "${OUT:-silence}"
+
+for h in kit-drift.sh post-merge post-checkout post-rewrite; do
+    [ -x "$ROOT/guardrail/$h" ] && ok "guardrail/$h is executable" \
+        || bad "guardrail/$h is executable" "executable" "not executable"
+done
+rm -rf "$DR"
+
 # --- session notes -----------------------------------------------------------
 #
 # Storage is trivial; the tests aim at the feature's two real risks — a note
@@ -1676,6 +1786,29 @@ kvf="$IPREFIX/session-kit/.kit-version"
     || bad "install records the kit version" "non-empty .kit-version" "missing or empty"
 [ "$(tr -d '[:space:]' < "$kvf" 2>/dev/null)" != "" ] \
     && ok "…and it is not blank" || bad "…and it is not blank" "a value" "whitespace only"
+# kit-drift.sh watches a hard-coded path list, and a file added to the installer but not to
+# that list would go unwatched in silence. Rather than parse install.sh, this compares the
+# list against what the installer just actually deployed above.
+covered(){ # covered <repo-relative-path> — 0 if kit-drift.sh watches it
+    local rel=$1 p
+    for p in $(sed -n 's/^PATHS=(\(.*\))$/\1/p' "$ROOT/guardrail/kit-drift.sh"); do
+        case "$rel" in "$p"|"$p"/*) return 0;; esac
+    done
+    return 1
+}
+unwatched=""
+while IFS= read -r rel; do
+    # config is seeded from config.example and never overwritten; .kit-version is written by
+    # the installer itself. Neither comes from a tracked file, so neither can be diffed.
+    case "$rel" in config|.kit-version) continue;; esac
+    covered "$rel" || unwatched="$unwatched $rel"
+done < <(cd "$IPREFIX/session-kit" && find . -type f | sed 's|^\./||')
+is "kit-drift.sh watches every file the installer deploys" "" "$unwatched"
+# Control: the same matcher must be able to return uncovered, or the assertion above passes
+# whatever the list says.
+covered docs/INTERNALS.md \
+    && bad "…and does not watch paths the installer skips" "docs/INTERNALS.md unwatched" "matched" \
+    || ok "…and does not watch paths the installer skips"
 # A relative source installs a skill that silently cannot find its libraries.
 # Checked against the repo, which is the only copy there is now: the plugin ships these
 # files verbatim. Globbing an install prefix here would pass vacuously, since nothing is
