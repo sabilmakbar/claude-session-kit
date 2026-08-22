@@ -26,7 +26,7 @@ note or a reminder, this is the reason.
 ## A session said "claude-session-kit: ..." out of nowhere
 
 Not a bug. The hooks say nothing on a normal day, so the kit tells you when it has
-stopped working, once a day per fault, until it is fixed. There are two of these.
+stopped working, once a day per fault, until it is fixed. There are three of these.
 
 **`jq is missing, so the kit is doing nothing at all`.** Every part of the kit parses
 JSON, so without `jq` all four hooks exit immediately and the skills refuse. Install it
@@ -43,6 +43,15 @@ bash ~/.claude/session-kit/tests/smoke.sh --report
 
 Then follow the next section, which is about exactly this. The line stops on its own
 once the suite passes again.
+
+**`the skills are at X while the hooks and libraries are at Y`.** The kit installs in two
+halves that version on their own: `install.sh` deploys the hooks and libraries, and
+`claude plugin install` caches the skills. Updating one and not the other leaves them on
+different releases, which works but is not what you asked for. The line names the half that
+is behind and the single command that brings it up, either
+`claude plugin update session-kit@session-kit` or re-running `install.sh` from your
+checkout. It says nothing while your checkout sits between releases, because a development
+tree has no release number for the plugin to match.
 
 ## A skill is missing, or fails the moment it runs
 

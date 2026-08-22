@@ -32,8 +32,22 @@ says nothing about the other.
   pull touching only docs or the test suite is silent. Wired through the `core.hooksPath` the
   commit guardrail already uses, so the hooks arrive with the pull that brings them.
 
+- The two halves sitting on different releases is now reported once a day, through the same
+  notice channel that reports a missing `jq` and a failed self-check. `install.sh` deploys the
+  hooks and libraries while the plugin cache holds the skills, and either could move without
+  the other with nothing saying so. Both version numbers were already on disk, so the check
+  records no new state, and it names the one command that fixes it rather than describing the
+  state: direction is knowable here, unlike the deploy-drift hook's symmetric diff. A
+  development checkout is silent, since a tree between releases has no number for the plugin
+  to match.
+
 ### Tested
 
+- The two halves check, every reporting case paired with a control that must stay silent:
+  matching releases, a development label, a `-dirty` label, `unknown` from an archive
+  install, no version record at all, and no plugin cache at all. Also that the newest cache
+  directory is the one compared, since nothing removes the old ones, and that a failed
+  self-check and a missing `jq` both still outrank it.
 - The drift check across both halves: the reporting cases each paired with a control that
   must stay silent, and the three wrappers driven by real git operations, including a pull
   between two local clones, so a dead wrapper file cannot pass. The watched path list is
