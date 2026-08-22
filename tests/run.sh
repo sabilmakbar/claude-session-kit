@@ -470,6 +470,86 @@ OUT=$(cs_notice_degraded)
     || ok "markers from other days are swept"
 drop_home
 
+# The third fault: the two halves on different releases. install.sh deploys the hooks and
+# libraries, the plugin cache holds the skills, and either can move without the other. Both
+# numbers are already on disk, so this compares what is there and records nothing new.
+new_home
+KVD="$FAKE/.claude/session-kit"; PCD="$FAKE/.claude/plugins/cache/session-kit/session-kit"
+mkdir -p "$KVD" "$PCD"
+halves(){ cs_degraded_reason 2>/dev/null; }
+
+# Present-and-equal first, so every silence case below has a reporting case beside it that
+# differs only in the version numbers.
+printf 'v0.3.2\n' >"$KVD/.kit-version"; mkdir -p "$PCD/0.3.2"
+is "both halves on the same release: no reason" "" "$(halves)"
+
+rm -rf "$PCD/0.3.2"; mkdir -p "$PCD/0.3.1"
+OUT=$(halves)
+case "$OUT" in
+    "halves the skills are at 0.3.1 while the hooks and libraries are at 0.3.2."*"claude plugin update session-kit@session-kit")
+        ok "skills behind: reported, naming plugin update" ;;
+    *)  bad "skills behind: reported, naming plugin update" "the halves line" "${OUT:-silence}" ;;
+esac
+
+printf 'v0.3.0\n' >"$KVD/.kit-version"
+OUT=$(halves)
+case "$OUT" in
+    "halves the hooks and libraries are at 0.3.0 while the skills are at 0.3.1."*"install.sh"*)
+        ok "kit behind: reported, naming install.sh" ;;
+    *)  bad "kit behind: reported, naming install.sh" "the halves line" "${OUT:-silence}" ;;
+esac
+# Direction is knowable here, so the two notices must not be the same sentence. The drift
+# git hook deliberately makes no direction claim; this one must, or it sends people to the
+# wrong command half the time.
+printf 'v0.3.2\n' >"$KVD/.kit-version"
+[ "$(halves)" != "$OUT" ] \
+    && ok "the two directions produce different advice" \
+    || bad "the two directions differ" "two sentences" "the same sentence both ways"
+
+# Nothing removes an old cache directory, so a machine that has updated keeps several and
+# the newest is the one the harness loads. Paired with the case above, where 0.3.1 alone
+# against a 0.3.2 kit did report.
+mkdir -p "$PCD/0.3.2"
+is "several cached versions: the newest is compared" "" "$(halves)"
+rm -rf "$PCD/0.3.2"
+
+# Anything that is not an exact release is silence, not a guess. A development checkout has
+# no release number for the plugin to match, so comparing there would fire on every prompt.
+for label in v0.3.2-4-gabc1234 v0.3.2-4-gabc1234-dirty unknown "" "0.3.2 " ; do
+    printf '%s\n' "$label" >"$KVD/.kit-version"
+    is "a .kit-version of '${label:-empty}' is not compared" "" "$(halves)"
+done
+rm -f "$KVD/.kit-version"
+is "no .kit-version at all: no reason" "" "$(halves)"
+
+# The plugin half absent is a different fault with a different owner: the plugin's own
+# SessionStart hook reports the reverse case, and install.sh reports this one while it runs.
+# Comparing a release against nothing would report a mismatch that no command fixes.
+printf 'v0.3.2\n' >"$KVD/.kit-version"; rm -rf "$PCD"
+is "the plugin not installed at all: no reason" "" "$(halves)"
+mkdir -p "$PCD/0.3.2"
+# Control: with the cache back, the same inputs are still silent because they now match,
+# and the reporting cases above prove the check is not simply switched off.
+is "…and the restored matching cache stays silent" "" "$(halves)"
+
+# Fault priority. A broken kit outranks a version difference: both halves work here, they
+# are just not the same release, so it must never mask a failed self-check.
+rm -rf "$PCD/0.3.2"; mkdir -p "$PCD/0.3.1"
+echo "stale report" >"$KVD/last-failure.md"
+case "$(halves)" in
+    selfcheck*) ok "a failed self-check outranks a version difference" ;;
+    *) bad "a failed self-check outranks a version difference" "the selfcheck reason" "$(halves)" ;;
+esac
+rm -f "$KVD/last-failure.md"
+# ...and with jq gone, that outranks both: a kit doing nothing at all is the worst of the
+# three, and this check must not be what a user sees instead.
+case "$(nojq_run 'cs_degraded_reason')" in
+    jq*) ok "a missing jq outranks a version difference" ;;
+    *) bad "a missing jq outranks a version difference" "the jq reason" "$(nojq_run 'cs_degraded_reason')" ;;
+esac
+drop_home
+
+
 # The whole point is that this reaches a hooks-only user, so assert it through a real
 # hook: the notice comes out, and the hook still exits 0 and never breaks a prompt.
 new_home
