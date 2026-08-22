@@ -31,11 +31,13 @@ when it is missing; everything else degrades to a clear error at the point of us
 - **tar**, and **shasum** or **sha256sum** (one of the two, both stock on macOS and
   Linux). Only for cross-machine handoff bundles. Export and import refuse up front
   when no sha tool is present, rather than producing a bundle nothing can verify.
-- **git**. Only for the commit guardrail in a development checkout: a pre-commit
+- **git**. Only in a development checkout, for two hooks wired through the same
+  `core.hooksPath`. The commit guardrail is a pre-commit
   hook that blocks staged home paths, emails, em-dashes in the reader-facing docs,
   and any private terms you list in `guardrail/denylist.local` (seeded from the
-  example at install; the `CLAUDE_CONFIG_DENYLIST` env var works too). An installed
-  copy never calls git.
+  example at install; the `CLAUDE_CONFIG_DENYLIST` env var works too). The deploy-drift
+  check is a post-merge, post-checkout and post-rewrite hook that says when the deployed
+  tree no longer matches the checkout. An installed copy never calls git.
 
 ## Platform
 - **bash or zsh.** The full test suite runs under both. Other shells fail loudly at
