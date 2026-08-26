@@ -359,11 +359,25 @@ fi
 
 # Refuse to install something the tests reject. CLAUDE_SESSION_KIT_NO_GATE exists for the
 # suite itself, whose install fixtures call this installer — gating would recurse.
+#
+# The output is KEPT, not discarded. "tests fail, refusing to install" with nothing after
+# it is unactionable in the two places it matters: a CI runner, where there is no terminal
+# to re-run the suite from, and an intermittent failure, where a passing hand re-run
+# destroys the evidence. Both happened. The log outlives a failed run on purpose; a passing
+# run has nothing to explain, so it removes it.
 if [ "$DRY" -eq 0 ] && [ -z "${CLAUDE_SESSION_KIT_NO_GATE:-}" ] && [ -f "$ROOT/tests/run.sh" ]; then
-    bash "$ROOT/tests/run.sh" >/dev/null 2>&1 || {
+    gate_log=$(mktemp "${TMPDIR:-/tmp}/session-kit-gate.XXXXXX")
+    if bash "$ROOT/tests/run.sh" >"$gate_log" 2>&1; then
+        rm -f "$gate_log"
+    else
         echo "install.sh: tests fail, refusing to install" >&2
-        echo "  run: bash tests/run.sh" >&2
-        exit 1; }
+        # The assertion and its expected/actual pair. A suite that died before asserting
+        # prints no FAIL line at all, so fall back to the tail rather than saying nothing.
+        grep -A2 '^  FAIL ' "$gate_log" >&2 || tail -n 20 "$gate_log" >&2
+        echo "  full output: $gate_log" >&2
+        echo "  re-run by hand: bash tests/run.sh" >&2
+        exit 1
+    fi
 fi
 
 # --- commit guardrail (checkout only) ----------------------------------------
