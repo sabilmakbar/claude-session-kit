@@ -23,7 +23,7 @@ read in the extension bundle but whose effect you cannot.
 
 ## Then the decision record
 
-The three `docs/DESIGN-*.md` files hold what we chose and why. They cite observations by
+The `docs/DESIGN-*.md` files hold what we chose and why. They cite observations by
 number rather than restating them, so a fact has one home and cannot drift between files.
 
 Each record opens with its status, when it was last revised, and the Claude Code version

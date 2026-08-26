@@ -22,6 +22,11 @@ says nothing about the other.
 
 ### Added
 
+- `docs/DESIGN-install.md`, holding the install decisions that had no home. D1 records why the
+  documented install pins both halves to a tag, why bumping `plugin.json` only at release was
+  rejected, and why the installer reports a disagreeing pin instead of writing one.
+
+
 - `install.sh` reports a marketplace pin that disagrees with the checkout it is run from.
   Two cases: the pin names a different tag, where it names the `marketplace add` command that
   puts both halves on one release, and the pin sits on a checkout that is not on a tag, where
@@ -87,6 +92,14 @@ says nothing about the other.
   installer and not to the list fails the suite instead of going unwatched.
 
 ### Changed
+
+- O20 is superseded on the point that mattered. It read `--help` on `plugin install` and
+  `marketplace add`, found no ref flag, and concluded a release tag could not change what the
+  plugin path delivers. The ref rides in the source string instead, so `--help` could not show
+  it: O26 records the three forms, which one fails, and that the pin persists and is enforced.
+  O27 records what unpinned costs, measured on this machine. O21 gains the converse experiment,
+  that writing `extraKnownMarketplaces` by hand materialises no marketplace at all.
+
 
 - The documented install pins both halves to a release tag: `git clone --branch`, and
   `claude plugin marketplace add sabilmakbar/claude-session-kit@v0.3.1`. Unpinned, each half

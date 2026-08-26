@@ -16,7 +16,7 @@ to build.
 The docs go shortest first. New here? [HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) tells the
 whole story in plain words, and it is the only one you need in order to use the kit.
 [FLOWS.md](docs/FLOWS.md) is the next step down: diagrams of what runs when, with the
-specifics the plain-language version leaves out. The three `docs/DESIGN-*.md` files are
+specifics the plain-language version leaves out. The `docs/DESIGN-*.md` files are
 decision records, for anyone changing the kit rather than running it: every rule in the
 code with the reason it exists. Underneath those,
 [INTERNALS.md](docs/INTERNALS.md) is about Claude Code rather than about this kit: what was
