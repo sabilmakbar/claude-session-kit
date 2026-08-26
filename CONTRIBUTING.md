@@ -73,6 +73,14 @@ bash tests/smoke.sh    # the real-data suite, against your own ~/.claude
 `run.sh` is the gate. `smoke.sh` passes or skips depending on the machine it runs on, which
 is the point, so it is never a required check.
 
+Both suites set `CLAUDE_SESSION_KIT_PREFIX` as well as `HOME`, and the second variable is not
+redundant. `plugin-hooks/kit-present.sh` and `guardrail/kit-drift.sh` resolve
+`${CLAUDE_SESSION_KIT_PREFIX:-$HOME/.claude}` for themselves, so a test that sets only `HOME`
+reads whatever an ambient prefix points at rather than its own fixture. That is not
+hypothetical: it is why one check passed locally and failed in CI. The variable exists for the
+harness rather than as a supported install location, and a prefixed install still writes skills
+that name `~/.claude`, so it looks removable and is not.
+
 Point the commit guardrail at your checkout too. It adds one house rule on top of the leak
 checks: no em-dashes on lines added to `README.md` or `docs/*.md`.
 
