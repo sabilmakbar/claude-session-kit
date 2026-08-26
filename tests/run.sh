@@ -2473,6 +2473,10 @@ drop_home
 # quiet when they disagree is the silent divergence this exists to catch.
 PC=$(mktemp -d)/c
 git clone -q "$ROOT" "$PC" 2>/dev/null
+# The clone inherits the checkout's tags. On a tag-push CI run HEAD carries a real
+# release tag, so without shedding them describe finds two tags where the fixtures
+# below plant one, and every tag-shaped assertion here stops testing what it says.
+for _t in $(git -C "$PC" tag); do git -C "$PC" tag -d "$_t" >/dev/null; done
 cp "$ROOT/install.sh" "$PC/install.sh"
 pin_prefix() {   # <ref> -> a prefix dir whose settings.json pins the marketplace to <ref>
     local d; d=$(mktemp -d)/.claude; mkdir -p "$d"
@@ -2733,6 +2737,10 @@ is "tag pairing holds, or HEAD is between tags where it does not apply" "" "$OUT
 # must pass. Without the second half, a tag_pairing that always complains would also pass.
 TPC=$(mktemp -d)/c
 git clone -q "$ROOT" "$TPC" 2>/dev/null
+# The clone inherits the checkout's tags. On a tag-push CI run HEAD carries a real
+# release tag, so without shedding them describe finds two tags where the fixtures
+# below plant one, and every tag-shaped assertion here stops testing what it says.
+for _t in $(git -C "$TPC" tag); do git -C "$TPC" tag -d "$_t" >/dev/null; done
 git -C "$TPC" -c user.email=t@e -c user.name=t tag -f v9.9.9 >/dev/null 2>&1
 OUT=$(tag_pairing "$TPC")
 is "a mismatched tag is named by all three checks" "3" \
