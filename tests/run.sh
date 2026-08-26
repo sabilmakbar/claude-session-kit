@@ -2506,6 +2506,50 @@ printf '%s' "$(pin_run "$d")" | grep -q 'not on a tag' \
     && ok "a pin on an untagged checkout is reported" \
     || bad "a stale pin on an untagged checkout is reported" "the gap" "silence"
 rm -rf "$(dirname "$d")"
+# A pin below an existing cache directory is silently out of effect, because the newest
+# directory is the one that loads. The report must name the blocking directory; and without
+# the pin, the same cache shape must get the development-shaped message instead, or the
+# check cannot tell a dead pin from an ordinary dev tree.
+git -C "$PC" tag -f v0.3.1 >/dev/null 2>&1
+d=$(mktemp -d)/.claude
+mkdir -p "$d/plugins/cache/session-kit/session-kit/0.3.1" \
+         "$d/plugins/cache/session-kit/session-kit/0.3.2"
+printf '{"enabledPlugins":{"session-kit@session-kit":true},"extraKnownMarketplaces":{"session-kit":{"source":{"source":"github","repo":"sabilmakbar/claude-session-kit","ref":"v0.3.1"}}}}' \
+    > "$d/settings.json"
+OUT=$(pin_run "$d")
+printf '%s' "$OUT" | grep -q 'pin has no effect' \
+    && ok "a pin below the cache names the blocking directory" \
+    || bad "a pin below the cache is reported" "the dead pin" "silence"
+printf '%s' "$OUT" | grep -q "cache/session-kit/session-kit/0.3.2" \
+    && ok "…and the directory it names is the newer one" \
+    || bad "the blocking directory is named" "the 0.3.2 path" "absent"
+rm -rf "$(dirname "$d")"
+# The same cache, unpinned: the development-shaped message, no dead-pin talk, and the nudge
+# to pin, because the checkout is on a tag and the marketplace source is remote.
+d=$(mktemp -d)/.claude
+mkdir -p "$d/plugins/cache/session-kit/session-kit/0.3.2"
+printf '{"enabledPlugins":{"session-kit@session-kit":true},"extraKnownMarketplaces":{"session-kit":{"source":{"source":"github","repo":"sabilmakbar/claude-session-kit"}}}}' \
+    > "$d/settings.json"
+OUT=$(pin_run "$d")
+printf '%s' "$OUT" | grep -q 'pin has no effect' \
+    && bad "unpinned cache is not a dead pin" "the dev-shaped message" "a dead-pin report" \
+    || ok "unpinned, the same cache is not called a dead pin"
+printf '%s' "$OUT" | grep -q 'the marketplace is not pinned' \
+    && ok "a remote unpinned marketplace gets the pin command" \
+    || bad "remote unpinned marketplace is nudged" "the pin command" "silence"
+rm -rf "$(dirname "$d")"
+# A directory marketplace is the development install: nudging it to pin would end the edit
+# loop, so the nudge must stay quiet there while everything else still speaks.
+d=$(mktemp -d)/.claude
+mkdir -p "$d/plugins/cache/session-kit/session-kit/0.3.2"
+printf '{"enabledPlugins":{"session-kit@session-kit":true},"extraKnownMarketplaces":{"session-kit":{"source":{"source":"directory","path":"/tmp/x"}}}}' \
+    > "$d/settings.json"
+OUT=$(pin_run "$d")
+printf '%s' "$OUT" | grep -q 'the marketplace is not pinned' \
+    && bad "a directory marketplace stays unnudged" "silence" "a pin nudge" \
+    || ok "a directory marketplace is never nudged to pin"
+rm -rf "$(dirname "$d")"
+
 # No pin: nothing to say, on the same untagged checkout that just spoke.
 d=$(mktemp -d)/.claude; mkdir -p "$d"; printf '{}' > "$d/settings.json"
 printf '%s' "$(pin_run "$d")" | grep -q 'not on a tag\|pinned to' \
@@ -2660,6 +2704,44 @@ rt=$(grep -oE '(--branch |claude-session-kit(\.git#|@))v[0-9]+\.[0-9]+\.[0-9]+' 
     && ok "the README install names a pinned tag" \
     || bad "the README install names a pinned tag" "a vX.Y.Z" "none found"
 is "the README tag matches the newest release" "v$REL" "$rt"
+
+# The shipping moment is the tag, so that is where the pairing must hold: plugin.json, the
+# README pin and the newest changelog heading all equal to the tag itself. Checked only when
+# HEAD sits exactly on a tag, because mid-cycle those values legitimately differ from any tag
+# and a release PR carrying the next number must not trip anything before its tag exists.
+# tests.yml runs the suite on tag pushes with fetch-tags, which is what arms this on the one
+# run that matters. Returns the mismatches, empty when paired or when HEAD is untagged.
+tag_pairing() {  # <root> -> mismatch lines on stdout
+    local root="$1" t tv pv rel rt
+    t=$(git -C "$root" describe --tags --exact-match HEAD 2>/dev/null) || return 0
+    tv=${t#v}
+    pv=$(jq -r .version "$root/.claude-plugin/plugin.json" 2>/dev/null)
+    rel=$(grep -E '^## ' "$root/CHANGELOG.md" 2>/dev/null | grep -viE 'unreleased' | head -1 \
+        | sed 's/^## *//;s/[^0-9.].*//')
+    rt=$(grep -oE '(--branch |claude-session-kit(\.git#|@))v[0-9]+\.[0-9]+\.[0-9]+' "$root/README.md" 2>/dev/null \
+        | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sort -u | tr '\n' ' ' | sed 's/ $//')
+    [ "$pv" = "$tv" ]  || echo "plugin.json says $pv on tag $t"
+    [ "$rel" = "$tv" ] || echo "newest changelog heading is $rel on tag $t"
+    [ "$rt" = "$t" ]   || echo "README pins '$rt' on tag $t"
+}
+OUT=$(tag_pairing "$ROOT")
+is "tag pairing holds, or HEAD is between tags where it does not apply" "" "$OUT"
+# The fixture pair, in a clone so the real checkout is never tagged by a test. A tag that
+# nothing else agrees with must be named three times; align all three files and the same tag
+# must pass. Without the second half, a tag_pairing that always complains would also pass.
+TPC=$(mktemp -d)/c
+git clone -q "$ROOT" "$TPC" 2>/dev/null
+git -C "$TPC" -c user.email=t@e -c user.name=t tag -f v9.9.9 >/dev/null 2>&1
+OUT=$(tag_pairing "$TPC")
+is "a mismatched tag is named by all three checks" "3" \
+   "$(printf '%s\n' "$OUT" | grep -c 'on tag v9.9.9')"
+( cd "$TPC" \
+  && jq '.version="9.9.9"' .claude-plugin/plugin.json > pj.tmp && mv pj.tmp .claude-plugin/plugin.json \
+  && perl -pi -e 's/^## Unreleased$/## 9.9.9/' CHANGELOG.md \
+  && perl -pi -e 's/v0\.[0-9]+\.[0-9]+/v9.9.9/g if /--branch |claude-session-kit(\.git#|@)/' README.md )
+OUT=$(tag_pairing "$TPC")
+is "an aligned tag passes the pairing" "" "$OUT"
+rm -rf "$(dirname "$TPC")"
 
 # source: "./" ships the whole repo, so every tracked file is distributed. A literal home
 # path leaks the author's username and breaks on every other machine. This is exactly what

@@ -112,7 +112,9 @@ than one that shipped. Pinning both halves to the same tag is what makes the ver
 reports mean something.
 
 To move to a newer release, repeat those commands with the new tag, then
-`claude plugin update session-kit@session-kit`.
+`claude plugin update session-kit@session-kit`. Pin forward, not back: a pin below a version
+already in the plugin cache has no effect, because the newest cached version is the one that
+loads, and `install.sh` names the blocking directory when it sees that state.
 
 Two forms pin the plugin half: `owner/repo@v0.3.1` as above, or
 `https://github.com/sabilmakbar/claude-session-kit.git#v0.3.1`. Writing `@v0.3.1` on the URL

@@ -81,6 +81,21 @@ hypothetical: it is why one check passed locally and failed in CI. The variable 
 harness rather than as a supported install location, and a prefixed install still writes skills
 that name `~/.claude`, so it looks removable and is not.
 
+For developing against a live Claude Code, point the marketplace at your working tree instead
+of the repo: `claude plugin marketplace add ~/claude-session-kit`. That is read in place, with
+no clone to go stale. One trap, measured: after editing a skill, `claude plugin update` answers
+"already at the latest version" and your edit never reaches the loaded copy, because the update
+compares version labels and the harness loads the cache, not the tree. The loop that works:
+
+```bash
+claude plugin uninstall session-kit@session-kit
+claude plugin install session-kit@session-kit --yes   # rewrites the cache copy in place
+# then start a new session: plugins load at session start
+```
+
+Hooks and libraries are not affected: re-running `install.sh` deploys those from the working
+tree directly.
+
 Point the commit guardrail at your checkout too. It adds one house rule on top of the leak
 checks: no em-dashes on lines added to `README.md` or `docs/*.md`.
 
