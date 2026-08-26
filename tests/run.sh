@@ -2602,6 +2602,18 @@ else
     is "plugin.json matches the newest released changelog entry" "$newest" "$pv"
 fi
 
+# The README pins the install to a tag. A tag left behind by a release sends every new
+# reader to an old version, and nothing else in the repo would notice: the commands still
+# work, they just install the wrong thing. Pinned to the newest released heading, the same
+# value install.sh compares the plugin against.
+rt=$(grep -oE '(--branch |claude-session-kit(\.git#|@))v[0-9]+\.[0-9]+\.[0-9]+' "$ROOT/README.md" \
+    | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sort -u)
+# Without this the check passes by silence the moment the commands are reworded.
+[ "$(printf '%s\n' "$rt" | grep -c .)" -ge 1 ] \
+    && ok "the README install names a pinned tag" \
+    || bad "the README install names a pinned tag" "a vX.Y.Z" "none found"
+is "the README tag matches the newest release" "v$REL" "$rt"
+
 # source: "./" ships the whole repo, so every tracked file is distributed. A literal home
 # path leaks the author's username and breaks on every other machine. This is exactly what
 # the install-time path rewrite used to produce, before the skills named $HOME themselves.
