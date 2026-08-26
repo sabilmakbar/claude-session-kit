@@ -4,7 +4,7 @@ Symptom, then check, then fix. If you are not sure anything is wrong, run the do
 `bash ~/.claude/session-kit/tests/smoke.sh`. The README explains what its output means.
 
 This file covers faults. Questions about behaviour that is working as intended live in the
-README's FAQ, and one of them is listed at the bottom because it looks like a fault.
+[FAQ](FAQ.md), and one of them is listed at the bottom because it looks like a fault.
 
 ## Nothing happens: no note, no reminders, no drift check
 
@@ -179,4 +179,4 @@ then `claude plugin install`, then a new session. Measured as O28 in
 
 ## Not a fault
 
-**The tab title did not change after a rename.** Nothing is broken. See the README's FAQ.
+**The tab title did not change after a rename.** Nothing is broken. See the [FAQ](FAQ.md).

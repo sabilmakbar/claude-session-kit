@@ -1974,7 +1974,7 @@ is "a re-run (the upgrade path) preserves the edited config" "CS_DRIFT_EVERY=42"
 is "…and wiring is idempotent, still four" 4 "$(ours)"
 
 # Deleting a hook and re-installing puts it back: "install" means "wire my hooks".
-# The README says so in both the Upgrading section and the FAQ, so pin it.
+# The README says so in Upgrading and docs/FAQ.md says it again, so pin it.
 jq 'del(.hooks.UserPromptSubmit[0].hooks[0])' "$SETT" >"$SETT.t" && mv "$SETT.t" "$SETT"
 is "sanity: one hook deleted by hand" 3 "$(ours)"
 inst
