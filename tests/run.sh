@@ -40,7 +40,8 @@ add_user()   { add_line "$1" "$(jq -cn --arg t "$2" '{type:"user",message:{conte
 pidfile() {
     # Match CLAUDE_SESSION_KIT_VERIFIED_VERSION so the version guard stays quiet; a mismatch here is
     # noise, and the guard's own behaviour is not what these cases are testing.
-    jq -n --arg p "$1" --arg i "$2" --arg n "$3" --arg s "${4:-}" --arg v "$CLAUDE_SESSION_KIT_VERIFIED_VERSION" \
+    # $5 overrides the build that wrote the file, for the cases that turn on it.
+    jq -n --arg p "$1" --arg i "$2" --arg n "$3" --arg s "${4:-}" --arg v "${5:-$CLAUDE_SESSION_KIT_VERIFIED_VERSION}" \
         '{pid:($p|tonumber),sessionId:$i,name:$n,version:$v}
          + (if $s=="" then {} else {nameSource:$s} end)' >"$PIDS/$1.json"
 }
@@ -105,6 +106,34 @@ ID=aaaaaaaa-0000-0000-0000-000000000009; transcript "$ID" >/dev/null
 add_ai "$ID" "Opening topic"
 pidfile "$$" "$ID" "Explicitly named"
 is "explicit pid-file name used when no custom-title" "Explicitly named" "$(cs_resolve_name "$ID")"
+drop_home
+
+# Before 2.1.121 no build wrote nameSource (O25), so its absence cannot mean "a person
+# chose this". Every name would read as explicit, including the derived ones, and would
+# outrank the transcript. The pid file names the build that wrote it, so rank 2 is
+# skipped there and the transcript wins instead.
+new_home
+ID=aaaaaaaa-0000-0000-0000-000000000021; transcript "$ID" >/dev/null
+add_ai "$ID" "Opening topic"
+pidfile "$$" "$ID" "documents-3e" "" 2.1.120
+is "a pre-nameSource build does not promote its pid-file name" "Opening topic" "$(cs_resolve_name "$ID")"
+drop_home
+
+# The pair: one version later the same file is trusted, so the skip above is the floor
+# doing its job and not the name being ignored everywhere.
+new_home
+ID=aaaaaaaa-0000-0000-0000-000000000022; transcript "$ID" >/dev/null
+add_ai "$ID" "Opening topic"
+pidfile "$$" "$ID" "Explicitly named" "" 2.1.121
+is "and the floor build itself is trusted" "Explicitly named" "$(cs_resolve_name "$ID")"
+drop_home
+
+# An unknown version keeps the old behaviour rather than guessing.
+new_home
+ID=aaaaaaaa-0000-0000-0000-000000000023; transcript "$ID" >/dev/null
+add_ai "$ID" "Opening topic"
+jq -n --arg p "$$" --arg i "$ID" '{pid:($p|tonumber),sessionId:$i,name:"Explicitly named"}' > "$PIDS/$$.json"
+is "a pid file with no version is trusted, as before" "Explicitly named" "$(cs_resolve_name "$ID")"
 drop_home
 
 new_home
@@ -2572,6 +2601,24 @@ drop_home
 bare=$(cd "$ROOT" && grep -rnE '(^|[^:a-zA-Z0-9_-])/(handoff|rename-session|session-note)($|[^/A-Za-z0-9_-])' \
     . --exclude-dir=.git --exclude=CHANGELOG.md 2>/dev/null || true)
 is "no un-namespaced slash-form survives" "" "$bare"
+
+# --- the observation record's own rule ---------------------------------------
+#
+# Numbers are never reused, and nothing checked it. claude-memory-kit had two entries
+# both numbered O13 and the collision survived review, because a duplicate reads
+# perfectly well in isolation: it is only wrong in relation to an entry elsewhere in
+# the file, and a decision citing that number silently gains a second referent.
+
+echo "docs/INTERNALS.md numbering:"
+dupes=$(grep -oE '^### O[0-9]+' "$ROOT/docs/INTERNALS.md" | sort | uniq -d | tr '\n' ' ')
+is "every observation number is used once" "" "$dupes"
+# Control: the same pattern has to report a duplicate that is really there, or a
+# pattern matching nothing would report a clean record either way.
+dup_fixture=$(mktemp)
+printf '### O1. a\n### O1. b\n' > "$dup_fixture"
+seen=$(grep -oE '^### O[0-9]+' "$dup_fixture" | sort | uniq -d | wc -l | tr -d ' ')
+is "and the check can see one when it is there" "1" "$seen"
+rm -f "$dup_fixture"
 
 # --- result -----------------------------------------------------------------
 

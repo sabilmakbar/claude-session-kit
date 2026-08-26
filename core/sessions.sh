@@ -340,8 +340,21 @@ cs_is_live() {
 # they normally agree, but the kit writes custom-title alone, making it the newer value
 # whenever the two differ. Ranking the pid-file first let a stale name shadow a fresh
 # rename while the tab, which reads custom-title, showed the new one.
+# Claude Code did not write nameSource before this build (O25), so an absent value
+# there says nothing about who chose the name. Rank 2 below reads absence as "a person
+# typed this", which on an older build is true of every session, including the derived
+# documents-3e ones. Each pid file records the build that wrote it, so the question is
+# answerable per file rather than by refusing to install.
+_CS_NAMESOURCE_SINCE=2.1.121
+
+_cs_predates_namesource() {  # <version from a pid file> -> 0 when older than the floor
+    [ -n "$1" ] || return 1                        # unknown: trust the file, as before
+    [ "$1" = "$_CS_NAMESOURCE_SINCE" ] && return 1
+    [ "$(printf '%s\n%s\n' "$1" "$_CS_NAMESOURCE_SINCE" | sort -V 2>/dev/null | head -1)" = "$1" ]
+}
+
 cs_resolve_name() {
-    local id="$1" pf="" name="" src="" tr="" v=""
+    local id="$1" pf="" name="" src="" ver="" tr="" v=""
     [ -n "$id" ] || return 1
     cs_version_guard
 
@@ -349,13 +362,15 @@ cs_resolve_name() {
     if pf=$(cs_pid_file "$id"); then
         name=$(jq -r '.name // empty'       "$pf" 2>/dev/null)
         src=$( jq -r '.nameSource // empty' "$pf" 2>/dev/null)
+        ver=$( jq -r '.version // empty'    "$pf" 2>/dev/null)
     fi
 
     if [ -n "$tr" ]; then
         v=$(cs_custom_title "$tr"); [ -n "$v" ] && { printf '%s' "$v"; return 0; }
     fi
 
-    [ -n "$name" ] && [ -z "$src" ] && { printf '%s' "$name"; return 0; }
+    [ -n "$name" ] && [ -z "$src" ] && ! _cs_predates_namesource "$ver" \
+        && { printf '%s' "$name"; return 0; }
 
     if [ -n "$tr" ]; then
         v=$(cs_ai_title     "$tr"); [ -n "$v" ] && { printf '%s' "$v"; return 0; }
