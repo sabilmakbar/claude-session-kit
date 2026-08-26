@@ -101,15 +101,61 @@ cs_have_deps() { command -v jq >/dev/null 2>&1; }
 #
 # It must not use jq, since a missing jq is half of what it reports.
 
+# --- the two halves ---------------------------------------------------------
+#
+# The kit installs in two halves that version independently: install.sh deploys the hooks
+# and libraries, `claude plugin install` caches the skills. Either can move without the
+# other, and until this check existed nothing said so. Both numbers are already on disk, so
+# no new state is recorded to compare them.
+
+# The deployed release as X.Y.Z, or non-zero when there is nothing comparable.
+# install.sh records `git describe`, which writes v0.3.1 on a tag and v0.3.1-4-gabc1234,
+# optionally -dirty, anywhere else. Only the exact-tag form names a release. Everything
+# else is a development tree, where the plugin has no matching number and a mismatch would
+# be noise on every prompt; `unknown` from an archive install is the same answer.
+_cs_kit_release() {
+    local v=""
+    v=$(cat "$(_cs_state_dir)/.kit-version" 2>/dev/null) || return 1
+    v=${v#v}
+    case "$v" in ""|*[!0-9.]*) return 1;; esac
+    printf '%s' "$v"
+}
+
+# The cached plugin version, or non-zero when the plugin is not installed. Newest rather
+# than the only one: nothing removes an old cache directory, so a machine that has updated
+# keeps both, and the newest is the one the harness loads.
+_cs_plugin_version() {
+    local d="" v=""
+    d="$(_cs_home)/.claude/plugins/cache/session-kit/session-kit"
+    [ -d "$d" ] || return 1
+    v=$(ls "$d" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+    [ -n "$v" ] || return 1
+    printf '%s' "$v"
+}
+
 # What is wrong, as "<key> <sentence>", or non-zero when the kit is healthy. The key
 # names the fault so a jq notice today cannot suppress a failed-check notice today.
 cs_degraded_reason() {
+    local kv="" pv=""
     command -v jq >/dev/null 2>&1 || {
         printf 'jq jq is missing, so the kit is doing nothing at all. Install it (brew install jq) and it picks straight back up.'
         return 0; }
     [ -r "$(_cs_state_dir)/last-failure.md" ] && {
         printf 'selfcheck its last self-check failed, so it may be reading Claude Code wrongly. See what moved: bash %s/tests/smoke.sh --report' \
             "$(_cs_state_dir)"
+        return 0; }
+    # The two halves on different releases. Reported last because it is the mildest of the
+    # three: both halves work, they are just not the same version. Direction is knowable
+    # here, unlike the deploy-drift hook's symmetric diff, so the notice names the one
+    # command that fixes it rather than describing the state.
+    kv=$(_cs_kit_release) && pv=$(_cs_plugin_version) && [ "$kv" != "$pv" ] && {
+        if [ "$(printf '%s\n%s\n' "$kv" "$pv" | sort -V | tail -1)" = "$kv" ]; then
+            printf 'halves the skills are at %s while the hooks and libraries are at %s. Bring the skills up: claude plugin update session-kit@session-kit' \
+                "$pv" "$kv"
+        else
+            printf 'halves the hooks and libraries are at %s while the skills are at %s. Bring them up: re-run install.sh from your checkout' \
+                "$kv" "$pv"
+        fi
         return 0; }
     return 1
 }
