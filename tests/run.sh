@@ -2739,7 +2739,7 @@ is "a mismatched tag is named by all three checks" "3" \
    "$(printf '%s\n' "$OUT" | grep -c 'on tag v9.9.9')"
 ( cd "$TPC" \
   && jq '.version="9.9.9"' .claude-plugin/plugin.json > pj.tmp && mv pj.tmp .claude-plugin/plugin.json \
-  && perl -pi -e 's/^## Unreleased$/## 9.9.9/' CHANGELOG.md \
+  && perl -pi -e 's/^## (Unreleased|[0-9][0-9.]*)$/## 9.9.9/ && ++$done unless $done' CHANGELOG.md \
   && perl -pi -e 's/v0\.[0-9]+\.[0-9]+/v9.9.9/g if /--branch |claude-session-kit(\.git#|@)/' README.md )
 OUT=$(tag_pairing "$TPC")
 is "an aligned tag passes the pairing" "" "$OUT"
