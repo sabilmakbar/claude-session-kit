@@ -519,8 +519,30 @@ echo
 # one. Read-only, so it runs under --dry-run too: previewing an install is exactly when
 # knowing the plugin state is useful.
 PLUG_MKT=session-kit; PLUG_NAME=session-kit
-PLUG_WANT=$(jq -r .version "$ROOT/.claude-plugin/plugin.json" 2>/dev/null)
 PLUG_CACHE="${CLAUDE_SESSION_KIT_PREFIX:-$HOME/.claude}/plugins/cache/$PLUG_MKT/$PLUG_NAME"
+# What the plugin should be at, which is NOT this checkout's plugin.json. That file carries
+# the open cycle's number the moment a release ships, so comparing against it told everyone
+# on the newest release that they were behind and pointed them at a version that never
+# shipped. Two honest answers instead, in order of authority: the tag the marketplace is
+# pinned to, because that is the only version that user can receive, and otherwise the
+# newest released changelog heading. The `|| true` guards matter under set -e: SETTINGS may
+# not exist yet and either grep may match nothing, and both are ordinary states here.
+PLUG_PIN=$(jq -r --arg m "$PLUG_MKT" '.extraKnownMarketplaces[$m].source.ref // empty' \
+    "$SETTINGS" 2>/dev/null || true)
+case "$PLUG_PIN" in
+  v[0-9]*.[0-9]*.[0-9]*|[0-9]*.[0-9]*.[0-9]*)
+    PLUG_WANT="${PLUG_PIN#v}"; PLUG_WANT_SRC="the marketplace pin" ;;
+  *)
+    # A pin naming a branch lands here too: it carries no version, so the release is the
+    # better answer than a branch name.
+    PLUG_WANT=$(grep -E '^## ' "$ROOT/CHANGELOG.md" 2>/dev/null \
+      | grep -viE 'unreleased' | head -1 | sed 's/^## *//;s/[^0-9.].*//' || true)
+    PLUG_WANT_SRC="the newest release"
+    [ -n "$PLUG_WANT" ] || {
+      PLUG_WANT=$(jq -r .version "$ROOT/.claude-plugin/plugin.json" 2>/dev/null || true)
+      PLUG_WANT_SRC="this checkout"; }  # no released heading yet: nothing better to offer
+    ;;
+esac
 plugin_state() {
     [ -f "$SETTINGS" ] || { printf 'absent'; return; }
     if ! jq -e --arg k "$PLUG_NAME@$PLUG_MKT" '.enabledPlugins[$k] // false' "$SETTINGS" >/dev/null 2>&1; then
@@ -532,6 +554,8 @@ plugin_state() {
     have=$(ls -d "$PLUG_CACHE"/*/ 2>/dev/null | while read -r d; do basename "$d"; done | sort -V | tail -1)
     if [ -z "$have" ]; then printf 'absent'
     elif [ "$have" = "$PLUG_WANT" ]; then printf 'current'
+    elif [ "$(printf '%s\n%s\n' "$have" "$PLUG_WANT" | sort -V | tail -1)" = "$have" ]
+    then printf 'ahead:%s' "$have"
     else printf 'stale:%s' "$have"; fi
 }
 echo "done. hooks and libraries are in place."
@@ -547,9 +571,15 @@ case "$PLUG_STATE" in
     echo "  the marketplace is known but the plugin is not installed. One command left:"
     echo "      claude plugin install $PLUG_NAME@$PLUG_MKT" ;;
   current)
-    echo "  the plugin is installed at $PLUG_WANT, matching this checkout — nothing to do" ;;
+    echo "  the plugin is installed at $PLUG_WANT, matching $PLUG_WANT_SRC — nothing to do" ;;
+  ahead:*)
+    echo "  the plugin is installed at ${PLUG_STATE#ahead:}, ahead of $PLUG_WANT:"
+    echo "  the skills came from an unpinned marketplace, which serves the default branch"
+    echo "  rather than a release, so that number names a build that was never released."
+    echo "  Nothing is broken. Pinning the marketplace to a tag is what keeps the number"
+    echo "  meaningful — the README install shows the form." ;;
   stale:*)
-    echo "  the plugin is installed at ${PLUG_STATE#stale:} but this checkout is $PLUG_WANT:"
+    echo "  the plugin is installed at ${PLUG_STATE#stale:} but $PLUG_WANT_SRC is $PLUG_WANT:"
     echo "      claude plugin update $PLUG_NAME@$PLUG_MKT      (restart to apply)"
     echo "      /plugin update $PLUG_NAME@$PLUG_MKT          (same thing, only where the host offers it)"
     echo "  a version behind means the skills are the older copy, even though the hooks and"

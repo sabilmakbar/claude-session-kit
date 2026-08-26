@@ -2427,13 +2427,36 @@ plug_case() {   # <label> <expected substring> [seed commands]
     drop_home
 }
 WANT=$(jq -r .version "$ROOT/.claude-plugin/plugin.json")
+# The version the installer now compares against: the newest RELEASED heading, not
+# plugin.json. Those differ for the whole of every development cycle, which is exactly when
+# the old comparison called a current install stale.
+REL=$(grep -E '^## ' "$ROOT/CHANGELOG.md" | grep -viE 'unreleased' | head -1 \
+    | sed 's/^## *//;s/[^0-9.].*//')
+pinned_settings() {  # <ref> -> settings.json naming a pinned marketplace, plugin enabled
+    printf '{"enabledPlugins":{"session-kit@session-kit":true},"extraKnownMarketplaces":{"session-kit":{"source":{"source":"github","repo":"sabilmakbar/claude-session-kit","ref":"%s"}}}}' "$1"
+}
 plug_case "no plugin and no marketplace: both commands" "claude plugin marketplace add"
 plug_case "marketplace known, plugin missing: one command left" "One command left" \
     'printf "{\"extraKnownMarketplaces\":{\"session-kit\":{\"source\":{\"source\":\"github\",\"repo\":\"x/y\"}}}}" > "$P/settings.json"'
 plug_case "installed but behind: offers /plugin update" "/plugin update session-kit@session-kit" \
     'mkdir -p "$P/plugins/cache/session-kit/session-kit/0.0.1"; printf "{\"enabledPlugins\":{\"session-kit@session-kit\":true}}" > "$P/settings.json"'
 plug_case "installed and current: nothing to do" "nothing to do" \
+    'mkdir -p "$P/plugins/cache/session-kit/session-kit/'"$REL"'"; printf "{\"enabledPlugins\":{\"session-kit@session-kit\":true}}" > "$P/settings.json"'
+# The pair that gives the comparison its discriminating power: one cache below the release
+# and one above it must reach different branches. Before this, both said "stale" and both
+# advised an update, which cannot help the one that is already ahead.
+plug_case "installed ahead of the release: says ahead, not stale" "ahead of" \
     'mkdir -p "$P/plugins/cache/session-kit/session-kit/'"$WANT"'"; printf "{\"enabledPlugins\":{\"session-kit@session-kit\":true}}" > "$P/settings.json"'
+plug_case "installed behind the release: still says stale" "but the newest release is" \
+    'mkdir -p "$P/plugins/cache/session-kit/session-kit/0.0.1"; printf "{\"enabledPlugins\":{\"session-kit@session-kit\":true}}" > "$P/settings.json"'
+# A pin outranks the release, because it is the only version that install can receive.
+plug_case "pinned and matching: names the pin, not the release" "matching the marketplace pin" \
+    'mkdir -p "$P/plugins/cache/session-kit/session-kit/'"$REL"'"; pinned_settings v'"$REL"' > "$P/settings.json"'
+plug_case "pinned and behind: names the pin as the target" "the marketplace pin is" \
+    'mkdir -p "$P/plugins/cache/session-kit/session-kit/0.0.1"; pinned_settings v'"$REL"' > "$P/settings.json"'
+# A pin naming a branch carries no version, so the release is still the better answer.
+plug_case "pinned to a branch: falls back to the release" "the newest release" \
+    'mkdir -p "$P/plugins/cache/session-kit/session-kit/0.0.1"; pinned_settings main > "$P/settings.json"'
 # The state read is read-only, so --dry-run must still report it. A preview that omits the
 # half you are missing is the least useful moment to omit it.
 new_home; P="$FAKE/.claude"; mkdir -p "$P"
