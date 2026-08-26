@@ -2620,6 +2620,71 @@ seen=$(grep -oE '^### O[0-9]+' "$dup_fixture" | sort | uniq -d | wc -l | tr -d '
 is "and the check can see one when it is there" "1" "$seen"
 rm -f "$dup_fixture"
 
+# --- the install gate explains its own refusal -------------------------------
+#
+# The gate refuses correctly; issue #42 was that it said nothing else. On a CI runner
+# there is no terminal to re-run the suite from, and an intermittent failure is destroyed
+# by a passing hand re-run, so the refusal has to carry the evidence with it.
+#
+# Driven against a COPY of the working tree, not a clone, because the fix under test is in
+# install.sh itself and a clone would carry the committed version instead.
+
+echo "the install gate explains its own refusal"
+
+new_home
+GROOT=$(mktemp -d)/root; mkdir -p "$GROOT"
+tar -cf - -C "$ROOT" --exclude .git . 2>/dev/null | tar -xf - -C "$GROOT" 2>/dev/null
+GPREFIX="$FAKE/.claude"; mkdir -p "$GPREFIX"
+
+# A suite that fails the way the real one does: bad() prints "  FAIL <name>" and then an
+# indented expected/actual pair, and the assertion name is what a reader needs first.
+cat >"$GROOT/tests/run.sh" <<'STUB'
+#!/usr/bin/env bash
+echo "  FAIL a distinctive assertion nobody could guess"
+echo "     expected: the-expected-value"
+echo "     actual:   the-actual-value"
+echo ""
+echo "1 passed, 1 failed"
+exit 1
+STUB
+
+GOUT=$(CLAUDE_SESSION_KIT_PREFIX="$GPREFIX" bash "$GROOT/install.sh" 2>&1) && grc=0 || grc=1
+is "a failing suite still refuses the install" "1" "$grc"
+
+case "$GOUT" in *"a distinctive assertion nobody could guess"*)
+        ok "the refusal names the failing assertion" ;;
+    *)  bad "the refusal names the failing assertion" "the FAIL line" "$GOUT" ;; esac
+
+case "$GOUT" in *"expected: the-expected-value"*"actual:   the-actual-value"*)
+        ok "…and carries its expected/actual pair" ;;
+    *)  bad "…and carries its expected/actual pair" "both lines" "$GOUT" ;; esac
+
+# The path has to be named AND still exist: a log deleted on the way out is worth nothing
+# to the CI runner this exists for.
+glog=$(printf '%s\n' "$GOUT" | sed -n 's/^  full output: //p' | head -1)
+case "${glog:-}" in
+    /*) [ -s "$glog" ] && ok "…and points at a log that survived the refusal" \
+            || bad "…and points at a log that survived the refusal" "a non-empty file" "$glog" ;;
+    *)  bad "…and points at a log that survived the refusal" "an absolute path" "${glog:-no path printed}" ;;
+esac
+
+# Control: the same installer, same copy, with a suite that PASSES. Without this the three
+# assertions above would read identically if the gate printed its log unconditionally, and
+# a gate that reports a failure on every run has no discriminating power.
+cat >"$GROOT/tests/run.sh" <<'STUB'
+#!/usr/bin/env bash
+echo "3 passed, 0 failed"
+exit 0
+STUB
+
+POUT=$(CLAUDE_SESSION_KIT_PREFIX="$GPREFIX" bash "$GROOT/install.sh" 2>&1) && prc=0 || prc=1
+is "a passing suite installs" "0" "$prc"
+case "$POUT" in *"refusing to install"*) bad "…and says nothing about a log" "silence" "$POUT" ;;
+    *"full output:"*)                     bad "…and says nothing about a log" "silence" "$POUT" ;;
+    *)                                    ok "…and says nothing about a log" ;; esac
+
+rm -rf "$GROOT"; drop_home
+
 # --- result -----------------------------------------------------------------
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
