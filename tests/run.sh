@@ -2466,6 +2466,53 @@ printf '%s' "$OUT" | grep -q "claude plugin install session-kit@session-kit" \
     || bad "installer, --dry-run reports plugin state" "the install command" "$(printf '%s' "$OUT" | tail -3)"
 drop_home
 
+# The pin against the checkout. Four states, and the two silent ones matter as much as the
+# two that speak: a report that fires when the halves agree is noise, and one that stays
+# quiet when they disagree is the silent divergence this exists to catch.
+PC=$(mktemp -d)/c
+git clone -q "$ROOT" "$PC" 2>/dev/null
+cp "$ROOT/install.sh" "$PC/install.sh"
+pin_prefix() {   # <ref> -> a prefix dir whose settings.json pins the marketplace to <ref>
+    local d; d=$(mktemp -d)/.claude; mkdir -p "$d"
+    printf '{"extraKnownMarketplaces":{"session-kit":{"source":{"source":"github","repo":"sabilmakbar/claude-session-kit","ref":"%s"}}}}' \
+        "$1" > "$d/settings.json"
+    printf '%s' "$d"
+}
+pin_run() {      # <prefix> -> installer output from the tagged clone
+    ( cd "$PC" && CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$1" \
+        bash install.sh --dry-run 2>&1 </dev/null )
+}
+git -C "$PC" tag -f v9.9.9 >/dev/null 2>&1
+d=$(pin_prefix v0.3.1); OUT=$(pin_run "$d")
+printf '%s' "$OUT" | grep -q 'pinned to v0.3.1 but this checkout is v9.9.9' \
+    && ok "pin against a different tag is reported" \
+    || bad "pin against a different tag is reported" "the disagreement" "silence"
+printf '%s' "$OUT" | grep -q 'marketplace add sabilmakbar/claude-session-kit@v9.9.9' \
+    && ok "…naming the command that agrees them" \
+    || bad "names the marketplace add command" "the command" "absent"
+rm -rf "$(dirname "$d")"
+# Same pin, checkout now ON that tag: must go quiet.
+git -C "$PC" tag -d v9.9.9 >/dev/null 2>&1; git -C "$PC" tag -f v0.3.1 >/dev/null 2>&1
+d=$(pin_prefix v0.3.1)
+printf '%s' "$(pin_run "$d")" | grep -q 'pinned to' \
+    && bad "a matching pin stays quiet" "silence" "a report" \
+    || ok "a pin matching the checkout tag says nothing"
+rm -rf "$(dirname "$d")"
+# Pinned, checkout between tags: the silent-divergence case, because a development version
+# has no number for the halves check to compare.
+git -C "$PC" tag -d v0.3.1 >/dev/null 2>&1
+d=$(pin_prefix v0.3.1)
+printf '%s' "$(pin_run "$d")" | grep -q 'not on a tag' \
+    && ok "a pin on an untagged checkout is reported" \
+    || bad "a stale pin on an untagged checkout is reported" "the gap" "silence"
+rm -rf "$(dirname "$d")"
+# No pin: nothing to say, on the same untagged checkout that just spoke.
+d=$(mktemp -d)/.claude; mkdir -p "$d"; printf '{}' > "$d/settings.json"
+printf '%s' "$(pin_run "$d")" | grep -q 'not on a tag\|pinned to' \
+    && bad "no pin, no pin report" "silence" "a report" \
+    || ok "no pin, no pin report"
+rm -rf "$(dirname "$d")" "$(dirname "$PC")"
+
 # --- the documented update command must work in every host ------------------------
 #
 # `/plugin update` is not available in the VS Code extension, so an instruction that offers
