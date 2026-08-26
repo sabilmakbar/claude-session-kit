@@ -22,6 +22,13 @@ says nothing about the other.
 
 ### Added
 
+- A weekly workflow probes published Claude Code builds for the names this kit reads.
+  `tests/version-probe.sh` installs one version, reads the shipped executable and records
+  whether it still carries `ai-title`, `custom-title`, `nameSource`, the hook event names
+  `install.sh` writes, and its own version. It starts no session and needs no credentials.
+  Results accumulate in `tests/versions-checked.tsv`, and only a verdict is written there, so
+  a runner missing `npm` or `jq` cannot mark builds as checked by failing.
+
 - A pull that leaves the deployed tree behind now says so, at the moment the gap opens.
   `git pull`, a branch switch and `git pull --rebase` compare the files `install.sh` deploys
   against the deployed commit and name the differing files and the command to fix them. The
@@ -40,6 +47,15 @@ says nothing about the other.
   state: direction is knowable here, unlike the deploy-drift hook's symmetric diff. A
   development checkout is silent, since a tree between releases has no number for the plugin
   to match.
+
+### Fixed
+
+- A session whose pid file was written before Claude Code 2.1.121 no longer resolves to that
+  file's name. The field marking a name as chosen by a person did not exist then, so every
+  name looked chosen, including generated ones like `documents-3e`, and those outranked the
+  session's own title. The resolver reads the build recorded in each pid file and skips that
+  rank below the floor. Recorded as O24, O25 and DESIGN-naming D8, which also says why this
+  kit takes no install floor while claude-memory-kit does.
 
 ### Tested
 
