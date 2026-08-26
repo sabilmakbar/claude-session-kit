@@ -139,11 +139,11 @@ want them gone.
   they do: the hooks go quiet instead of erroring, commands warn that internals may have
   moved and name the check to run, and a failing background re-test is reported in your
   next session rather than waiting to be found.
-- Works with bash and zsh; the full suite runs under both, on macOS and Linux. Verified
-  by hand against Claude Code 2.1.x, and a weekly workflow probes every published build,
-  2.0.0 through 2.1.246 so far, for the names this kit reads. Once the kit has run its
-  check on your machine, it keeps its own list of versions that passed there, and the
-  warning goes by your list.
+- Works with bash and zsh; the full suite runs under both, on macOS and Linux.
+- A weekly workflow probes every published Claude Code build for the names this kit
+  reads; `tests/versions-checked.tsv` is the ledger, always current on `main`. On your
+  machine the kit keeps its own list of versions that passed there, and warns only about
+  a version that is not on it.
 
 ## FAQ and troubleshooting
 
