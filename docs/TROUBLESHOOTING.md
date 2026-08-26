@@ -153,6 +153,30 @@ the handoff.
 
 `claim: $DIR has no 'from' file` means the folder was not written by `split.sh`.
 
+## The installer says the plugin is "ahead of" the newest release
+
+Not a fault. The skills came from a source that is not a release: an unpinned marketplace
+serves the default branch, and a local path serves a working tree. On a development checkout
+this is the expected state. To make the number meaningful, pin the marketplace to a tag; the
+README's install shows the form, and D1 in [DESIGN-install.md](DESIGN-install.md) holds the
+reasoning.
+
+## The installer says a pin "has no effect"
+
+The marketplace pin names a version below one already in the plugin cache, and the newest
+cached version is the one that loads. Nothing removes cache directories automatically, so the
+pin stays dead until you act. Remove the directory the installer names, then
+`claude plugin install session-kit@session-kit`, or pin forward to a release at or above the
+cached version. Background: O22 and O27 in [INTERNALS.md](INTERNALS.md).
+
+## I edited a skill, but the running copy never changes
+
+`claude plugin update` compares version labels and never content, so an edit under an
+unchanged version silently stays out of the loaded copy, even from a marketplace that points
+at your working tree. The loop that works is in CONTRIBUTING.md: `claude plugin uninstall`,
+then `claude plugin install`, then a new session. Measured as O28 in
+[INTERNALS.md](INTERNALS.md).
+
 ## Not a fault
 
 **The tab title did not change after a rename.** Nothing is broken. See the README's FAQ.
