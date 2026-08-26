@@ -1,1 +1,6 @@
 guardrail/denylist.local
+
+# Working notes: backlog, WIP, progress. Untracked by design — durable reasoning goes
+# in docs/DESIGN-*.md and delivered work in CHANGELOG.md. Same entry claude-memory-kit
+# carries, so a note written in either repo behaves the same way.
+WORKPLAN-*.md
