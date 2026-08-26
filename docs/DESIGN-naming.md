@@ -277,6 +277,42 @@ check could not have worked even if followed, and it would deserve a different r
 first at whether the routing step actually finds the right session, because a hint that cannot
 name a destination is not really an offer.
 
+## D8. No install floor; the resolver reads each pid file's own build instead
+
+`nameSource` arrived in 2.1.121 (O25). Below it the field is never written, and O13 rank 2
+reads an absent value as "a person chose this name". So on those builds every pid-file name
+qualifies, including the derived `documents-3e` ones, and a generated name outranks the
+transcript's own `custom-title` and `ai-title`.
+
+**The obvious fix was a version floor in `install.sh`, and it is not what this does.**
+claude-memory-kit refuses below 2.1.75 because `autoMemoryDirectory` is load-bearing with
+nothing to fall back to: without the key there is no store to point at, so a refusal is the
+honest answer. Nothing here is like that. The names are all still present; only one rank of
+the precedence chain is unreadable, and the chain has five other ranks. Refusing to install
+would trade a correct answer for no answer at all.
+
+**Each pid file records the build that wrote it**, which makes the question answerable per
+file rather than per machine. `cs_resolve_name` reads `.version` alongside `.name`, and skips
+rank 2 when that build predates the floor. Old sessions then resolve by `custom-title`,
+`ai-title` or the first prompt, which is what they should have done all along, and sessions
+written by a current build are unaffected.
+
+A pid file with no version at all keeps the old behaviour rather than guessing, because an
+unknown build is not evidence of an old one, and the tests state that case explicitly.
+
+**A shape heuristic was rejected**: deciding that `documents-3e` looks generated while
+`relo-calculator` does not means guessing at names people are free to choose, and O6 already
+warns that derived names collide with each other. The version is a fact in the file; the shape
+is an inference about a person.
+
+**Failure posture.** Degrade, never refuse. The worst case on an old build is a session
+resolving to its transcript title instead of a pid-file name that may have been generated,
+which is the correct answer more often than not and never worse than a wrong name.
+
+**What would reopen this.** Evidence that pre-2.1.121 builds wrote no pid-file `name` at all,
+which would make rank 2 dead there rather than misleading, and this a no-op worth deleting.
+O25 records that as unestablished, and settling it needs an old build running a real session.
+
 ## What would reopen this
 
 D1 carries its own list above, since it is the decision that changed five times. For the rest:
