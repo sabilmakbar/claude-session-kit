@@ -86,14 +86,14 @@ is in [settings.snippet.json](settings.snippet.json), and
 diagram.
 
 ```bash
-git clone --branch v0.3.1 https://github.com/sabilmakbar/claude-session-kit.git ~/claude-session-kit
+git clone --branch v0.4.0 https://github.com/sabilmakbar/claude-session-kit.git ~/claude-session-kit
 ~/claude-session-kit/install.sh     # --dry-run to preview, --uninstall to remove
 ```
 
 Then add the skills, which ship as a Claude Code plugin:
 
 ```bash
-claude plugin marketplace add sabilmakbar/claude-session-kit@v0.3.1
+claude plugin marketplace add sabilmakbar/claude-session-kit@v0.4.0
 claude plugin install session-kit@session-kit
 ```
 
