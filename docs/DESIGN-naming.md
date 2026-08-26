@@ -285,11 +285,10 @@ qualifies, including the derived `documents-3e` ones, and a generated name outra
 transcript's own `custom-title` and `ai-title`.
 
 **The obvious fix was a version floor in `install.sh`, and it is not what this does.**
-claude-memory-kit refuses below 2.1.75 because `autoMemoryDirectory` is load-bearing with
-nothing to fall back to: without the key there is no store to point at, so a refusal is the
-honest answer. Nothing here is like that. The names are all still present; only one rank of
-the precedence chain is unreadable, and the chain has five other ranks. Refusing to install
-would trade a correct answer for no answer at all.
+A floor is the honest answer when a load-bearing key has nothing to fall back to, because
+without it there is nothing to install against. Nothing here is like that. The names are
+all still present; only one rank of the precedence chain is unreadable, and the chain has
+five other ranks. Refusing to install would trade a correct answer for no answer at all.
 
 **Each pid file records the build that wrote it**, which makes the question answerable per
 file rather than per machine. `cs_resolve_name` reads `.version` alongside `.name`, and skips
