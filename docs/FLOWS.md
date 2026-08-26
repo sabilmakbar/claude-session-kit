@@ -134,8 +134,16 @@ If that background run comes back FAILING, the next prompt hook to fire says so 
 line and points at the report. The same line reports a missing `jq`, which is the other
 way the kit can stop working without appearing to. Both are throttled to once a day per
 fault, and both clear themselves: the jq one when `jq` is back, the self-check one when
-the suite next passes and deletes its report. This is the only thing the hooks will say
-uninvited, and it exists because their silence is otherwise ambiguous.
+the suite next passes and deletes its report. It exists because silence is otherwise
+ambiguous.
+
+Two more checks speak uninvited, each at most once a day, each naming the command that
+fixes what it found. At session start, the deployed kit and the installed plugin sitting on
+different releases is reported, with the half that is behind named. After a pull in a
+development checkout, files the installer deploys having changed since the deployed commit
+are named, with `bash install.sh` as the fix. A third runs away from this machine entirely:
+every newly published Claude Code build is probed weekly on GitHub for the names this kit
+reads. The reasoning is in [DESIGN-install.md](DESIGN-install.md).
 
 ## Writing settings.json at install time
 

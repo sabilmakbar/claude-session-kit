@@ -1974,7 +1974,7 @@ is "a re-run (the upgrade path) preserves the edited config" "CS_DRIFT_EVERY=42"
 is "…and wiring is idempotent, still four" 4 "$(ours)"
 
 # Deleting a hook and re-installing puts it back: "install" means "wire my hooks".
-# The README says so in both the Upgrading section and the FAQ, so pin it.
+# The README says so in Upgrading and docs/FAQ.md says it again, so pin it.
 jq 'del(.hooks.UserPromptSubmit[0].hooks[0])' "$SETT" >"$SETT.t" && mv "$SETT.t" "$SETT"
 is "sanity: one hook deleted by hand" 3 "$(ours)"
 inst
@@ -2444,9 +2444,11 @@ plug_case "installed and current: nothing to do" "nothing to do" \
     'mkdir -p "$P/plugins/cache/session-kit/session-kit/'"$REL"'"; printf "{\"enabledPlugins\":{\"session-kit@session-kit\":true}}" > "$P/settings.json"'
 # The pair that gives the comparison its discriminating power: one cache below the release
 # and one above it must reach different branches. Before this, both said "stale" and both
-# advised an update, which cannot help the one that is already ahead.
+# advised an update, which cannot help the one that is already ahead. The ahead case seeds a
+# literal 9.9.9 rather than plugin.json's version, because at a release commit plugin.json
+# equals the newest heading and a fixture seeded from it silently becomes the current case.
 plug_case "installed ahead of the release: says ahead, not stale" "ahead of" \
-    'mkdir -p "$P/plugins/cache/session-kit/session-kit/'"$WANT"'"; printf "{\"enabledPlugins\":{\"session-kit@session-kit\":true}}" > "$P/settings.json"'
+    'mkdir -p "$P/plugins/cache/session-kit/session-kit/9.9.9"; printf "{\"enabledPlugins\":{\"session-kit@session-kit\":true}}" > "$P/settings.json"'
 plug_case "installed behind the release: still says stale" "but the newest release is" \
     'mkdir -p "$P/plugins/cache/session-kit/session-kit/0.0.1"; printf "{\"enabledPlugins\":{\"session-kit@session-kit\":true}}" > "$P/settings.json"'
 # A pin outranks the release, because it is the only version that install can receive.
@@ -2737,7 +2739,7 @@ is "a mismatched tag is named by all three checks" "3" \
    "$(printf '%s\n' "$OUT" | grep -c 'on tag v9.9.9')"
 ( cd "$TPC" \
   && jq '.version="9.9.9"' .claude-plugin/plugin.json > pj.tmp && mv pj.tmp .claude-plugin/plugin.json \
-  && perl -pi -e 's/^## Unreleased$/## 9.9.9/' CHANGELOG.md \
+  && perl -pi -e 's/^## (Unreleased|[0-9][0-9.]*)$/## 9.9.9/ && ++$done unless $done' CHANGELOG.md \
   && perl -pi -e 's/v0\.[0-9]+\.[0-9]+/v9.9.9/g if /--branch |claude-session-kit(\.git#|@)/' README.md )
 OUT=$(tag_pairing "$TPC")
 is "an aligned tag passes the pairing" "" "$OUT"

@@ -97,3 +97,11 @@ still have open is not treated as news.
   takes them back out when you uninstall, and backs the file up before either.
 - Never deletes your notes or handoff folders, not even on uninstall.
 - Never sends anything anywhere. There is no network code in the kit.
+
+## When it talks first
+
+The kit stays quiet unless something needs a decision or a fix. You will see a message
+without asking in a few cases: a failed self-check after a Claude Code update, a note that
+the deployed kit and the plugin are on different releases, and, in a development checkout, a
+note that a pull changed files the installer deploys. Each names the command that resolves
+it, at most once a day. [FLOWS.md](FLOWS.md) lists them all.
