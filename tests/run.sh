@@ -2602,6 +2602,24 @@ bare=$(cd "$ROOT" && grep -rnE '(^|[^:a-zA-Z0-9_-])/(handoff|rename-session|sess
     . --exclude-dir=.git --exclude=CHANGELOG.md 2>/dev/null || true)
 is "no un-namespaced slash-form survives" "" "$bare"
 
+# --- the observation record's own rule ---------------------------------------
+#
+# Numbers are never reused, and nothing checked it. claude-memory-kit had two entries
+# both numbered O13 and the collision survived review, because a duplicate reads
+# perfectly well in isolation: it is only wrong in relation to an entry elsewhere in
+# the file, and a decision citing that number silently gains a second referent.
+
+echo "docs/INTERNALS.md numbering:"
+dupes=$(grep -oE '^### O[0-9]+' "$ROOT/docs/INTERNALS.md" | sort | uniq -d | tr '\n' ' ')
+is "every observation number is used once" "" "$dupes"
+# Control: the same pattern has to report a duplicate that is really there, or a
+# pattern matching nothing would report a clean record either way.
+dup_fixture=$(mktemp)
+printf '### O1. a\n### O1. b\n' > "$dup_fixture"
+seen=$(grep -oE '^### O[0-9]+' "$dup_fixture" | sort | uniq -d | wc -l | tr -d ' ')
+is "and the check can see one when it is there" "1" "$seen"
+rm -f "$dup_fixture"
+
 # --- result -----------------------------------------------------------------
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
