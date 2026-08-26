@@ -6,9 +6,11 @@
 > read [FLOWS.md](FLOWS.md).
 
     Observed against:   Claude Code 2.1.220, 2.1.221, 2.1.222 · 2.1.234 (O16–O22) · 2.1.237 (O23)
+                        2.0.43 through 2.1.246, every published build (O24–O25)
     Platform:           macOS, VS Code extension
-    Last re-verified:   2026-08-12 · 2026-08-19 (O16–O20) · 2026-08-20 (O21–O23)
-    Needs to re-run:    jq, a live VS Code session, read access to the extension bundle
+    Last re-verified:   2026-08-12 · 2026-08-19 (O16–O20) · 2026-08-20 (O21–O23) · 2026-08-26 (O24–O25)
+    Needs to re-run:    jq, a live VS Code session, read access to the extension bundle;
+                        O24 and O25 need only npm and grep, and run on any machine
 
 Nothing here is promised by Claude Code. Every entry is an observation with a date, a
 version, the surface it was read from, and how it was checked, so it can be re-run rather
@@ -282,7 +284,9 @@ open, in place.
    explicit record for a dead or imported session
 2. pid-file `name` with `nameSource` absent: explicit, but ephemeral
 3. transcript last **`ai-title`**
-4. `firstPrompt` / first user message
+4. the **first user message** in the transcript, parsed here rather than read from a
+   field; Claude Code keeps its own `firstPrompt` in the same title record, and the kit
+   has never used it
 5. pid-file `name` with `nameSource` of `derived` or `auto`: `documents-41`, which tells
    you nothing and collides across concurrent sessions
 6. short id
@@ -296,6 +300,47 @@ rename the tab is already displaying.
 then take the last of that type.
 
 ## Version behaviour
+
+### O24. The names the resolver reads have three different floors
+
+    First observed:     2026-08-26 · 2.0.43 through 2.1.246
+    Surface:            published npm package
+    How:                installed published versions into a temporary prefix and read the
+                        shipped executable with `grep -a`, binary search for each boundary,
+                        seven probes each; a control string matched none of the same builds
+    Needs:              npm, grep
+    Checkable:          automated (`tests/version-probe.sh <version>`)
+
+| name | first build carrying it | last build without |
+|---|---|---|
+| `customTitle`, `firstPrompt`, `summary` | at least as old as 2.0.43 | none found |
+| `aiTitle` | 2.1.74 | 2.1.73 |
+| `nameSource` | 2.1.121 | 2.1.120 |
+
+Only `nameSource` binds, and O25 says why. The rest are older than any build a person is
+likely to be running, so ranks 1, 4 and 6 of O13 have no version question at all.
+
+This reads strings out of the shipped executable rather than watching a session write one.
+That dates a name rather than describing what it does: finding it shows the build carries the
+name, not that it writes it in the shape the resolver expects. Absence is the strong signal.
+
+### O25. Builds before 2.1.121 never wrote `nameSource`, so its absence means nothing there
+
+    First observed:     2026-08-26 · 2.1.120 and 2.1.121
+    Surface:            published npm package
+    How:                the O24 probe, narrowed to the boundary
+    Needs:              npm, grep
+    Checkable:          manual for the consequence (an old build has to run a session to
+                        show what it writes into a pid file), automated for the boundary
+
+O7 says an absent `nameSource` marks a session a person named, and O13 rank 2 reads it that
+way. On a build that never writes the field, every session looks that way, including the
+derived `documents-3e` ones, which would then outrank the transcript's own titles.
+
+**What is not established** is whether those builds wrote a pid-file `name` at all. Settling it
+needs an old build running a real session, which is why the consequence is marked manual. The
+resolver does not wait for that answer: each pid file records the build that wrote it, so rank
+2 is skipped when that build predates this floor, which is correct either way.
 
 ### O14. Version skew between layers is the normal state
 
