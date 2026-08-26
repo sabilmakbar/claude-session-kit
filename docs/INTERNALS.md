@@ -6,11 +6,13 @@
 > read [FLOWS.md](FLOWS.md).
 
     Observed against:   Claude Code 2.1.220, 2.1.221, 2.1.222 · 2.1.234 (O16–O22) · 2.1.237 (O23)
-                        2.0.0 through 2.1.246, every published build (O24–O25)
+                        2.0.0 through 2.1.246, every published build (O24–O25) · 2.1.246 (O26–O28)
     Platform:           macOS, VS Code extension
-    Last re-verified:   2026-08-12 · 2026-08-19 (O16–O20) · 2026-08-20 (O21–O23) · 2026-08-26 (O24–O25)
+    Last re-verified:   2026-08-12 · 2026-08-19 (O16–O20) · 2026-08-20 (O21–O23)
+                        2026-08-26 (O21, O24–O28)
     Needs to re-run:    jq, a live VS Code session, read access to the extension bundle;
-                        O24 and O25 need only npm and grep, and run on any machine
+                        O24 and O25 need only npm and grep, and run on any machine; O26 and
+                        O28 need the claude CLI and a throwaway HOME, O27 only git
 
 Nothing here is promised by Claude Code. Every entry is an observation with a date, a
 version, the surface it was read from, and how it was checked, so it can be re-run rather
@@ -444,9 +446,104 @@ of an installed plugin.
     Needs:              nothing
     Checkable:          automated
 
-The marketplace clone tracks the repo's default branch, so a release tag cannot change what the
-plugin path delivers. `plugin tag` creates a `<name>--v<version>` tag and validates that
-plugin.json agrees with the marketplace entry, but nothing on the install side consumes that tag.
+`plugin tag` creates a `<name>--v<version>` tag and validates that plugin.json agrees with the
+marketplace entry, but nothing on the install side consumes that tag.
+
+**Superseded by O26 on the part that matters.** This record concluded that the marketplace clone
+tracks the default branch and a release tag therefore cannot change what the plugin path
+delivers. The first half is the default, not a limit: the ref rides in the source string rather
+than in a flag, so `--help` could not show it and reading `--help` alone was not enough.
+
+### O26. A plugin source pins to a tag through the source string, not through a flag
+
+    First observed:     2026-08-26 · 2.1.246
+    Surface:            plugin marketplace add, settings.json, the plugin cache
+    How:                in a throwaway HOME, `marketplace add sabilmakbar/claude-memory-kit@v0.3.0`
+                        then `plugin install`: the cache directory came out `0.3.0` while the
+                        default branch declares 0.3.2, so the ref decided the content. The
+                        source schema was also read out of the binary with `grep -a`
+    Needs:              the claude CLI, jq
+    Checkable:          manual (needs a throwaway HOME; nothing here scripts a marketplace)
+    Supersedes:         O20, which read `--help` on both commands, found no ref flag, and
+                        concluded that a release tag could not change what the plugin delivers
+
+The schema shipped inside the binary carries `ref`, described as "Git branch or tag to use (e.g.
+\"main\", \"v1.0.0\"). Defaults to repository default branch.", and an optional `sha`, "Specific
+commit SHA to use". The pin is enforced rather than advisory: `sha_pin_mismatch` sits beside
+"Failed to checkout commit" as a real failure path. Source types are `npm`, `url`, `github`,
+`git-subdir`, `archive`, `command`, plus `local` and `git`.
+
+Three forms, all tested:
+
+| form | result |
+|---|---|
+| `owner/repo@v0.3.0` | pins; clone at a detached HEAD, cache named from the tag |
+| `https://github.com/owner/repo.git#v0.3.0` | pins, same |
+| `https://github.com/owner/repo.git@v0.3.0` | fails; git is handed the whole string as a repository name |
+
+The `@` form works on the owner/repo shorthand and not on a URL, which is worth knowing because
+the failure names a repository nobody typed.
+
+The pin persists into `extraKnownMarketplaces` in `settings.json` and into
+`plugins/known_marketplaces.json`, both as `{"source":"github","repo":...,"ref":"v0.3.0"}`.
+Moving it is a re-add: `marketplace add ...@v0.3.1` rewrote the ref, after which `plugin update`
+reported "updated from 0.3.0 to 0.3.1". While pinned, `plugin update` refuses to go past the pin
+and answers "already at the latest version", which is the pin working rather than a failure.
+
+The pin only counts when `marketplace add` writes it. Adding a `ref` by hand to an
+already-materialised entry in `settings.json` is ignored: `plugins/known_marketplaces.json`
+keeps the old source, `marketplace update` re-fetches the default branch, and `plugin update`
+declines. The re-add is the only pin that takes.
+
+The probe used the memory-kit marketplace because it was the one to hand; the mechanism is
+Claude Code's, not a property of either kit, and the schema was read from the same binary this
+kit runs against.
+
+### O28. `plugin update` compares version labels, never content
+
+    First observed:     2026-08-26 · 2.1.246
+    Surface:            plugin update, plugin uninstall, the plugin cache
+    How:                in a throwaway HOME with a `directory` marketplace pointed at a clone:
+                        edited a skill in the tree, `plugin update` answered "already at the
+                        latest version" and the edit was absent from the cache copy while
+                        present in the tree; `plugin uninstall` then `plugin install` refreshed
+                        the same cache directory in place; bumping plugin.json in the tree made
+                        `plugin update` pull into a new directory
+    Needs:              the claude CLI, git
+    Checkable:          manual (needs a throwaway HOME)
+
+The update decision reads the two version labels and stops there. Content that changes under an
+unchanged label never propagates: an unpinned user mid-cycle stays on whatever the branch held
+when their label last moved, and a contributor's skill edits never reach the loaded copy, even
+though a `directory` marketplace reads the tree in place, because the harness loads the cache
+copy rather than the marketplace (O17).
+
+Two refresh paths work. Reinstalling under the same label rewrites the cache directory in place,
+which with O22's "uninstall keeps the cache" makes `plugin uninstall` then `plugin install` the
+development loop for skills. Bumping the label pulls into a new directory, which works but
+leaves a directory per bump behind. CONTRIBUTING.md carries the loop.
+
+### O27. Unpinned, the plugin cache is labelled with a version that was never released
+
+    First observed:     2026-08-26 · 2.1.246
+    Surface:            the plugin cache
+    How:                compared `~/.claude/plugins/cache/session-kit/session-kit/0.3.1` against
+                        `git archive v0.3.1`: 6 files differ, including `install.sh` and
+                        `tests/run.sh`, and the directory's mtime is 4 hours older than the tag
+                        itself. Control: the same comparison against v0.3.0 differs in 16
+    Needs:              git
+    Checkable:          automated
+
+The cache is keyed by plugin.json's version (O17), the marketplace serves the default branch, and
+plugin.json carries the next release's number for the whole of a development cycle. So an add
+performed mid-cycle files the default branch's content under a number that has not shipped, and
+the number stays on that directory afterwards.
+
+Any static label inside a moving branch mislabels; when the bump happens only decides which
+number is wrong. Bumping at release instead would put the same lie on an already-published
+number, which is worse. Pinning the source is what makes the label true (O26), and this is why
+`install.sh` compares the plugin against the pin or the newest release rather than against the
+version in this checkout.
 
 ### O21. `marketplace add` and `plugin install` are a lookup, not a chain
 
@@ -456,7 +553,10 @@ plugin.json agrees with the marketplace entry, but nothing on the install side c
                         `extraKnownMarketplaces` at 1 with `enabledPlugins` at 0 and no cache
                         directory; `plugin install session-kit@session-kit` with no marketplace
                         added failed with "not found in marketplace"; `plugin install <path>`
-                        failed with "not found in any configured marketplace"
+                        failed with "not found in any configured marketplace". Re-verified
+                        2026-08-26 from the other side: `extraKnownMarketplaces` written by
+                        hand left `marketplace update` reporting "Available marketplaces: "
+                        empty, with no clone on disk
     Needs:              jq
     Checkable:          automated
 
@@ -465,6 +565,13 @@ resolves names inside registries already configured, and will not take a repo or
 bootstrap itself. `plugin@marketplace` is a lookup key, not a source. That is why both commands
 appear in every install instruction, and why the installer distinguishes "nothing installed" from
 "one command left".
+
+Writing the settings key by hand is therefore not an install path. The entry becomes a real
+marketplace only once something reconciles it into `plugins/known_marketplaces.json` with a
+clone, which happens when a session starts, not when a `plugin` subcommand runs. Until then
+`plugin install` reports the plugin missing and `marketplace update` lists no marketplaces at
+all. `marketplace add` does both halves in one step, which is why the install instructions name
+it rather than a settings edit.
 
 Refreshing has two rungs, and they are separate commands: `marketplace update [name]` re-fetches
 the registry clone, so a newly published plugin becomes visible, while `plugin update

@@ -2427,13 +2427,36 @@ plug_case() {   # <label> <expected substring> [seed commands]
     drop_home
 }
 WANT=$(jq -r .version "$ROOT/.claude-plugin/plugin.json")
+# The version the installer now compares against: the newest RELEASED heading, not
+# plugin.json. Those differ for the whole of every development cycle, which is exactly when
+# the old comparison called a current install stale.
+REL=$(grep -E '^## ' "$ROOT/CHANGELOG.md" | grep -viE 'unreleased' | head -1 \
+    | sed 's/^## *//;s/[^0-9.].*//')
+pinned_settings() {  # <ref> -> settings.json naming a pinned marketplace, plugin enabled
+    printf '{"enabledPlugins":{"session-kit@session-kit":true},"extraKnownMarketplaces":{"session-kit":{"source":{"source":"github","repo":"sabilmakbar/claude-session-kit","ref":"%s"}}}}' "$1"
+}
 plug_case "no plugin and no marketplace: both commands" "claude plugin marketplace add"
 plug_case "marketplace known, plugin missing: one command left" "One command left" \
     'printf "{\"extraKnownMarketplaces\":{\"session-kit\":{\"source\":{\"source\":\"github\",\"repo\":\"x/y\"}}}}" > "$P/settings.json"'
 plug_case "installed but behind: offers /plugin update" "/plugin update session-kit@session-kit" \
     'mkdir -p "$P/plugins/cache/session-kit/session-kit/0.0.1"; printf "{\"enabledPlugins\":{\"session-kit@session-kit\":true}}" > "$P/settings.json"'
 plug_case "installed and current: nothing to do" "nothing to do" \
+    'mkdir -p "$P/plugins/cache/session-kit/session-kit/'"$REL"'"; printf "{\"enabledPlugins\":{\"session-kit@session-kit\":true}}" > "$P/settings.json"'
+# The pair that gives the comparison its discriminating power: one cache below the release
+# and one above it must reach different branches. Before this, both said "stale" and both
+# advised an update, which cannot help the one that is already ahead.
+plug_case "installed ahead of the release: says ahead, not stale" "ahead of" \
     'mkdir -p "$P/plugins/cache/session-kit/session-kit/'"$WANT"'"; printf "{\"enabledPlugins\":{\"session-kit@session-kit\":true}}" > "$P/settings.json"'
+plug_case "installed behind the release: still says stale" "but the newest release is" \
+    'mkdir -p "$P/plugins/cache/session-kit/session-kit/0.0.1"; printf "{\"enabledPlugins\":{\"session-kit@session-kit\":true}}" > "$P/settings.json"'
+# A pin outranks the release, because it is the only version that install can receive.
+plug_case "pinned and matching: names the pin, not the release" "matching the marketplace pin" \
+    'mkdir -p "$P/plugins/cache/session-kit/session-kit/'"$REL"'"; pinned_settings v'"$REL"' > "$P/settings.json"'
+plug_case "pinned and behind: names the pin as the target" "the marketplace pin is" \
+    'mkdir -p "$P/plugins/cache/session-kit/session-kit/0.0.1"; pinned_settings v'"$REL"' > "$P/settings.json"'
+# A pin naming a branch carries no version, so the release is still the better answer.
+plug_case "pinned to a branch: falls back to the release" "the newest release" \
+    'mkdir -p "$P/plugins/cache/session-kit/session-kit/0.0.1"; pinned_settings main > "$P/settings.json"'
 # The state read is read-only, so --dry-run must still report it. A preview that omits the
 # half you are missing is the least useful moment to omit it.
 new_home; P="$FAKE/.claude"; mkdir -p "$P"
@@ -2442,6 +2465,97 @@ printf '%s' "$OUT" | grep -q "claude plugin install session-kit@session-kit" \
     && ok "installer, --dry-run still reports the plugin state" \
     || bad "installer, --dry-run reports plugin state" "the install command" "$(printf '%s' "$OUT" | tail -3)"
 drop_home
+
+# The pin against the checkout. Four states, and the two silent ones matter as much as the
+# two that speak: a report that fires when the halves agree is noise, and one that stays
+# quiet when they disagree is the silent divergence this exists to catch.
+PC=$(mktemp -d)/c
+git clone -q "$ROOT" "$PC" 2>/dev/null
+cp "$ROOT/install.sh" "$PC/install.sh"
+pin_prefix() {   # <ref> -> a prefix dir whose settings.json pins the marketplace to <ref>
+    local d; d=$(mktemp -d)/.claude; mkdir -p "$d"
+    printf '{"extraKnownMarketplaces":{"session-kit":{"source":{"source":"github","repo":"sabilmakbar/claude-session-kit","ref":"%s"}}}}' \
+        "$1" > "$d/settings.json"
+    printf '%s' "$d"
+}
+pin_run() {      # <prefix> -> installer output from the tagged clone
+    ( cd "$PC" && CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$1" \
+        bash install.sh --dry-run 2>&1 </dev/null )
+}
+git -C "$PC" tag -f v9.9.9 >/dev/null 2>&1
+d=$(pin_prefix v0.3.1); OUT=$(pin_run "$d")
+printf '%s' "$OUT" | grep -q 'pinned to v0.3.1 but this checkout is v9.9.9' \
+    && ok "pin against a different tag is reported" \
+    || bad "pin against a different tag is reported" "the disagreement" "silence"
+printf '%s' "$OUT" | grep -q 'marketplace add sabilmakbar/claude-session-kit@v9.9.9' \
+    && ok "…naming the command that agrees them" \
+    || bad "names the marketplace add command" "the command" "absent"
+rm -rf "$(dirname "$d")"
+# Same pin, checkout now ON that tag: must go quiet.
+git -C "$PC" tag -d v9.9.9 >/dev/null 2>&1; git -C "$PC" tag -f v0.3.1 >/dev/null 2>&1
+d=$(pin_prefix v0.3.1)
+printf '%s' "$(pin_run "$d")" | grep -q 'pinned to' \
+    && bad "a matching pin stays quiet" "silence" "a report" \
+    || ok "a pin matching the checkout tag says nothing"
+rm -rf "$(dirname "$d")"
+# Pinned, checkout between tags: the silent-divergence case, because a development version
+# has no number for the halves check to compare.
+git -C "$PC" tag -d v0.3.1 >/dev/null 2>&1
+d=$(pin_prefix v0.3.1)
+printf '%s' "$(pin_run "$d")" | grep -q 'not on a tag' \
+    && ok "a pin on an untagged checkout is reported" \
+    || bad "a stale pin on an untagged checkout is reported" "the gap" "silence"
+rm -rf "$(dirname "$d")"
+# A pin below an existing cache directory is silently out of effect, because the newest
+# directory is the one that loads. The report must name the blocking directory; and without
+# the pin, the same cache shape must get the development-shaped message instead, or the
+# check cannot tell a dead pin from an ordinary dev tree.
+git -C "$PC" tag -f v0.3.1 >/dev/null 2>&1
+d=$(mktemp -d)/.claude
+mkdir -p "$d/plugins/cache/session-kit/session-kit/0.3.1" \
+         "$d/plugins/cache/session-kit/session-kit/0.3.2"
+printf '{"enabledPlugins":{"session-kit@session-kit":true},"extraKnownMarketplaces":{"session-kit":{"source":{"source":"github","repo":"sabilmakbar/claude-session-kit","ref":"v0.3.1"}}}}' \
+    > "$d/settings.json"
+OUT=$(pin_run "$d")
+printf '%s' "$OUT" | grep -q 'pin has no effect' \
+    && ok "a pin below the cache names the blocking directory" \
+    || bad "a pin below the cache is reported" "the dead pin" "silence"
+printf '%s' "$OUT" | grep -q "cache/session-kit/session-kit/0.3.2" \
+    && ok "…and the directory it names is the newer one" \
+    || bad "the blocking directory is named" "the 0.3.2 path" "absent"
+rm -rf "$(dirname "$d")"
+# The same cache, unpinned: the development-shaped message, no dead-pin talk, and the nudge
+# to pin, because the checkout is on a tag and the marketplace source is remote.
+d=$(mktemp -d)/.claude
+mkdir -p "$d/plugins/cache/session-kit/session-kit/0.3.2"
+printf '{"enabledPlugins":{"session-kit@session-kit":true},"extraKnownMarketplaces":{"session-kit":{"source":{"source":"github","repo":"sabilmakbar/claude-session-kit"}}}}' \
+    > "$d/settings.json"
+OUT=$(pin_run "$d")
+printf '%s' "$OUT" | grep -q 'pin has no effect' \
+    && bad "unpinned cache is not a dead pin" "the dev-shaped message" "a dead-pin report" \
+    || ok "unpinned, the same cache is not called a dead pin"
+printf '%s' "$OUT" | grep -q 'the marketplace is not pinned' \
+    && ok "a remote unpinned marketplace gets the pin command" \
+    || bad "remote unpinned marketplace is nudged" "the pin command" "silence"
+rm -rf "$(dirname "$d")"
+# A directory marketplace is the development install: nudging it to pin would end the edit
+# loop, so the nudge must stay quiet there while everything else still speaks.
+d=$(mktemp -d)/.claude
+mkdir -p "$d/plugins/cache/session-kit/session-kit/0.3.2"
+printf '{"enabledPlugins":{"session-kit@session-kit":true},"extraKnownMarketplaces":{"session-kit":{"source":{"source":"directory","path":"/tmp/x"}}}}' \
+    > "$d/settings.json"
+OUT=$(pin_run "$d")
+printf '%s' "$OUT" | grep -q 'the marketplace is not pinned' \
+    && bad "a directory marketplace stays unnudged" "silence" "a pin nudge" \
+    || ok "a directory marketplace is never nudged to pin"
+rm -rf "$(dirname "$d")"
+
+# No pin: nothing to say, on the same untagged checkout that just spoke.
+d=$(mktemp -d)/.claude; mkdir -p "$d"; printf '{}' > "$d/settings.json"
+printf '%s' "$(pin_run "$d")" | grep -q 'not on a tag\|pinned to' \
+    && bad "no pin, no pin report" "silence" "a report" \
+    || ok "no pin, no pin report"
+rm -rf "$(dirname "$d")" "$(dirname "$PC")"
 
 # --- the documented update command must work in every host ------------------------
 #
@@ -2578,6 +2692,56 @@ if grep -qiE '^## unreleased' "$ROOT/CHANGELOG.md"; then
 else
     is "plugin.json matches the newest released changelog entry" "$newest" "$pv"
 fi
+
+# The README pins the install to a tag. A tag left behind by a release sends every new
+# reader to an old version, and nothing else in the repo would notice: the commands still
+# work, they just install the wrong thing. Pinned to the newest released heading, the same
+# value install.sh compares the plugin against.
+rt=$(grep -oE '(--branch |claude-session-kit(\.git#|@))v[0-9]+\.[0-9]+\.[0-9]+' "$ROOT/README.md" \
+    | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sort -u)
+# Without this the check passes by silence the moment the commands are reworded.
+[ "$(printf '%s\n' "$rt" | grep -c .)" -ge 1 ] \
+    && ok "the README install names a pinned tag" \
+    || bad "the README install names a pinned tag" "a vX.Y.Z" "none found"
+is "the README tag matches the newest release" "v$REL" "$rt"
+
+# The shipping moment is the tag, so that is where the pairing must hold: plugin.json, the
+# README pin and the newest changelog heading all equal to the tag itself. Checked only when
+# HEAD sits exactly on a tag, because mid-cycle those values legitimately differ from any tag
+# and a release PR carrying the next number must not trip anything before its tag exists.
+# tests.yml runs the suite on tag pushes with fetch-tags, which is what arms this on the one
+# run that matters. Returns the mismatches, empty when paired or when HEAD is untagged.
+tag_pairing() {  # <root> -> mismatch lines on stdout
+    local root="$1" t tv pv rel rt
+    t=$(git -C "$root" describe --tags --exact-match HEAD 2>/dev/null) || return 0
+    tv=${t#v}
+    pv=$(jq -r .version "$root/.claude-plugin/plugin.json" 2>/dev/null)
+    rel=$(grep -E '^## ' "$root/CHANGELOG.md" 2>/dev/null | grep -viE 'unreleased' | head -1 \
+        | sed 's/^## *//;s/[^0-9.].*//')
+    rt=$(grep -oE '(--branch |claude-session-kit(\.git#|@))v[0-9]+\.[0-9]+\.[0-9]+' "$root/README.md" 2>/dev/null \
+        | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sort -u | tr '\n' ' ' | sed 's/ $//')
+    [ "$pv" = "$tv" ]  || echo "plugin.json says $pv on tag $t"
+    [ "$rel" = "$tv" ] || echo "newest changelog heading is $rel on tag $t"
+    [ "$rt" = "$t" ]   || echo "README pins '$rt' on tag $t"
+}
+OUT=$(tag_pairing "$ROOT")
+is "tag pairing holds, or HEAD is between tags where it does not apply" "" "$OUT"
+# The fixture pair, in a clone so the real checkout is never tagged by a test. A tag that
+# nothing else agrees with must be named three times; align all three files and the same tag
+# must pass. Without the second half, a tag_pairing that always complains would also pass.
+TPC=$(mktemp -d)/c
+git clone -q "$ROOT" "$TPC" 2>/dev/null
+git -C "$TPC" -c user.email=t@e -c user.name=t tag -f v9.9.9 >/dev/null 2>&1
+OUT=$(tag_pairing "$TPC")
+is "a mismatched tag is named by all three checks" "3" \
+   "$(printf '%s\n' "$OUT" | grep -c 'on tag v9.9.9')"
+( cd "$TPC" \
+  && jq '.version="9.9.9"' .claude-plugin/plugin.json > pj.tmp && mv pj.tmp .claude-plugin/plugin.json \
+  && perl -pi -e 's/^## Unreleased$/## 9.9.9/' CHANGELOG.md \
+  && perl -pi -e 's/v0\.[0-9]+\.[0-9]+/v9.9.9/g if /--branch |claude-session-kit(\.git#|@)/' README.md )
+OUT=$(tag_pairing "$TPC")
+is "an aligned tag passes the pairing" "" "$OUT"
+rm -rf "$(dirname "$TPC")"
 
 # source: "./" ships the whole repo, so every tracked file is distributed. A literal home
 # path leaks the author's username and breaks on every other machine. This is exactly what

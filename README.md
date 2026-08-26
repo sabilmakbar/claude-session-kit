@@ -16,7 +16,7 @@ to build.
 The docs go shortest first. New here? [HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) tells the
 whole story in plain words, and it is the only one you need in order to use the kit.
 [FLOWS.md](docs/FLOWS.md) is the next step down: diagrams of what runs when, with the
-specifics the plain-language version leaves out. The three `docs/DESIGN-*.md` files are
+specifics the plain-language version leaves out. The `docs/DESIGN-*.md` files are
 decision records, for anyone changing the kit rather than running it: every rule in the
 code with the reason it exists. Underneath those,
 [INTERNALS.md](docs/INTERNALS.md) is about Claude Code rather than about this kit: what was
@@ -94,16 +94,41 @@ diagram, and spells out what the installer leaves alone: another tool's hooks, e
 does not wire, and every setting that is not a hook.
 
 ```bash
-git clone https://github.com/sabilmakbar/claude-session-kit.git ~/claude-session-kit
+git clone --branch v0.3.1 https://github.com/sabilmakbar/claude-session-kit.git ~/claude-session-kit
 ~/claude-session-kit/install.sh     # --dry-run to preview, --uninstall to remove
 ```
 
 Then add the skills, which ship as a Claude Code plugin:
 
 ```bash
-claude plugin marketplace add sabilmakbar/claude-session-kit
+claude plugin marketplace add sabilmakbar/claude-session-kit@v0.3.1
 claude plugin install session-kit@session-kit
 ```
+
+**Why the tag appears twice.** Both halves carry a version, and both default to tracking the
+default branch rather than a release. Leave the tag off and you get whatever `main` held that
+day, filed under the version number `main` declared, which is the next release's number rather
+than one that shipped. Pinning both halves to the same tag is what makes the version this kit
+reports mean something.
+
+To move to a newer release, repeat those commands with the new tag, then
+`claude plugin update session-kit@session-kit`. Pin forward, not back: a pin below a version
+already in the plugin cache has no effect, because the newest cached version is the one that
+loads, and `install.sh` names the blocking directory when it sees that state.
+
+Two forms pin the plugin half: `owner/repo@v0.3.1` as above, or
+`https://github.com/sabilmakbar/claude-session-kit.git#v0.3.1`. Writing `@v0.3.1` on the URL
+form does not work, and fails with a git error that names a repository nobody asked for.
+
+Tracking `main` instead is a reasonable choice if you want unreleased work. `install.sh` says
+so when it sees it, rather than calling your install stale.
+
+Editing `extraKnownMarketplaces` in `settings.json` by hand is not an install path. Claude Code
+reads that key when a session starts, so `claude plugin install` reports the plugin missing
+until then. Use `claude plugin marketplace add`.
+
+Re-running `install.sh` from an untagged checkout leaves any pin in place, so the skills stay
+on the pinned tag while the hooks and libraries move ahead of it.
 
 **Both steps are needed, and neither works alone.** The plugin gives you the skills, namespaced
 `/session-kit:rename-session` and so on, so they cannot collide with a skill of the same name from
