@@ -6,25 +6,8 @@ Claude Code keeps every conversation as a session, and sessions pile up. Tabs na
 "documents-41" that could be anything. A session you reopen after a week that
 remembers nothing about where you left off. Half-finished work stranded on the
 other laptop. This kit fixes those: it gives sessions real names, leaves you a note
-for next time, and moves or splits sessions cleanly.
-
-It is plain bash plus `jq`. Moving sessions between machines also needs `shasum` or
-`sha256sum`, one of which is stock on macOS and Linux; without one, export and import
-refuse rather than write a bundle nothing can verify. No server, no telemetry, nothing
-to build.
-
-The docs go shortest first. New here? [HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) tells the
-whole story in plain words, and it is the only one you need in order to use the kit.
-[FLOWS.md](docs/FLOWS.md) is the next step down: diagrams of what runs when, with the
-specifics the plain-language version leaves out. The `docs/DESIGN-*.md` files are
-decision records, for anyone changing the kit rather than running it: every rule in the
-code with the reason it exists. Underneath those,
-[INTERNALS.md](docs/INTERNALS.md) is about Claude Code rather than about this kit: what was
-observed about undocumented behaviour the kit leans on, each entry dated, versioned, and
-written so you can re-run the check yourself.
-
-If something is broken rather than unclear, go straight to
-[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+for next time, and moves or splits sessions cleanly. It is plain bash plus `jq`, no
+server, no telemetry, nothing to build.
 
 ## What you get
 
@@ -45,12 +28,16 @@ And four optional background hooks:
 - **version-check** re-tests the kit after Claude Code updates.
 
 The hooks stay quiet unless they have something useful to say. If anything inside
-them fails, they do nothing. They cannot break a session.
+them fails, they do nothing. They cannot break a session. The one exception exists
+because of the quiet: if the kit itself stops working, you get a single line saying
+so, once a day until it is fixed, because otherwise a broken kit and a healthy one
+would look exactly the same.
 
-There is one exception to the quiet, and it exists because of the quiet: if the kit
-itself stops working, you get a single line saying so and what to do about it, once a
-day until it is fixed. Otherwise a broken kit and a healthy one would look exactly the
-same, since both say nothing.
+Reading order for the rest of the docs: [HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) is the
+plain-language story and the only one you need to use the kit. [FLOWS.md](docs/FLOWS.md)
+has the diagrams, the `docs/DESIGN-*.md` records hold every rule with its reason, and
+[INTERNALS.md](docs/INTERNALS.md) records what was observed about Claude Code itself.
+Something broken rather than unclear: [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 ## What it looks like
 
@@ -66,24 +53,24 @@ b93f5d21-...   live   documents-41
 Three tab-separated columns: the session id, whether a process is still running for it, and
 the best name the kit can find. `documents-41` is what an unnamed session looks like, and is
 what `/session-kit:rename-session` fixes. `cs_find "billing importer"` finds one by name fragment or id
-prefix, and if neither matches, by what the session actually contains, so a session whose
-title describes the whole arc of the work is still findable by a specific thing you did in
-it. Both only read; nothing here writes.
+prefix, and if neither matches, by what the session actually contains. Both only read;
+nothing here writes.
 
 The titles are made up. Yours are your own work, so treat `cs_list` output the way you would
 treat a list of your branch names.
 
-## Install
+## Getting started
 
-**Read this first: the installer edits `~/.claude/settings.json`.** That file is your global
-Claude Code config, shared with every other tool you have installed. The kit writes to it
-because registering a hook is the only way to make the reminders arrive on their own.
-
-The test suite runs first and refuses to install if anything fails, the merge into your file
-only ever adds, and `--dry-run` shows the plan before anything happens. The exact content added
+**The installer edits `~/.claude/settings.json`**, your global Claude Code config, because
+registering a hook is the only way to make the reminders arrive on their own. The test
+suite runs first and refuses to install if anything fails, the merge into your file only
+ever adds, and `--dry-run` shows the plan before anything happens. The exact content added
 is in [settings.snippet.json](settings.snippet.json), and
-[docs/FLOWS.md](docs/FLOWS.md#writing-settingsjson-at-install-time) has the whole sequence as a
+[docs/FLOWS.md](docs/FLOWS.md#writing-settingsjson-at-install-time) has the sequence as a
 diagram.
+
+You need `jq`. Moving sessions between machines also needs `shasum` or `sha256sum`.
+Details in [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
 
 ```bash
 git clone --branch v0.4.0 https://github.com/sabilmakbar/claude-session-kit.git ~/claude-session-kit
@@ -97,125 +84,71 @@ claude plugin marketplace add sabilmakbar/claude-session-kit@v0.4.0
 claude plugin install session-kit@session-kit
 ```
 
-**Both steps are needed.** The plugin brings the skills, `/session-kit:rename-session` and so
-on. `install.sh` brings the hooks and the libraries those skills source. Order does not matter.
+**Both steps are needed.** The plugin brings the skills, `/session-kit:rename-session` and
+so on. `install.sh` brings the hooks and the libraries those skills source. Order does not
+matter. The tag appears twice on purpose: without it, both halves track the default branch
+instead of a release ([docs/DESIGN-install.md](docs/DESIGN-install.md), D1).
 
-**The tag appears twice on purpose.** Without it, both halves track the default branch instead
-of a release. To upgrade, repeat the commands with the new tag, then
-`claude plugin update session-kit@session-kit`. Pin forward, not back. The reasons and the
-traps are in [docs/DESIGN-install.md](docs/DESIGN-install.md), D1.
+The timing knobs (when drift checks start, how often they repeat, the handoff pickup
+window) live in `~/.claude/session-kit/config`, seeded at install with every default
+shown, and upgrades never overwrite your edits.
 
-Re-running the installer is always safe, and is also how you upgrade (see below).
-
-To confirm it works, run the same listing against the installed copy:
+### Check it worked
 
 ```bash
 . ~/.claude/session-kit/core/sessions.sh && cs_list
 ```
 
-You should get the three columns shown above. If nothing prints, or the name column comes
-back empty, the usual cause is a missing `jq` (see
-[docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)). The three skills are available in any new
-session; `/session-kit:rename-session` is the quickest one to try.
+You should get the three columns shown above. If nothing prints, the usual cause is a
+missing `jq`. The hooks start working in your next session; wiring them is the last thing
+the installer does, so a run that breaks earlier never reaches `settings.json` at all.
+`settings.json.session-kit.bak` is a one-step undo of the last real change to your
+settings.
 
-The hooks start working in your next session. Wiring them is the **last** thing the installer
-does, after everything else is installed and checked, so a run that breaks earlier never
-reaches `settings.json` at all.
+For a deeper check any time, or after a Claude Code update,
+`bash ~/.claude/session-kit/tests/smoke.sh` tests the installed kit against your real
+`~/.claude`, read-only. `0 failed` is the answer you want, and the last line records which
+Claude Code versions the kit has passed against on this machine. To report a failure, add
+`--report`: that output is built to be published, carrying versions and check names but
+never a title or a path.
 
-`settings.json.session-kit.bak` is a one-step undo of the last real change to your settings.
-To get your config as it would be without this kit, run `./install.sh --uninstall` instead,
-which removes our hooks and leaves everything else exactly as it is.
-
-## Upgrading
-
-Two halves, matching the two halves of the install. Re-run the installer for the hooks
-and the libraries:
+### Upgrading
 
 ```bash
 git -C ~/claude-session-kit pull && ~/claude-session-kit/install.sh
-```
-
-Then update the plugin for the skills:
-
-```bash
 claude plugin update session-kit@session-kit      # restart to apply
 ```
 
-The CLI form works in every host. If `claude` is not on your `PATH`, or you want the VS Code
-routes, see [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
+To move between releases, repeat the install commands with the new tag. Pin forward, not
+back. You do not have to track any of this yourself: the installer says which state you
+are in and names the command that fixes it, halves on different releases are reported once
+a day, and a pull that leaves the deployed tree behind is reported the moment it happens.
+If `claude` is not on your `PATH`, see [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
 
-You do not have to track any of this yourself. The installer says which of the four plugin
-states you are in and names the command that fixes it. Halves on different releases are
-reported once a day, and a pull that leaves the deployed tree behind is reported the moment
-it happens ([docs/FLOWS.md](docs/FLOWS.md)).
+Only kit code is replaced: your notes, handoff folders, transcripts, and your edited
+`config` are left as they are. If you deleted one of the four hooks, re-running the
+installer puts it back, because "install" means "wire my hooks". Use `--uninstall` if you
+want them gone.
 
-Only kit code is replaced: your notes, handoff folders, transcripts, and your edited `config`
-are left as they are. If you deleted one of the four hooks, re-running the installer puts it
-back, because "install" means "wire my hooks". Use `--uninstall` if you want them gone.
+## How it stays safe
 
-## Is it working?
-
-If something seems off, or Claude Code has just updated itself, run the smoke suite. It
-checks the installed kit against your real `~/.claude` rather than against fixtures, and
-it only reads:
-
-```
-$ bash ~/.claude/session-kit/tests/smoke.sh
-smoke: 23 transcripts
-
-layout
-  ok   every transcript is at the expected depth
-  ok   a Claude Code version is readable from the pid-files
-...
-13 passed, 0 failed, 0 skipped
-verified against Claude Code 2.1.222
-```
-
-`0 failed` is the answer you want, and the last line tells you which Claude Code versions
-the kit has passed against on this machine. A skip is fine; it means a check had no
-data to run against.
-
-Every passing run adds that version to the record, so once you have been through a few
-updates the line grows into a span, `verified against Claude Code 2.1.222 to 2.1.231
-(6 versions)`. The count is there because the ends were tested and the middle was not.
-The kit only speaks up on a version that is not in the record, so keeping several
-sessions open on different versions costs you nothing.
-
-If something fails, [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) works through it by
-symptom. To report it, paste the report rather than your terminal:
-
-```bash
-bash ~/.claude/session-kit/tests/smoke.sh --report
-```
-
-That report is built to be published. It carries versions, check names, and the first eight
-characters of a session id, never a title or a path. The terminal output is deliberately not
-redacted, because seeing the offending title is what makes a failure debuggable on your own
-machine.
-
-## Good to know
-
-- Works with bash and zsh. The full test suite runs under both, on macOS and Linux.
-- The kit reads Claude Code's own files but only ever appends to them. It never
-  rewrites a transcript and never touches VS Code's database.
+- The kit reads Claude Code's own files but only ever appends to them. It never rewrites
+  a transcript and never touches VS Code's database.
 - Your notes live in their own folder. Uninstalling the kit never deletes them.
-- The timing knobs (when drift checks start, how often they repeat, the handoff
-  pickup window) live in `~/.claude/session-kit/config`, seeded at install with
-  every default shown. To change one, uncomment its line and edit the number;
-  upgrades never overwrite your edits. If you work from a checkout without
-  installing, copy `config.example` to that path yourself.
-- Claude Code's internals are undocumented and can change. The kit degrades safely
-  when they do: the hooks go quiet instead of erroring, any command you run yourself
-  warns that internals may have moved and names the check to run, and if the
-  background re-test comes back failing you get told in your next session rather than
-  having to go looking.
-- Built and verified on Claude Code 2.1.x, with the real-data suite also passing
-  over transcripts written by 20 different 2.1.x versions. Anything older is
-  untested. That is only a starting point though: once the kit has run its check on
-  your machine it keeps its own list of the versions that passed there, and the
+- Claude Code's internals are undocumented and can change. The kit degrades safely when
+  they do: the hooks go quiet instead of erroring, commands warn that internals may have
+  moved and name the check to run, and a failing background re-test is reported in your
+  next session rather than waiting to be found.
+- Works with bash and zsh; the full suite runs under both, on macOS and Linux. Verified
+  by hand against Claude Code 2.1.x, and a weekly workflow probes every published build,
+  2.0.0 through 2.1.246 so far, for the names this kit reads. Once the kit has run its
+  check on your machine, it keeps its own list of versions that passed there, and the
   warning goes by your list.
 
 ## FAQ
+
+Something broken rather than unclear:
+[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) is symptom-first.
 
 **Why doesn't the tab title change right after a rename?**
 The tab reads its title when it opens. Close and reopen the tab to see the new
@@ -252,36 +185,30 @@ warns you until it is looked at.
 ./install.sh --uninstall
 ```
 
-Removes the installed libraries and the knobs config (it configures nothing once
-the kit is gone), along with any bare skill copy an older version of the kit left
-in `~/.claude/skills`. The skills themselves come from the plugin, so remove that
-separately, and **order matters**:
+Removes the installed libraries and the knobs config, along with any bare skill copy an
+older version of the kit left in `~/.claude/skills`, and takes its four hooks back out of
+`settings.json`, backing the file up first. Hooks it did not put there are not touched.
+It leaves your notes (`~/.claude/session-notes/`), your handoff folders
+(`~/.claude/session-handoffs/`), and every transcript exactly where they are. The kit
+never owned those.
+
+The skills come from the plugin, so remove that separately, and **order matters**:
 
 ```bash
 claude plugin uninstall session-kit@session-kit    # first
 claude plugin marketplace remove session-kit       # only after
 ```
 
-Reversed, the uninstall fails: it resolves the plugin through the marketplace and cannot find it
-once that entry is gone. Neither command removes the plugin's cache directory under
-`~/.claude/plugins/cache/session-kit/`, and `claude plugin prune` does not either, since it only
-handles auto-installed dependencies. Delete it by hand if you want the disk space back. It leaves your notes
-(`~/.claude/session-notes/`), your handoff folders (`~/.claude/session-handoffs/`),
-and every transcript exactly where they are. The kit never owned those. It also
-takes its four hooks back out of `settings.json`, backing the file up first, so
-nothing is left firing at a path that no longer exists. Hooks it did not put
-there are not touched.
+Reversed, the uninstall fails: it resolves the plugin through the marketplace and cannot
+find it once that entry is gone. Neither command removes the plugin's cache under
+`~/.claude/plugins/cache/session-kit/`; delete it by hand if you want the disk space back.
 
 ## Working on the kit
 
-```bash
-bash tests/run.sh          # the fixture suite, runs on any machine, gates every install
-bash tests/smoke.sh        # the real-data suite, checks the kit against your ~/.claude
-```
-
-`run.sh` is the gate. `smoke.sh` passes or skips depending on the machine it runs on, which
-is the point, so it is never a required check. The design records under `docs/` say why
-every rule exists; read them before changing one.
+`bash tests/run.sh` is the gate: `install.sh` runs it first and refuses to deploy a tree
+it rejects. [CONTRIBUTING.md](CONTRIBUTING.md) is the way in, including the development
+loop for skills. The design records under `docs/` say why every rule exists; read the one
+covering what you are changing before you change it.
 
 ## Related projects
 
