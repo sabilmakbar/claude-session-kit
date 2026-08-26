@@ -79,19 +79,11 @@ treat a list of your branch names.
 Claude Code config, shared with every other tool you have installed. The kit writes to it
 because registering a hook is the only way to make the reminders arrive on their own.
 
-Two gates run before anything is written, and neither is good intentions.
-
-The test suite runs first. If it fails, nothing is installed. Then your `settings.json` is
-checked: if it cannot be parsed, or the part the kit merges into is not the shape it expects,
-the run stops and names the key to fix. Nothing is deployed and your file is untouched.
-
-Past those, the merge only ever adds, and a run that fails later puts the previous contents
-back. `--dry-run` shows you the plan without doing any of it.
-
-The exact content added is in [settings.snippet.json](settings.snippet.json).
+The test suite runs first and refuses to install if anything fails, the merge into your file
+only ever adds, and `--dry-run` shows the plan before anything happens. The exact content added
+is in [settings.snippet.json](settings.snippet.json), and
 [docs/FLOWS.md](docs/FLOWS.md#writing-settingsjson-at-install-time) has the whole sequence as a
-diagram, and spells out what the installer leaves alone: another tool's hooks, events this kit
-does not wire, and every setting that is not a hook.
+diagram.
 
 ```bash
 git clone --branch v0.3.1 https://github.com/sabilmakbar/claude-session-kit.git ~/claude-session-kit
@@ -105,43 +97,15 @@ claude plugin marketplace add sabilmakbar/claude-session-kit@v0.3.1
 claude plugin install session-kit@session-kit
 ```
 
-**Why the tag appears twice.** Both halves carry a version, and both default to tracking the
-default branch rather than a release. Leave the tag off and you get whatever `main` held that
-day, filed under the version number `main` declared, which is the next release's number rather
-than one that shipped. Pinning both halves to the same tag is what makes the version this kit
-reports mean something.
+**Both steps are needed.** The plugin brings the skills, `/session-kit:rename-session` and so
+on. `install.sh` brings the hooks and the libraries those skills source. Order does not matter.
 
-To move to a newer release, repeat those commands with the new tag, then
-`claude plugin update session-kit@session-kit`. Pin forward, not back: a pin below a version
-already in the plugin cache has no effect, because the newest cached version is the one that
-loads, and `install.sh` names the blocking directory when it sees that state.
+**The tag appears twice on purpose.** Without it, both halves track the default branch instead
+of a release. To upgrade, repeat the commands with the new tag, then
+`claude plugin update session-kit@session-kit`. Pin forward, not back. The reasons and the
+traps are in [docs/DESIGN-install.md](docs/DESIGN-install.md), D1.
 
-Two forms pin the plugin half: `owner/repo@v0.3.1` as above, or
-`https://github.com/sabilmakbar/claude-session-kit.git#v0.3.1`. Writing `@v0.3.1` on the URL
-form does not work, and fails with a git error that names a repository nobody asked for.
-
-Tracking `main` instead is a reasonable choice if you want unreleased work. `install.sh` says
-so when it sees it, rather than calling your install stale.
-
-Editing `extraKnownMarketplaces` in `settings.json` by hand is not an install path. Claude Code
-reads that key when a session starts, so `claude plugin install` reports the plugin missing
-until then. Use `claude plugin marketplace add`.
-
-Re-running `install.sh` from an untagged checkout leaves any pin in place, so the skills stay
-on the pinned tag while the hooks and libraries move ahead of it.
-
-**Both steps are needed, and neither works alone.** The plugin gives you the skills, namespaced
-`/session-kit:rename-session` and so on, so they cannot collide with a skill of the same name from
-somewhere else. `install.sh` gives you the hooks and the libraries those skills source: install
-only the plugin and the skills appear but fail on first use, because the library they source is
-not there yet. Order does not matter.
-
-If an older version of this kit installed the skills into `~/.claude/skills`, a re-run of
-`install.sh` retires those copies, because a bare copy shadows the namespaced one. It only removes
-a copy it recognises as its own; anything written by another tool is reported and left alone.
-
-After the suite passes, the installer checks that the copy it just installed loads. Re-running
-it is safe.
+Re-running the installer is always safe, and is also how you upgrade (see below).
 
 To confirm it works, run the same listing against the installed copy:
 
@@ -158,19 +122,9 @@ The hooks start working in your next session. Wiring them is the **last** thing 
 does, after everything else is installed and checked, so a run that breaks earlier never
 reaches `settings.json` at all.
 
-`settings.json.session-kit.bak` holds the version from just before the last real change, so
-you can undo that change yourself at any time.
-
-It is a one-step undo, not a permanent copy of your pre-kit config. An ordinary re-install
-changes nothing, so it leaves the backup alone. When the kit's own set of hooks does change,
-the next install backs up the file as it stood that day, our hooks included.
-
-To get your config as it would be without this kit, do not reach for that file. Run
-`./install.sh --uninstall`, which takes out our four hooks and leaves everything else
-exactly as it is, including hooks you added after installing.
-
-To drop a single hook afterwards, delete its line from `settings.json`; to remove all four,
-run `./install.sh --uninstall`.
+`settings.json.session-kit.bak` is a one-step undo of the last real change to your settings.
+To get your config as it would be without this kit, run `./install.sh --uninstall` instead,
+which removes our hooks and leaves everything else exactly as it is.
 
 ## Upgrading
 
@@ -187,42 +141,16 @@ Then update the plugin for the skills:
 claude plugin update session-kit@session-kit      # restart to apply
 ```
 
-`/plugin update session-kit@session-kit` may do the same thing where your host provides that
-slash command. An interactive CLI session does provide it, confirmed on 2.1.246. The VS Code
-extension does not, and neither does `claude -p`, so the CLI form above is the one that works
-in every host. If `claude` is not on your `PATH` it ships inside the extension:
+The CLI form works in every host. If `claude` is not on your `PATH`, or you want the VS Code
+routes, see [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
 
-```bash
-~/.vscode/extensions/anthropic.claude-code-*/resources/native-binary/claude plugin update session-kit@session-kit
-```
+You do not have to track any of this yourself. The installer says which of the four plugin
+states you are in and names the command that fixes it. Halves on different releases are
+reported once a day, and a pull that leaves the deployed tree behind is reported the moment
+it happens ([docs/FLOWS.md](docs/FLOWS.md)).
 
-Use `~/.vscode-server/extensions/...` on a remote or WSL host.
-
-In VS Code there are two other routes, both verified in the extension manifest rather than
-guessed: the command palette entry **Claude Code: Install Plugin**, and a URI handler, which
-accepts `vscode://anthropic.claude-code/install-plugin?plugin=<name>&marketplace=<owner/repo>`.
-Neither is a chat slash command.
-
-You do not have to remember which half is behind. The installer reads the plugin's
-installed version and says which of the four cases you are in: not installed at all,
-marketplace added but plugin missing, installed and matching this checkout, or installed
-at an older version with the update command to run. `--dry-run` reports it too.
-
-You do not have to remember to re-run it either. A pull only updates the checkout, and the
-deployed tree at `~/.claude/session-kit` stays on whatever the last install put there, which
-used to go unnoticed until something behaved like the old version. From a development
-checkout the kit now says so at the moment the gap opens: `git pull`, a branch switch and
-`git pull --rebase` each check whether the files the installer deploys have changed since the
-deployed commit, and print the differing files and `bash install.sh` if they have. It compares
-content rather than version labels, so a pull that only touched docs or the test suite stays
-quiet. Nothing to enable: the hooks live in `guardrail/`, which `install.sh` already points
-`core.hooksPath` at, so they arrive with the pull that brings them.
-
-It runs the test suite first and refuses to install if anything fails, so a tree the tests
-reject never reaches `~/.claude/session-kit`. Only kit code is replaced: your notes, handoff
-folders, transcripts, and your edited `config` are left as they are. In `settings.json` it
-adds only what is missing, so nothing is duplicated and no other tool's hook is touched.
-One thing to know: if you deleted one of the four hooks, re-running the installer puts it
+Only kit code is replaced: your notes, handoff folders, transcripts, and your edited `config`
+are left as they are. If you deleted one of the four hooks, re-running the installer puts it
 back, because "install" means "wire my hooks". Use `--uninstall` if you want them gone.
 
 ## Is it working?
