@@ -6,7 +6,7 @@
 > read [FLOWS.md](FLOWS.md).
 
     Observed against:   Claude Code 2.1.220, 2.1.221, 2.1.222 · 2.1.234 (O16–O22) · 2.1.237 (O23)
-                        2.0.43 through 2.1.246, every published build (O24–O25)
+                        2.0.0 through 2.1.246, every published build (O24–O25)
     Platform:           macOS, VS Code extension
     Last re-verified:   2026-08-12 · 2026-08-19 (O16–O20) · 2026-08-20 (O21–O23) · 2026-08-26 (O24–O25)
     Needs to re-run:    jq, a live VS Code session, read access to the extension bundle;
@@ -303,22 +303,33 @@ then take the last of that type.
 
 ### O24. The names the resolver reads have three different floors
 
-    First observed:     2026-08-26 · 2.0.43 through 2.1.246
+    First observed:     2026-08-26 · 2.0.0 through 2.1.246
     Surface:            published npm package
     How:                installed published versions into a temporary prefix and read the
-                        shipped executable with `grep -a`, binary search for each boundary,
-                        seven probes each; a control string matched none of the same builds
+                        shipped executable with `grep -a`. The boundaries below come from
+                        every published build in `tests/versions-checked.tsv`, 283 of them,
+                        rather than from a bisect; a control string matched none of the
+                        same builds
     Needs:              npm, grep
     Checkable:          automated (`tests/version-probe.sh <version>`)
 
-| name | first build carrying it | last build without |
+| string in the executable | first build carrying it | newest build without |
 |---|---|---|
-| `customTitle`, `firstPrompt`, `summary` | at least as old as 2.0.43 | none found |
-| `aiTitle` | 2.1.74 | 2.1.73 |
+| `custom-title` | 2.0.41 | 2.0.37 |
+| `ai-title` | 2.1.74 | 2.1.73 |
 | `nameSource` | 2.1.121 | 2.1.120 |
 
-Only `nameSource` binds, and O25 says why. The rest are older than any build a person is
-likely to be running, so ranks 1, 4 and 6 of O13 have no version question at all.
+These are the strings the probe greps, which for the first two are record types rather than
+the fields beside them: a `custom-title` line carries a `customTitle` value, and only the
+type was measured. 2.0.38 through 2.0.40 are absent from the index, so 2.0.37 is the newest
+build found without `custom-title` rather than the one directly below the floor.
+`firstPrompt` and `summary` are not probed, and the resolver reads neither, so this record
+says nothing about them.
+
+Only `nameSource` binds, and O25 says why. `custom-title` and `ai-title` have floors too,
+both older than any build a person is likely to be running, so ranks 1 and 3 of O13 carry a
+version question that never fires in practice. Ranks 4 and 6 have none at all: the first
+user message is parsed here, and the short id is the kit's own.
 
 This reads strings out of the shipped executable rather than watching a session write one.
 That dates a name rather than describing what it does: finding it shows the build carries the
@@ -326,9 +337,11 @@ name, not that it writes it in the shape the resolver expects. Absence is the st
 
 ### O25. Builds before 2.1.121 never wrote `nameSource`, so its absence means nothing there
 
-    First observed:     2026-08-26 · 2.1.120 and 2.1.121
+    First observed:     2026-08-26 · 2.0.0 through 2.1.246
     Surface:            published npm package
-    How:                the O24 probe, narrowed to the boundary
+    How:                the O24 probe. All 174 indexed builds at or below 2.1.120 lack the
+                        field and all 109 from 2.1.121 up carry it, with no exception in
+                        either direction
     Needs:              npm, grep
     Checkable:          manual for the consequence (an old build has to run a session to
                         show what it writes into a pid file), automated for the boundary
