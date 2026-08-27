@@ -136,7 +136,7 @@ _cs_plugin_version() {
 # What is wrong, as "<key> <sentence>", or non-zero when the kit is healthy. The key
 # names the fault so a jq notice today cannot suppress a failed-check notice today.
 cs_degraded_reason() {
-    local kv="" pv=""
+    local kv="" pv="" src=""
     command -v jq >/dev/null 2>&1 || {
         printf 'jq jq is missing, so the kit is doing nothing at all. Install it (brew install jq) and it picks straight back up.'
         return 0; }
@@ -153,8 +153,18 @@ cs_degraded_reason() {
             printf 'halves the skills are at %s while the hooks and libraries are at %s. Bring the skills up: claude plugin update session-kit@session-kit' \
                 "$pv" "$kv"
         else
-            printf 'halves the hooks and libraries are at %s while the skills are at %s. Bring them up: re-run install.sh from your checkout' \
-                "$kv" "$pv"
+            # install.sh records its source checkout in .kit-source, so the advice can
+            # name a runnable path. Named only while its install.sh still exists: a
+            # checkout that has moved or been deleted falls back to the generic wording,
+            # because advice naming a dead path is worse than advice naming no path.
+            src=$(cat "$(_cs_state_dir)/.kit-source" 2>/dev/null) || src=""
+            if [ -n "$src" ] && [ -x "$src/install.sh" ]; then
+                printf 'halves the hooks and libraries are at %s while the skills are at %s. Bring them up: re-run %s/install.sh' \
+                    "$kv" "$pv" "$src"
+            else
+                printf 'halves the hooks and libraries are at %s while the skills are at %s. Bring them up: re-run install.sh from your checkout' \
+                    "$kv" "$pv"
+            fi
         fi
         return 0; }
     return 1

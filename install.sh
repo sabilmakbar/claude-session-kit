@@ -500,6 +500,17 @@ else
     printf '%s\n' "${kv:-unknown}" > "$DEST_LIB/.kit-version"
     echo "kit version: ${kv:-unknown}"
 fi
+# Record where the kit was installed from, so hook-side notices can name a real path
+# instead of "your checkout". Only a git checkout is recorded: the deployed tree also
+# carries install.sh (for re-verification and self-uninstall), and recording $DEST_LIB
+# would make the advice circular, so a rerun from the deployed tree keeps the last
+# checkout on record. The reader checks the recorded install.sh still exists before
+# naming it, which covers a checkout that has since moved or been deleted.
+if [ "$DRY" -eq 1 ]; then
+    printf '  would: record the install source in %s\n' "$DEST_LIB/.kit-source"
+elif git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+    printf '%s\n' "$ROOT" > "$DEST_LIB/.kit-source"
+fi
 
 # --- hooks -------------------------------------------------------------------
 #
