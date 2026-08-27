@@ -535,6 +535,29 @@ printf 'v0.3.2\n' >"$KVD/.kit-version"
     && ok "the two directions produce different advice" \
     || bad "the two directions differ" "two sentences" "the same sentence both ways"
 
+# With the install source on record, the notice upgrades "your checkout" to the real
+# path. A recorded path whose install.sh is gone must fall back to the generic wording,
+# not name a dead path. Back to the kit-behind state, the only direction that names
+# install.sh.
+SRCD="$FAKE/src-checkout"; mkdir -p "$SRCD"; : >"$SRCD/install.sh"; chmod +x "$SRCD/install.sh"
+printf 'v0.3.0\n' >"$KVD/.kit-version"
+printf '%s\n' "$SRCD" >"$KVD/.kit-source"
+OUT=$(halves)
+case "$OUT" in
+    *"re-run $SRCD/install.sh")
+        ok "install source on record: the notice names the real path" ;;
+    *)  bad "install source on record: the notice names the real path" "re-run $SRCD/install.sh" "${OUT:-silence}" ;;
+esac
+rm -rf "$SRCD"
+OUT=$(halves)
+case "$OUT" in
+    *"from your checkout")
+        ok "recorded source gone: the generic wording returns" ;;
+    *)  bad "recorded source gone: the generic wording returns" "your checkout" "${OUT:-silence}" ;;
+esac
+rm -f "$KVD/.kit-source"
+printf 'v0.3.2\n' >"$KVD/.kit-version"
+
 # Nothing removes an old cache directory, so a machine that has updated keeps several and
 # the newest is the one the harness loads. Paired with the case above, where 0.3.1 alone
 # against a 0.3.2 kit did report.
@@ -1898,6 +1921,9 @@ kvf="$IPREFIX/session-kit/.kit-version"
     || bad "install records the kit version" "non-empty .kit-version" "missing or empty"
 [ "$(tr -d '[:space:]' < "$kvf" 2>/dev/null)" != "" ] \
     && ok "…and it is not blank" || bad "…and it is not blank" "a value" "whitespace only"
+# The halves notice can only name a real path if the installer says where it ran from.
+# This install ran from the checkout, so the record must be exactly that path.
+is "install records the install source" "$ROOT" "$(cat "$IPREFIX/session-kit/.kit-source" 2>/dev/null)"
 # kit-drift.sh watches a hard-coded path list, and a file added to the installer but not to
 # that list would go unwatched in silence. Rather than parse install.sh, this compares the
 # list against what the installer just actually deployed above.
@@ -1910,9 +1936,10 @@ covered(){ # covered <repo-relative-path> — 0 if kit-drift.sh watches it
 }
 unwatched=""
 while IFS= read -r rel; do
-    # config is seeded from config.example and never overwritten; .kit-version is written by
-    # the installer itself. Neither comes from a tracked file, so neither can be diffed.
-    case "$rel" in config|.kit-version) continue;; esac
+    # config is seeded from config.example and never overwritten; .kit-version and
+    # .kit-source are written by the installer itself. None comes from a tracked file,
+    # so none can be diffed.
+    case "$rel" in config|.kit-version|.kit-source) continue;; esac
     covered "$rel" || unwatched="$unwatched $rel"
 done < <(cd "$IPREFIX/session-kit" && find . -type f | sed 's|^\./||')
 is "kit-drift.sh watches every file the installer deploys" "" "$unwatched"
