@@ -114,16 +114,28 @@ never a title or a path.
 
 ### Upgrading
 
+`<kit>` below is your clone of this repo, wherever you put it. The install commands above
+used `~/claude-session-kit`, but any path works.
+
 ```bash
-git -C ~/claude-session-kit pull && ~/claude-session-kit/install.sh
-claude plugin update session-kit@session-kit      # restart to apply
+git -C <kit> fetch --tags
+git -C <kit> checkout <new tag>   # plain `git pull` cannot move a clone pinned to a tag
+<kit>/install.sh
 ```
 
-To move between releases, repeat the install commands with the new tag. Pin forward, not
-back. You do not have to track any of this yourself: the installer says which state you
-are in and names the command that fixes it, halves on different releases are reported once
-a day, and a pull that leaves the deployed tree behind is reported the moment it happens.
-If `claude` is not on your `PATH`, see [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
+Then the skills half:
+
+```bash
+claude plugin marketplace add sabilmakbar/claude-session-kit@<new tag>   # moves the pin
+claude plugin update session-kit@session-kit                             # restart to apply
+```
+
+The updater's "restart to apply" message covers the skills only. The hooks and the
+libraries they source move with `install.sh`, never with `claude plugin update`. Run the
+installer first: it says which state each half is in and names any command still needed.
+Skip a half and the kit reports the split once a day rather than leaving you to notice.
+Pin forward, not back. If `claude` is not on your `PATH`, see
+[docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
 
 Only kit code is replaced: your notes, handoff folders, transcripts, and your edited
 `config` are left as they are. If you deleted one of the four hooks, re-running the
