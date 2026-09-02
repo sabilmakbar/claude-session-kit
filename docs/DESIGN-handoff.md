@@ -318,3 +318,39 @@ sentence.
 The one thing it cannot protect against is a note that is **inadequate**, which is why the
 verification decision, still unnumbered in the narrative above, points the check at the note
 itself and runs it while the original session is still resumable and the fix is still cheap.
+
+## D6. SendMessage is a doorbell, never the carrier
+
+Claude Code can deliver a message straight into another running session. The obvious question is
+whether a handoff should travel that way instead of through a folder on disk. It should not, and
+the reasons are structural rather than stylistic.
+
+**No script here can reach it.** `SendMessage` is a tool the model invokes inside a turn, not a
+command on `PATH`. `split.sh`, `claim.sh`, `release.sh` and all four hooks are shell processes with
+no channel to the harness, so the only layer that could ever call it is a `SKILL.md`. A carrier the
+kit's own code cannot write to is not a carrier.
+
+**Its addressing is neither unique nor stable.** It addresses peers by the derived `documents-NN`
+name. `INTERNALS.md` O6 records two concurrent sessions holding `documents-7c`, and the naming
+record notes that a process restart regenerates the name regardless of who set it.
+
+**It only reaches sessions that are running.** The handoff's main case is a session that does not
+exist yet, which is the whole reason for the folder, `claim.sh` and the pickup hook.
+
+**It is not present in every host.** Headless and scheduled runs may not have it, and the kit's
+floor is bash plus `jq` (same reasoning as naming `claude plugin update` over `/plugin`).
+
+So the folder stays the record, and `SendMessage` gets the one job the folder cannot do: telling a
+session that is **already open** that a handoff is waiting, since the pickup hook only fires on a
+session's first message. The message carries the folder path, never the note body, and grants
+nothing on arrival: the receiver still reads the `.handed` record and claims from it. That is what
+makes a misdelivered doorbell cost nothing, which in turn is what makes it safe to build on an
+identifier we have recorded as ambiguous.
+
+The addressing is still handled rather than trusted: peers resolve through
+`~/.claude/sessions/<pid>.json` to a `sessionId` and then to a real title, so a collision is
+detected and asked about instead of being a coin flip.
+
+**What would reopen this.** A stable, unique session address exposed by Claude Code. That removes
+the second objection but not the first, third or fourth, so the folder would remain the record even
+then.
