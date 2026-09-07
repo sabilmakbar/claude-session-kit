@@ -49,9 +49,11 @@ halves that version on their own: `install.sh` deploys the hooks and libraries, 
 `claude plugin install` caches the skills. Updating one and not the other leaves them on
 different releases, which works but is not what you asked for. The line names the half that
 is behind and the single command that brings it up, either
-`claude plugin update session-kit@session-kit` or re-running `install.sh` from your
-checkout. It says nothing while your checkout sits between releases, because a development
-tree has no release number for the plugin to match.
+`claude plugin update session-kit@session-kit` or a re-run of `install.sh`, named by the
+checkout path the installer recorded, with plain "re-run install.sh from your checkout" as
+the wording only when that recorded path no longer exists. It says nothing while your
+checkout sits between releases, because a development tree has no release number for the
+plugin to match.
 
 ## A skill is missing, or fails the moment it runs
 
