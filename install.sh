@@ -29,6 +29,21 @@ done
 
 run() { [ "$DRY" -eq 1 ] && { printf '  would: %s\n' "$*"; return 0; }; "$@"; }
 
+# The bare skill copies an older version left in ~/.claude/skills, as name|dir pairs.
+SKILL_PAIRS=("rename-session|$DEST_SKILL" "session-note|$DEST_SKILL_NOTE" "handoff|$DEST_SKILL_HANDOFF")
+
+# kit_owns_skill <name> <dir> — is <dir>/SKILL.md one this kit wrote? Both halves must
+# hold: frontmatter naming the skill exactly, and a source line naming a library under
+# session-kit/. Either alone is too weak to delete on: a user's own skill can share the
+# name, and any note that mentions this kit contains the string "session-kit". Every
+# copy this kit ever shipped carries both, whether its paths were rewritten or not.
+kit_owns_skill() {
+    [ -f "$2/SKILL.md" ] || return 1
+    awk -v n="name: $1" 'NR==1 { if ($0 != "---") exit; next }
+        /^---$/ { exit } $0 == n { found=1 } END { exit !found }' "$2/SKILL.md" \
+        && grep -qE 'session-kit/(core|naming|notes|handoff)/[a-z]+\.sh' "$2/SKILL.md"
+}
+
 # --- settings.json hook wiring ------------------------------------------------
 #
 # This kit wires its own hooks and removes them again, matching claude-memory-kit:
@@ -290,8 +305,20 @@ if [ "$UNINSTALL" -eq 1 ]; then
     hooks_unwire
     # Note DATA (~/.claude/session-notes) is deliberately left alone: it is user
     # content, not kit code, which is also why it lives outside $DEST_LIB.
-    run rm -rf "$DEST_LIB" "$DEST_SKILL" "$DEST_SKILL_NOTE" "$DEST_SKILL_HANDOFF"
-    echo "removed $DEST_LIB and any bare skill copy an older version left behind"
+    run rm -rf "$DEST_LIB"
+    echo "removed $DEST_LIB"
+    # Only a bare skill copy that passes the same ownership check install uses. A dir of
+    # that name holding anything else is the user's, and survives with a word about it.
+    for pair in "${SKILL_PAIRS[@]}"; do
+        name="${pair%%|*}"; dest="${pair##*|}"
+        [ -e "$dest" ] || continue
+        if kit_owns_skill "$name" "$dest"; then
+            run rm -rf "$dest"
+            echo "removed the bare skill copy an older version left at $dest"
+        else
+            echo "skipped $dest — not written by this kit, so it was left alone"
+        fi
+    done
     echo "  the skills themselves come from the plugin. Remove it in this order:"
     echo "      claude plugin uninstall session-kit@session-kit"
     echo "      claude plugin marketplace remove session-kit"
@@ -446,7 +473,7 @@ done
 # skills pointing at ~/.claude/session-kit regardless of the prefix. That variable
 # exists for the test harness, which never sources a skill.
 
-for pair in "rename-session|$DEST_SKILL" "session-note|$DEST_SKILL_NOTE" "handoff|$DEST_SKILL_HANDOFF"; do
+for pair in "${SKILL_PAIRS[@]}"; do
     name="${pair%%|*}"; dest="${pair##*|}"
 
     # A relative source path ships a skill that silently cannot find its libraries.
@@ -459,10 +486,11 @@ for pair in "rename-session|$DEST_SKILL" "session-note|$DEST_SKILL_NOTE" "handof
     fi
 
     [ -f "$dest/SKILL.md" ] || continue
-    # Ours always name a library under .../session-kit/. A copy without that marker
-    # belongs to the user or another tool: report it and leave it. Losing someone else's
-    # file is worse than the shadowing, so say what the shadowing costs instead.
-    if grep -q 'session-kit' "$dest/SKILL.md"; then
+    # Ours always carry our frontmatter name and a library path under session-kit/
+    # (kit_owns_skill). A copy without both belongs to the user or another tool: report
+    # it and leave it. Losing someone else's file is worse than the shadowing, so say
+    # what the shadowing costs instead.
+    if kit_owns_skill "$name" "$dest"; then
         run rm -rf "$dest"
         echo "retired the bare copy at $dest — the plugin supersedes it as /session-kit:$name"
     else

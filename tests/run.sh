@@ -2423,6 +2423,32 @@ grep -q 'someone elses skill' "$P/skills/session-note/SKILL.md" \
 printf '%s' "$OUT" | grep -q 'shadows the plugin' \
     && ok "…and the run says it shadows the plugin" \
     || bad "…and the run says it shadows the plugin" "a shadowing warning" "$OUT"
+
+# Mentioning the kit is not owning: a user's own skill that talks ABOUT session-kit
+# under our name used to pass a bare `grep session-kit` and be deleted.
+mkdir -p "$P/skills/rename-session"
+printf -- '---\nname: rename-session\n---\nmy wrapper; see the session-kit README\n' \
+    > "$P/skills/rename-session/SKILL.md"
+CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$P" bash "$ROOT/install.sh" >/dev/null 2>&1
+[ -f "$P/skills/rename-session/SKILL.md" ] \
+    && ok "a skill that only mentions session-kit is not taken for ours" \
+    || bad "a skill that only mentions session-kit is kept" "kept" "deleted"
+
+# Uninstall used to rm -rf every skill dir of our names unconditionally. It must apply
+# the same check: the user's handoff survives, a copy of ours goes, and the run names
+# what it skipped.
+mkdir -p "$P/skills/handoff"
+printf -- '---\nname: handoff\n---\nmy own handoff skill\n' > "$P/skills/handoff/SKILL.md"
+cp "$ROOT/skills/session-note/SKILL.md" "$P/skills/session-note/SKILL.md"
+OUT=$(CLAUDE_SESSION_KIT_PREFIX="$P" bash "$ROOT/install.sh" --uninstall 2>&1)
+grep -q 'my own handoff skill' "$P/skills/handoff/SKILL.md" 2>/dev/null \
+    && ok "uninstall leaves a user-owned skills/handoff alone" \
+    || bad "uninstall leaves a user-owned skills/handoff alone" "kept" "deleted"
+printf '%s' "$OUT" | grep -q "skipped $P/skills/handoff" \
+    && ok "…and reports it as skipped" || bad "…and reports it as skipped" "a skipped line" "$OUT"
+[ -e "$P/skills/session-note" ] \
+    && bad "uninstall still removes a bare copy of ours" "absent" "present" \
+    || ok "uninstall still removes a bare copy of ours"
 drop_home
 
 # --- the plugin's own SessionStart hook reports a missing kit ------------------
