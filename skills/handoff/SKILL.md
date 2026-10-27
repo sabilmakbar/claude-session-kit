@@ -53,8 +53,10 @@ seven of them had piled up in one directory before this line said where.
 > this skill; `install.sh` ships what the skill runs. Say so plainly and name the fix:
 > `install.sh` from the kit checkout, then a new session. Do not work around it.
 
-Ambiguous refs refuse with candidates — pick with the user, never guess. Tell the
-user where the bundle is and that they move it themselves (scp, drive, anything).
+Ambiguous refs refuse with candidates — pick with the user, never guess. The bundle
+lands in `~/.claude/session-handoffs/exports/`, owner-only, unless `-o <dir>` says
+otherwise; keep it out of a repo, since it holds the raw transcripts. Tell the user
+where the bundle is and that they move it themselves (scp, drive, anything).
 On the other machine: `handoff/import.sh <bundle>` — it verifies checksums before
 touching anything and prints this note at the end.
 

@@ -11,7 +11,8 @@
 # valuable file in the bundle).
 #
 # Output: session-handoff-<stamp>.tar.gz containing manifest.json, sessions/<id>.jsonl
-# (original UUID filenames — no rename dance on import), notes/, files/.
+# (original UUID filenames — no rename dance on import), notes/, files/. It lands in
+# ~/.claude/session-handoffs/exports unless -o names another directory.
 
 set -euo pipefail
 
@@ -37,7 +38,11 @@ _ho_sha256() {  # <file> -> 64-hex digest, or hard stop. The VALUE is validated,
     printf '%s\n' "$d"
 }
 
-OUT_DIR="$PWD"; NOTE=""
+# Not $PWD: the bundle is raw transcripts, and the cwd is usually a repo, where it
+# sits one `git add .` away from being pushed. A private dir under the kit's own
+# handoff state instead, and the bundle itself is owner-only (umask below).
+DEFAULT_OUT="$(_cs_home)/.claude/session-handoffs/exports"
+OUT_DIR="$DEFAULT_OUT"; NOTE=""
 while getopts 'o:n:' opt; do
     case "$opt" in
         o) OUT_DIR="$OPTARG" ;;
@@ -161,7 +166,9 @@ n=2
 while [ -e "$BUNDLE" ]; do
     BUNDLE="$OUT_DIR/session-handoff-$STAMP-$n.tar.gz"; n=$((n+1))
 done
+umask 077
 mkdir -p "$OUT_DIR"
+[ "$OUT_DIR" != "$DEFAULT_OUT" ] || chmod 700 "$OUT_DIR"
 tar -czf "$BUNDLE" -C "$STAGE" .
 
 echo "bundle: $BUNDLE"

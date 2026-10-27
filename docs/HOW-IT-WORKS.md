@@ -64,7 +64,8 @@ A split passes through four states, and which sessions hear about it differs in 
 ## When you change machines
 
 `export.sh` packs chosen sessions, your note, and any loose files into one archive
-with checksums. You carry it however you like. On the other machine, `import.sh`
+with checksums, written owner-only to `~/.claude/session-handoffs/exports/` (or wherever
+`-o` says). You carry it however you like. On the other machine, `import.sh`
 verifies everything before writing anything: a damaged archive or a session that
 diverged between machines refuses the whole import and leaves the machine untouched.
 Session titles travel inside the archive, so moved sessions keep their names in the

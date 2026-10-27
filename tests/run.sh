@@ -1203,6 +1203,18 @@ BOUT=$(CLAUDE_SESSION_KIT_HOME="$HA" bash "$ROOT/handoff/export.sh" \
 BUNDLE=$(printf '%s\n' "$BOUT" | sed -n 's/^bundle: //p')
 [ -f "$BUNDLE" ] && ok "export produces a bundle" || bad "export produces a bundle" "a tar.gz" "${BUNDLE:-nothing}"
 
+# With no -o the bundle must NOT land in the cwd: that is usually a repo, and the
+# bundle is raw transcripts. It goes to a private dir, and is itself owner-only.
+mode() { stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1"; }
+DEFCWD=$(mktemp -d)
+DOUT=$(cd "$DEFCWD" && CLAUDE_SESSION_KIT_HOME="$HA" bash "$ROOT/handoff/export.sh" "$S1" 2>/dev/null)
+DBUNDLE=$(printf '%s\n' "$DOUT" | sed -n 's/^bundle: //p')
+is "with no -o, nothing is written to the cwd" "" "$(ls -A "$DEFCWD")"
+is "…the bundle goes to the private exports dir" "$HA/.claude/session-handoffs/exports" "$(dirname "$DBUNDLE")"
+is "…which is mode 700" 700 "$(mode "$HA/.claude/session-handoffs/exports")"
+is "…and the bundle is mode 600" 600 "$(mode "$DBUNDLE")"
+rm -rf "$DEFCWD" "$HA/.claude/session-handoffs"
+
 # "parser" matches BOTH titles — this must exercise the ambiguity branch, not the
 # unknown-ref branch, so the assertion checks the message too.
 AMB=$(CLAUDE_SESSION_KIT_HOME="$HA" bash "$ROOT/handoff/export.sh" -o "$OUT" parser 2>&1 >/dev/null); RC=$?
