@@ -18,6 +18,57 @@ that was tagged, and the tag is what you check out to go back to it. Versions mo
 from claude-memory-kit: the two share conventions, neither depends on the other, and a bump in one
 says nothing about the other.
 
+## Unreleased
+
+### Security
+
+- `handoff/export.sh` no longer writes the bundle into the current directory, which was usually a
+  repo and left raw transcripts one `git add .` from being pushed. Bundles now go to
+  `~/.claude/session-handoffs/exports/` (mode 700) and are written owner-only (0600); `-o` still
+  chooses another directory, and the handoff skill drafts its note in a private `mktemp -d`
+  directory there instead of `/tmp` ([#56](https://github.com/sabilmakbar/claude-session-kit/pull/56)).
+- `handoff/import.sh` refuses a manifest whose session id is not letters, digits and dashes,
+  and `handoff/release.sh` refuses a marker whose `to` is not one, before writing or deleting
+  anything. An id like `../x` previously resolved to a path outside the kit's directories
+  ([#56](https://github.com/sabilmakbar/claude-session-kit/pull/56)).
+- The pickup hook shell-quotes the handoff folder in the claim command it hands the agent,
+  rather than splicing it inside single quotes, where a quote in the path ended the argument
+  ([#56](https://github.com/sabilmakbar/claude-session-kit/pull/56)).
+- `install.sh --uninstall` removes a bare skill directory only if the kit wrote it, by the same
+  check install uses, and names any it skips. It used to delete `~/.claude/skills/handoff` and
+  its siblings unconditionally. The check itself now needs the skill's frontmatter name and a
+  kit library path, where a bare match on "session-kit" took any skill that mentioned the kit
+  for its own ([#56](https://github.com/sabilmakbar/claude-session-kit/pull/56)).
+
+### Changed
+
+- A fresh session that meets a pending handoff asks the user before claiming it. The pickup
+  message used to tell the agent to treat the user's first message as the confirmation, so a
+  claim, which links two sessions and seeds this one with another's note, could happen without
+  anyone agreeing to it ([#56](https://github.com/sabilmakbar/claude-session-kit/pull/56)).
+- The upgrade commands `install.sh` prints are pinned to a release: `marketplace add` carries
+  `@<tag>`, and a checkout behind upstream is pointed at `git fetch --tags` and a checkout of the
+  newer release tag rather than `git pull`. A tag counts as newer only when it descends from
+  HEAD, so a shallow clone is not sent back to an older release. With no tag known, the unpinned
+  form is printed and labelled as such. `docs/TROUBLESHOOTING.md` shows the pinned form too
+  ([#56](https://github.com/sabilmakbar/claude-session-kit/pull/56)).
+
+### Added
+
+- The handoff skill can ring a session that is already open: after a split, it confirms the
+  target by title with the user and sends it the handoff folder's path, never the note body.
+  The message grants nothing on its own; the receiving session still checks the `.handed`
+  record and claims from the folder as usual
+  ([#53](https://github.com/sabilmakbar/claude-session-kit/pull/53)).
+
+### Documented
+
+- `docs/TROUBLESHOOTING.md` describes the halves notice as it has behaved since 0.4.1: it names
+  the recorded checkout path, with "re-run install.sh from your checkout" only as the fallback
+  when that path is gone ([#54](https://github.com/sabilmakbar/claude-session-kit/pull/54)).
+- Routine: the weekly probe recorded more published Claude Code builds in
+  `tests/versions-checked.tsv`.
+
 ## 0.4.1
 
 ### Added
