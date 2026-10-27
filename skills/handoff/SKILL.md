@@ -37,11 +37,20 @@ conversation; never generate it mechanically. Sections:
   reading ONLY this note. Pick load-bearing facts stated once and briefly — those are
   what get lost. This is the note's quality bar, checked at claim time.
 
-Write it under `/tmp`, show the user, adjust, then hand that file to the script.
-Not the working directory: the script COPIES the note into the handoff folder, which
-is the permanent record, so the file you drafted is scratch the moment the script
-runs. Left in a repo it becomes an untracked stray that outlives the handoff, and
-seven of them had piled up in one directory before this line said where.
+Write it in a private scratch dir, show the user, adjust, then hand that file to
+the script:
+
+```bash
+mkdir -p "$HOME/.claude/session-handoffs" && mktemp -d "$HOME/.claude/session-handoffs/draft.XXXXXX"
+```
+
+`mktemp -d` makes the dir mode 700; write `note.md` inside the path it prints. Not
+`/tmp`, where the name is guessable and the file readable by anyone else on the
+machine, and the note is a summary of the conversation. Not the working directory
+either: the script COPIES the note into the handoff folder, which is the permanent
+record, so the file you drafted is scratch the moment the script runs. Left in a repo
+it becomes an untracked stray that outlives the handoff, and seven of them had piled
+up in one directory before this line said where.
 
 ## 2a. Cross-machine ending
 
