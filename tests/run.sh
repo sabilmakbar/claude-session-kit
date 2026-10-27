@@ -1465,6 +1465,13 @@ guard() { printf '{"session_id":"%s"}' "$1" | bash "$ROOT/hooks/session-guard.sh
 OUT=$(guard "$FRESH")
 case "$OUT" in *pending*"release pass"*"The source session"*claim.sh*) ok "a fresh session is told about the pending handoff" ;;
     *) bad "a fresh session is told about the pending handoff" "pickup payload" "${OUT:-silence}";; esac
+# Claiming links two sessions on the strength of a hook-injected line, so the payload
+# must send the agent to the user first, never treat the message itself as the yes.
+case "$OUT" in *"ask them to confirm"*) ok "…and told to confirm with the user before claiming" ;;
+    *) bad "…and told to confirm with the user before claiming" "a confirm step" "$OUT";; esac
+case "$OUT" in *"do not ask again"*|*"as the confirmation"*)
+    bad "…never told to skip the confirmation" "no skip wording" "$OUT" ;;
+    *) ok "…never told to skip the confirmation" ;; esac
 is "…once — the next message is quiet" "" "$(guard "$FRESH")"
 is "a session with real history is never nudged" "" "$(guard "$BUSY")"
 
@@ -1481,6 +1488,20 @@ bash "$ROOT/handoff/release.sh" "$OLD2" >/dev/null 2>&1
 FRESH3=ffff9999-0000-0000-0000-000000000005
 transcript "$FRESH3" >/dev/null; add_ai "$FRESH3" "x"
 is "a released handoff nudges nobody" "" "$(guard "$FRESH3")"
+
+# The claim command is run as written, and its folder comes from a marker file. A
+# folder with a quote in it must come back as ONE argument naming that exact path, not
+# end the quoting early. The $( ) would run under the old '...' splice once the quote
+# closed it, so it is a probe: it must survive as text.
+HOSTILE="$FAKE/it's a \"dir\" \$(touch $FAKE/ran)"
+jq -n --arg dir "$HOSTILE" '{folder:$dir, topic:"q", date:"2026-01-01T00:00:00Z", to:null}' \
+    >"$FAKE/.claude/session-handoffs/$OLD2.handed"
+FRESH6=ffff9999-0000-0000-0000-000000000008
+transcript "$FRESH6" >/dev/null; add_ai "$FRESH6" "x"
+QARG=$(guard "$FRESH6" | sed -n 's/.*handoff\/claim\.sh \(.*\) — it links.*/\1/p')
+is "a quote in the folder survives as one exact argument" "$HOSTILE" \
+   "$(eval "set -- $QARG" 2>/dev/null; [ $# -eq 1 ] && printf '%s' "$1")"
+[ ! -e "$FAKE/ran" ] && ok "…and nothing in it runs" || bad "…and nothing in it runs" "no file" "the probe ran"
 drop_home
 
 # Stale: unclaimed past the pickup window. The old session's guard must say so and

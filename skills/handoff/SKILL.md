@@ -72,8 +72,9 @@ the user, exactly:
 1. Open a **fresh** session for the split-off topic.
 2. Type anything — their first message surfaces the pending handoff automatically
    (the session-guard hook watches for unclaimed handoffs), and that session's
-   agent claims it and receives the note as seed context. Manual fallback if the
-   hook is not wired there: run `handoff/claim.sh <folder>` in the fresh session.
+   agent asks them to confirm, then claims it and receives the note as seed
+   context. Manual fallback if the hook is not wired there: run
+   `handoff/claim.sh <folder>` in the fresh session.
 3. **Only if the receiving session is already open**, ring its doorbell rather than
    waiting for it to be reopened — the pickup hook fires on a session's first message,
    so a session already running hears nothing until then. `ListAgents` for the peers,
