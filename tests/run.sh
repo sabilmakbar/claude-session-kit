@@ -1205,7 +1205,9 @@ BUNDLE=$(printf '%s\n' "$BOUT" | sed -n 's/^bundle: //p')
 
 # With no -o the bundle must NOT land in the cwd: that is usually a repo, and the
 # bundle is raw transcripts. It goes to a private dir, and is itself owner-only.
-mode() { stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1"; }
+# GNU first: on Linux `stat -f` also succeeds, but means FILESYSTEM status and prints a
+# multi-line report, so BSD-first never reaches the fallback there.
+mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 DEFCWD=$(mktemp -d)
 DOUT=$(cd "$DEFCWD" && CLAUDE_SESSION_KIT_HOME="$HA" bash "$ROOT/handoff/export.sh" "$S1" 2>/dev/null)
 DBUNDLE=$(printf '%s\n' "$DOUT" | sed -n 's/^bundle: //p')
