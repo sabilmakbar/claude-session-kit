@@ -59,6 +59,15 @@ DEST="$(_cs_projects_dir)/$(cs_encode_cwd "$PWD")"
 
 INSTALL=(); SKIP=0; FAILED=0
 while IFS= read -r id; do
+    # The id becomes a filename under the project dir, so it gets the same rule as
+    # every other session id in the kit, checked rather than stripped: a manifest
+    # whose id needed cleaning was not written by export.sh, and "../x" quietly
+    # cleaned to "x" would install somewhere nobody asked for.
+    case "$id" in
+        ""|*[!A-Za-z0-9-]*)
+            echo "import: manifest lists an unsafe session id '$id' — ids are letters, digits and dashes only" >&2
+            FAILED=1; continue ;;
+    esac
     src="$WORK/sessions/$id.jsonl"
     want=$(jq -r --arg id "$id" '.sessions[] | select(.id==$id) | .sha256' "$M")
 

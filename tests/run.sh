@@ -1350,7 +1350,26 @@ jq --arg id "$S1" '(.sessions[] | select(.id==$id) | .title) |= "line one\nline 
 is "a multi-line manifest title is normalised on import" "line one line two" \
    "$(CLAUDE_SESSION_KIT_HOME="$HB4" bash -c '. "'"$ROOT"'/core/sessions.sh"; cs_resolve_name '"$S1"'')"
 
-rm -rf "$HA" "$HB" "$HB2" "$HB3" "$HB4" "$CWDB" "$OUT" "$TDIR" "$TDIR2"
+# A manifest id is a filename on the target machine. "../x" with a file and a checksum
+# that both line up would pass every other check and install one level above the
+# project dir, so the id itself must be refused, and the whole bundle with it.
+HB5=$(mktemp -d); TDIR3=$(mktemp -d)
+tar -xzf "$BUNDLE" -C "$TDIR3"
+cp "$TDIR3/sessions/$S1.jsonl" "$TDIR3/x.jsonl"
+TSHA=$( { sha256sum "$TDIR3/x.jsonl" 2>/dev/null || shasum -a 256 "$TDIR3/x.jsonl"; } | cut -d' ' -f1)
+jq --arg id "$S1" --arg sha "$TSHA" \
+    '(.sessions[] | select(.id==$id)) |= (.id = "../x" | .sha256 = $sha)' \
+    "$TDIR3/manifest.json" >"$TDIR3/m.tmp" && mv "$TDIR3/m.tmp" "$TDIR3/manifest.json"
+( cd "$TDIR3" && tar -czf "$OUT/traversal.tar.gz" . )
+TERR=$(cd "$CWDB" && CLAUDE_SESSION_KIT_HOME="$HB5" bash "$ROOT/handoff/import.sh" "$OUT/traversal.tar.gz" 2>&1 >/dev/null); RC=$?
+is "a manifest id like ../x refuses the import" 1 "$RC"
+case "$TERR" in *"unsafe session id"*) ok "…naming the id as the reason" ;;
+    *) bad "…naming the id as the reason" "'unsafe session id'" "$TERR";; esac
+[ -z "$(find "$HB5" -name '*.jsonl' 2>/dev/null)" ] \
+    && ok "…and installs nothing, inside the project dir or out of it" \
+    || bad "…and installs nothing" "no transcripts" "$(find "$HB5" -name '*.jsonl')"
+
+rm -rf "$HA" "$HB" "$HB2" "$HB3" "$HB4" "$HB5" "$CWDB" "$OUT" "$TDIR" "$TDIR2" "$TDIR3"
 
 # --- same-machine split: split / claim / guard / release ----------------------
 #
@@ -1432,6 +1451,19 @@ is "…and the guard goes quiet" "" "$(rm -f "$HDIR/$OLD.guard-seen"; guard "$OL
     || bad "…while the folder survives as the record" "folder kept" "deleted"
 is "releasing again refuses — nothing active" 1 \
    "$(bash "$ROOT/handoff/release.sh" "$OLD" >/dev/null 2>&1; echo $?)"
+
+# The marker's `to` names a file release deletes. One that is a path, not an id, must
+# refuse before removing anything, rather than delete $HDIR/../x.claimed.
+jq -n '{folder:"f", topic:"t", date:"d", to:"../x"}' >"$HDIR/$OLD.handed"
+: >"$FAKE/.claude/x.claimed"
+RERR=$(bash "$ROOT/handoff/release.sh" "$OLD" 2>&1 >/dev/null); RC=$?
+is "release refuses a marker whose 'to' is ../x" 1 "$RC"
+case "$RERR" in *"not a session id"*) ok "…saying why" ;;
+    *) bad "…saying why" "'not a session id'" "$RERR";; esac
+[ -e "$FAKE/.claude/x.claimed" ] && [ -e "$HDIR/$OLD.handed" ] \
+    && ok "…and removes nothing, the file outside or the marker" \
+    || bad "…and removes nothing" "both kept" "something deleted"
+rm -f "$HDIR/$OLD.handed" "$FAKE/.claude/x.claimed"
 
 # release with no argument means "this session" — the form the guard's own message
 # suggests, so it has to work.
