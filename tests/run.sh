@@ -2621,6 +2621,25 @@ d=$(mktemp -d)/.claude; mkdir -p "$d"; printf '{}' > "$d/settings.json"
 printf '%s' "$(pin_run "$d")" | grep -q 'not on a tag\|pinned to' \
     && bad "no pin, no pin report" "silence" "a report" \
     || ok "no pin, no pin report"
+rm -rf "$(dirname "$d")"
+
+# With no plugin at all, the add command it prints is pinned to the checkout's release,
+# not the bare form that follows the default branch. And with no tag anywhere, it falls
+# back to the bare form but says what that means rather than passing it off as a pin.
+d=$(mktemp -d)/.claude; mkdir -p "$d"; printf '{}' > "$d/settings.json"
+printf '%s' "$(pin_run "$d")" | grep -q 'marketplace add sabilmakbar/claude-session-kit@v0.3.1$' \
+    && ok "no plugin: the add command is pinned to the checkout's tag" \
+    || bad "no plugin: add command pinned" "@v0.3.1" "$(pin_run "$d" | grep 'marketplace add')"
+git -C "$PC" -c user.email=t@e -c user.name=t commit -q --allow-empty -m "past the tag" 2>/dev/null
+printf '%s' "$(pin_run "$d")" | grep -q 'marketplace add sabilmakbar/claude-session-kit@v0.3.1$' \
+    && ok "…and to the nearest tag behind it when HEAD has moved on" \
+    || bad "add command pinned to nearest tag" "@v0.3.1" "$(pin_run "$d" | grep 'marketplace add')"
+git -C "$PC" tag -d v0.3.1 >/dev/null 2>&1
+OUT=$(pin_run "$d")
+printf '%s' "$OUT" | grep -q 'marketplace add sabilmakbar/claude-session-kit$' \
+    && printf '%s' "$OUT" | grep -q 'unpinned: no release tag is known' \
+    && ok "no tag known: the bare form, labelled as unpinned" \
+    || bad "no tag: bare form labelled" "bare add + unpinned note" "$(printf '%s' "$OUT" | grep -A3 'marketplace add')"
 rm -rf "$(dirname "$d")" "$(dirname "$PC")"
 
 # --- the documented update command must work in every host ------------------------
@@ -2661,9 +2680,39 @@ OUT=$( cd "$CB_C" && CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$CB
 printf '%s' "$OUT" | grep -q 'commit(s) behind' \
     && ok "integration: a behind checkout is reported" \
     || bad "integration: behind checkout reported" "a behind line" "$(printf '%s' "$OUT" | tail -3)"
-printf '%s' "$OUT" | grep -q 'git -C' \
-    && ok "…naming git pull for the checkout" || bad "behind line names git pull" "git -C ... pull" "absent"
+# No release is newer than HEAD (every inherited tag is behind it), and HEAD is a branch,
+# so a pull is the only move, and it is named as unpinned rather than passed off as one.
+printf '%s' "$OUT" | grep -q 'git -C .* pull' && printf '%s' "$OUT" | grep -q 'unpinned' \
+    && ok "…with no newer release, naming git pull as the unpinned move" \
+    || bad "behind line names git pull, unpinned" "git -C ... pull + unpinned" "$(printf '%s' "$OUT" | grep -A2 'behind')"
 drop_home
+# A release upstream: the line names that tag, never a pull that follows the branch.
+git -C "$CB_C" tag -f v9.9.9 upstream-probe >/dev/null 2>&1
+cp "$ROOT/install.sh" "$CB_C/install.sh"
+new_home; CBP="$FAKE/.claude"; mkdir -p "$CBP"
+OUT=$( cd "$CB_C" && CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$CBP" \
+        bash install.sh 2>&1 </dev/null )
+printf '%s' "$OUT" | grep -q 'fetch --tags && git -C .* checkout v9.9.9' \
+    && ok "…with a newer release, naming a checkout of its tag" \
+    || bad "behind line names the tag" "fetch --tags && checkout v9.9.9" "$(printf '%s' "$OUT" | grep -A2 'behind')"
+printf '%s' "$OUT" | grep -q 'git -C .* pull' \
+    && bad "…and no pull" "no pull" "a pull" || ok "…and no pull"
+printf '%s' "$OUT" | grep -q 'marketplace add sabilmakbar/claude-session-kit@v9.9.9' \
+    && ok "…and the pin for the plugin half" || bad "behind line pins the plugin" "@v9.9.9" "absent"
+drop_home
+git -C "$CB_C" tag -d v9.9.9 >/dev/null 2>&1
+# Detached, as a tag-pinned clone is, with no newer release: no pull (there is no branch
+# to pull into), just the fact that nothing ahead is released.
+git -C "$CB_C" checkout -q --detach main 2>/dev/null
+cp "$ROOT/install.sh" "$CB_C/install.sh"
+new_home; CBP="$FAKE/.claude"; mkdir -p "$CBP"
+OUT=$( cd "$CB_C" && CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$CBP" \
+        bash install.sh 2>&1 </dev/null )
+printf '%s' "$OUT" | grep -q 'none of it is released yet' && ! printf '%s' "$OUT" | grep -q 'git -C .* pull' \
+    && ok "…detached with no newer release, no pull is offered" \
+    || bad "detached behind line" "no pull, 'not released'" "$(printf '%s' "$OUT" | grep -A2 'behind')"
+drop_home
+git -C "$CB_C" checkout -q main 2>/dev/null
 # Control: the same clone, level with its upstream, must say nothing.
 git -C "$CB_C" update-ref refs/remotes/origin/main main
 cp "$ROOT/install.sh" "$CB_C/install.sh"
