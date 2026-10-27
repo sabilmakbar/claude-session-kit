@@ -2731,6 +2731,11 @@ git -C "$CB_C" -c user.email=t@e -c user.name=t commit -q --allow-empty -m "upst
 git -C "$CB_C" update-ref refs/remotes/origin/main upstream-probe
 git -C "$CB_C" checkout -q main 2>/dev/null
 git -C "$CB_C" branch -q --set-upstream-to=origin/main main 2>/dev/null
+# Hermetic tags: the clone inherits the checkout's, and on a shallow CI clone their history
+# is missing, so what they prove depends on how the runner fetched. Shed them and plant
+# one ON HEAD, which is the release this checkout is at and must never count as newer.
+for _t in $(git -C "$CB_C" tag); do git -C "$CB_C" tag -d "$_t" >/dev/null; done
+git -C "$CB_C" tag v0.0.1 main
 # The clone carries COMMITTED install.sh, so a working-tree change would not be under test.
 # Copy the one being tested over it; only its own logic is exercised here, and the gate is off.
 cp "$ROOT/install.sh" "$CB_C/install.sh"
@@ -2740,7 +2745,7 @@ OUT=$( cd "$CB_C" && CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$CB
 printf '%s' "$OUT" | grep -q 'commit(s) behind' \
     && ok "integration: a behind checkout is reported" \
     || bad "integration: behind checkout reported" "a behind line" "$(printf '%s' "$OUT" | tail -3)"
-# No release is newer than HEAD (every inherited tag is behind it), and HEAD is a branch,
+# No release is newer than HEAD (its only tag is ON it), and HEAD is a branch,
 # so a pull is the only move, and it is named as unpinned rather than passed off as one.
 printf '%s' "$OUT" | grep -q 'git -C .* pull' && printf '%s' "$OUT" | grep -q 'unpinned' \
     && ok "…with no newer release, naming git pull as the unpinned move" \
@@ -2783,6 +2788,33 @@ is "integration: a current checkout says nothing about being behind" "" \
    "$(printf '%s' "$OUT" | grep 'commit(s) behind')"
 drop_home
 rm -rf "$(dirname "$CB_C")"
+
+# A shallow clone, as actions/checkout makes one, with an OLDER tag fetched. Its history is
+# cut, so the old tag is not provably an ancestor of HEAD, and "not an ancestor" once read
+# as "newer" and named v0.1.0 as the upgrade. Built from a temp repo so the real one's
+# tags and depth play no part.
+SH=$(mktemp -d); SR="$SH/src"; mkdir -p "$SR"
+tar -C "$ROOT" --exclude=.git -cf - . | tar -C "$SR" -xf -
+cp "$ROOT/install.sh" "$SR/install.sh"
+sgit() { git -C "$1" -c user.email=t@e -c user.name=t -c core.hooksPath=/dev/null "${@:2}"; }
+sgit "$SR" init -q -b main 2>/dev/null || { sgit "$SR" init -q; sgit "$SR" checkout -q -b main; }
+sgit "$SR" add -A; sgit "$SR" commit -q -m "release"; sgit "$SR" tag v0.1.0
+sgit "$SR" commit -q --allow-empty -m "after the release"
+git clone -q --depth 1 "file://$SR" "$SH/c" 2>/dev/null
+git -C "$SH/c" fetch -q --depth 1 origin tag v0.1.0 2>/dev/null
+sgit "$SR" commit -q --allow-empty -m "upstream moved"
+git -C "$SH/c" fetch -q --depth 1 origin main 2>/dev/null
+new_home; CBP="$FAKE/.claude"; mkdir -p "$CBP"
+OUT=$( cd "$SH/c" && CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$CBP" \
+        bash install.sh 2>&1 </dev/null )
+printf '%s' "$OUT" | grep -q 'commit(s) behind' \
+    && ok "integration: a shallow clone behind upstream is reported" \
+    || bad "shallow clone behind reported" "a behind line" "$(printf '%s' "$OUT" | tail -3)"
+printf '%s' "$OUT" | grep -q 'checkout v0.1.0' \
+    && bad "…without naming an older tag as the upgrade" "no checkout v0.1.0" "$(printf '%s' "$OUT" | grep -A2 'behind')" \
+    || ok "…without naming an older tag as the upgrade"
+drop_home
+rm -rf "$SH"
 
 # Uninstall states the plugin order. Removing the marketplace before the plugin makes
 # `plugin uninstall` unable to resolve it, so listing the two commands in either order is

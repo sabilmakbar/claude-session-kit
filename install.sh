@@ -703,10 +703,23 @@ kit_behind() {
 # and a clone pinned to a tag has no branch to pull. Only a release newer than HEAD is
 # worth naming; without one, a branch can still pull, and a detached (pinned) clone has
 # nothing to move to, since only unreleased commits are ahead of it.
+#
+# "Newer" means a DESCENDANT of HEAD, proven by ancestry, never "not an ancestor of HEAD":
+# that is also true of a tag whose history is simply missing, as in a shallow clone, and
+# it named an older release as the upgrade.
+kit_newer_tag() {
+    local head t
+    head=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null) || return 1
+    for t in $(git -C "$ROOT" tag -l 'v[0-9]*' --sort=-v:refname 2>/dev/null); do
+        [ "$(git -C "$ROOT" rev-parse "$t^{commit}" 2>/dev/null)" != "$head" ] || continue
+        git -C "$ROOT" merge-base --is-ancestor HEAD "$t" 2>/dev/null || continue
+        printf '%s' "$t"; return 0
+    done
+    return 1
+}
 if BEHIND=$(kit_behind); then
     echo "  this checkout is ${BEHIND%% *} commit(s) behind ${BEHIND##* } as of your last fetch:"
-    newest=$(git -C "$ROOT" tag -l 'v[0-9]*' --sort=-v:refname 2>/dev/null | head -1)
-    if [ -n "$newest" ] && ! git -C "$ROOT" merge-base --is-ancestor "$newest" HEAD 2>/dev/null; then
+    if newest=$(kit_newer_tag); then
         echo "      git -C \"$ROOT\" fetch --tags && git -C \"$ROOT\" checkout $newest   then re-run this script"
         echo "  the plugin is a separate clone, so move its pin as well once the checkout is current:"
         echo "      claude plugin marketplace add sabilmakbar/claude-session-kit@$newest"
