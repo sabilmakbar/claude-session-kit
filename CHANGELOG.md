@@ -18,7 +18,9 @@ that was tagged, and the tag is what you check out to go back to it. Versions mo
 from claude-memory-kit: the two share conventions, neither depends on the other, and a bump in one
 says nothing about the other.
 
-## Unreleased
+## 0.5.0
+
+Released on 2026-10-27.
 
 ### Security
 
