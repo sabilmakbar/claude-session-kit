@@ -29,6 +29,21 @@ done
 
 run() { [ "$DRY" -eq 1 ] && { printf '  would: %s\n' "$*"; return 0; }; "$@"; }
 
+# The bare skill copies an older version left in ~/.claude/skills, as name|dir pairs.
+SKILL_PAIRS=("rename-session|$DEST_SKILL" "session-note|$DEST_SKILL_NOTE" "handoff|$DEST_SKILL_HANDOFF")
+
+# kit_owns_skill <name> <dir> — is <dir>/SKILL.md one this kit wrote? Both halves must
+# hold: frontmatter naming the skill exactly, and a source line naming a library under
+# session-kit/. Either alone is too weak to delete on: a user's own skill can share the
+# name, and any note that mentions this kit contains the string "session-kit". Every
+# copy this kit ever shipped carries both, whether its paths were rewritten or not.
+kit_owns_skill() {
+    [ -f "$2/SKILL.md" ] || return 1
+    awk -v n="name: $1" 'NR==1 { if ($0 != "---") exit; next }
+        /^---$/ { exit } $0 == n { found=1 } END { exit !found }' "$2/SKILL.md" \
+        && grep -qE 'session-kit/(core|naming|notes|handoff)/[a-z]+\.sh' "$2/SKILL.md"
+}
+
 # --- settings.json hook wiring ------------------------------------------------
 #
 # This kit wires its own hooks and removes them again, matching claude-memory-kit:
@@ -290,8 +305,20 @@ if [ "$UNINSTALL" -eq 1 ]; then
     hooks_unwire
     # Note DATA (~/.claude/session-notes) is deliberately left alone: it is user
     # content, not kit code, which is also why it lives outside $DEST_LIB.
-    run rm -rf "$DEST_LIB" "$DEST_SKILL" "$DEST_SKILL_NOTE" "$DEST_SKILL_HANDOFF"
-    echo "removed $DEST_LIB and any bare skill copy an older version left behind"
+    run rm -rf "$DEST_LIB"
+    echo "removed $DEST_LIB"
+    # Only a bare skill copy that passes the same ownership check install uses. A dir of
+    # that name holding anything else is the user's, and survives with a word about it.
+    for pair in "${SKILL_PAIRS[@]}"; do
+        name="${pair%%|*}"; dest="${pair##*|}"
+        [ -e "$dest" ] || continue
+        if kit_owns_skill "$name" "$dest"; then
+            run rm -rf "$dest"
+            echo "removed the bare skill copy an older version left at $dest"
+        else
+            echo "skipped $dest — not written by this kit, so it was left alone"
+        fi
+    done
     echo "  the skills themselves come from the plugin. Remove it in this order:"
     echo "      claude plugin uninstall session-kit@session-kit"
     echo "      claude plugin marketplace remove session-kit"
@@ -446,7 +473,7 @@ done
 # skills pointing at ~/.claude/session-kit regardless of the prefix. That variable
 # exists for the test harness, which never sources a skill.
 
-for pair in "rename-session|$DEST_SKILL" "session-note|$DEST_SKILL_NOTE" "handoff|$DEST_SKILL_HANDOFF"; do
+for pair in "${SKILL_PAIRS[@]}"; do
     name="${pair%%|*}"; dest="${pair##*|}"
 
     # A relative source path ships a skill that silently cannot find its libraries.
@@ -459,10 +486,11 @@ for pair in "rename-session|$DEST_SKILL" "session-note|$DEST_SKILL_NOTE" "handof
     fi
 
     [ -f "$dest/SKILL.md" ] || continue
-    # Ours always name a library under .../session-kit/. A copy without that marker
-    # belongs to the user or another tool: report it and leave it. Losing someone else's
-    # file is worse than the shadowing, so say what the shadowing costs instead.
-    if grep -q 'session-kit' "$dest/SKILL.md"; then
+    # Ours always carry our frontmatter name and a library path under session-kit/
+    # (kit_owns_skill). A copy without both belongs to the user or another tool: report
+    # it and leave it. Losing someone else's file is worse than the shadowing, so say
+    # what the shadowing costs instead.
+    if kit_owns_skill "$name" "$dest"; then
         run rm -rf "$dest"
         echo "retired the bare copy at $dest — the plugin supersedes it as /session-kit:$name"
     else
@@ -573,13 +601,28 @@ plugin_state() {
     then printf 'ahead:%s' "$have"
     else printf 'stale:%s' "$have"; fi
 }
+# The checkout's own tag, and the release it builds on. Read here, before any command
+# is printed, because every hint below names one. KIT_REL is the tag the printed
+# commands pin to: the exact tag, else the nearest one behind HEAD, else the release a
+# deployed tree recorded in .kit-version. Empty means no release is known, and the
+# hints fall back to the unpinned form and say so.
+KIT_TAG=""; KIT_IS_GIT=""; KIT_REL=""
+if git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+    KIT_IS_GIT=1
+    KIT_TAG=$(git -C "$ROOT" describe --tags --exact-match HEAD 2>/dev/null || true)
+    KIT_REL=$(git -C "$ROOT" describe --tags --abbrev=0 --match 'v[0-9]*' HEAD 2>/dev/null || true)
+elif [ -f "$ROOT/.kit-version" ]; then
+    KIT_REL=$(sed -n '1s/^\(v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' "$ROOT/.kit-version")
+fi
+case "$KIT_REL" in v[0-9]*.[0-9]*.[0-9]*) ;; *) KIT_REL="" ;; esac
 echo "done. hooks and libraries are in place."
 PLUG_STATE=$(plugin_state)
 case "$PLUG_STATE" in
   absent)
     echo "  the skills are NOT installed — they come from the plugin:"
-    echo "      claude plugin marketplace add sabilmakbar/claude-session-kit"
+    echo "      claude plugin marketplace add sabilmakbar/claude-session-kit${KIT_REL:+@$KIT_REL}"
     echo "      claude plugin install $PLUG_NAME@$PLUG_MKT"
+    [ -n "$KIT_REL" ] || echo "  (unpinned: no release tag is known for this tree, so that follows the default branch)"
     echo "  without it the skills are missing; installed without this script they fail on"
     echo "  first use, because the libraries they source are not there." ;;
   marketplace-only)
@@ -617,11 +660,6 @@ esac
 # digits, so the release accessor returns rc 1 and the daily halves notice stays quiet.
 # Read-only like the block above, so a preview says it too. Reports rather than rewrites: the
 # pin is the user's, and which half to move is theirs to pick.
-KIT_TAG=""; KIT_IS_GIT=""
-if git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
-    KIT_IS_GIT=1
-    KIT_TAG=$(git -C "$ROOT" describe --tags --exact-match HEAD 2>/dev/null || true)
-fi
 case "$PLUG_PIN" in
   v[0-9]*.[0-9]*.[0-9]*|[0-9]*.[0-9]*.[0-9]*)
     if [ -z "$KIT_IS_GIT" ]; then :   # an archive tree has no version to compare the pin to
@@ -661,10 +699,37 @@ kit_behind() {
     [ "${n:-0}" -gt 0 ] || return 1
     printf '%s %s' "$n" "$up"
 }
+# The command named is a tag, not a pull: a pull follows whatever the branch holds next,
+# and a clone pinned to a tag has no branch to pull. Only a release newer than HEAD is
+# worth naming; without one, a branch can still pull, and a detached (pinned) clone has
+# nothing to move to, since only unreleased commits are ahead of it.
+#
+# "Newer" means a DESCENDANT of HEAD, proven by ancestry, never "not an ancestor of HEAD":
+# that is also true of a tag whose history is simply missing, as in a shallow clone, and
+# it named an older release as the upgrade.
+kit_newer_tag() {
+    local head t
+    head=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null) || return 1
+    for t in $(git -C "$ROOT" tag -l 'v[0-9]*' --sort=-v:refname 2>/dev/null); do
+        [ "$(git -C "$ROOT" rev-parse "$t^{commit}" 2>/dev/null)" != "$head" ] || continue
+        git -C "$ROOT" merge-base --is-ancestor HEAD "$t" 2>/dev/null || continue
+        printf '%s' "$t"; return 0
+    done
+    return 1
+}
 if BEHIND=$(kit_behind); then
     echo "  this checkout is ${BEHIND%% *} commit(s) behind ${BEHIND##* } as of your last fetch:"
-    echo "      git -C \"$ROOT\" pull   then re-run this script"
-    echo "  the plugin is a separate clone, so update it as well once the checkout is current."
+    if newest=$(kit_newer_tag); then
+        echo "      git -C \"$ROOT\" fetch --tags && git -C \"$ROOT\" checkout $newest   then re-run this script"
+        echo "  the plugin is a separate clone, so move its pin as well once the checkout is current:"
+        echo "      claude plugin marketplace add sabilmakbar/claude-session-kit@$newest"
+    elif git -C "$ROOT" symbolic-ref -q HEAD >/dev/null 2>&1; then
+        echo "      git -C \"$ROOT\" pull   then re-run this script"
+        echo "  no release is newer than this checkout, so that follows ${BEHIND##* } unpinned."
+        echo "  the plugin is a separate clone, so update it as well once the checkout is current."
+    else
+        echo "  none of it is released yet, so a checkout off any branch has no newer tag to move to."
+    fi
 fi
 echo "  they appear as /session-kit:rename-session, /session-kit:session-note, /session-kit:handoff"
 echo "timing knobs (drift cadence, pickup window) live in $DEST_LIB/config —"

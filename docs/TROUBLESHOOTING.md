@@ -75,10 +75,14 @@ then check that `~/.claude/session-kit/core/sessions.sh` exists.
 **Fix.** Whichever half is missing:
 
 ```bash
-claude plugin marketplace add sabilmakbar/claude-session-kit
-claude plugin install session-kit@session-kit    # skills
-~/claude-session-kit/install.sh                  # hooks and libraries
+claude plugin marketplace add sabilmakbar/claude-session-kit@<tag>   # the release your checkout is on
+claude plugin install session-kit@session-kit                       # skills
+~/claude-session-kit/install.sh                                     # hooks and libraries
 ```
+
+`<tag>` is what `git -C ~/claude-session-kit describe --tags --abbrev=0` prints, and the
+installer prints this command with it filled in. Without `@<tag>` the marketplace follows
+the default branch, so the skills drift from the release the hooks and libraries came from.
 
 A skill that appears in the list and then fails on its first command is the second half
 missing: each one sources a library under `~/.claude/session-kit/`, which only the installer

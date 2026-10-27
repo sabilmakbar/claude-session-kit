@@ -49,7 +49,7 @@ A split moves a topic to a fresh session without moving any files:
    threads, what to pick up first. You review it.
 2. The note lands in a folder, and the old session is marked "handed off, pending".
 3. You open a fresh session and type anything. It notices the pending handoff,
-   claims it, and starts from the note.
+   asks you to confirm, claims it, and starts from the note.
 4. The old session keeps a small signpost: this topic now lives over there. History
    questions still work; the old transcript is the only place the full story lives.
 
@@ -64,7 +64,8 @@ A split passes through four states, and which sessions hear about it differs in 
 ## When you change machines
 
 `export.sh` packs chosen sessions, your note, and any loose files into one archive
-with checksums. You carry it however you like. On the other machine, `import.sh`
+with checksums, written owner-only to `~/.claude/session-handoffs/exports/` (or wherever
+`-o` says). You carry it however you like. On the other machine, `import.sh`
 verifies everything before writing anything: a damaged archive or a session that
 diverged between machines refuses the whole import and leaves the machine untouched.
 Session titles travel inside the archive, so moved sessions keep their names in the

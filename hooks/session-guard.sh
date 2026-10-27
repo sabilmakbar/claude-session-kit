@@ -37,8 +37,10 @@ M="$HANDOFFS/$sid.handed"
 #
 # The one step that cannot be automated is opening the fresh tab (no receipted way
 # to drive the VS Code UI — same discipline as never touching state.vscdb). This
-# removes every step after it: the new session's first message surfaces the pending
-# handoff and the agent claims it, the user's own message serving as confirmation.
+# removes every step after it but one: the new session's first message surfaces the
+# pending handoff, and the agent claims it once the user says yes. That yes is not
+# inferred from the message: claiming links two sessions and seeds this one with
+# another's note, and a hook-injected line is not the user agreeing to that.
 # Scoped hard so it cannot nag: only sessions with almost no history, only handoffs
 # from the last 48h, only while unclaimed, and mentioned exactly once per session.
 if [ ! -r "$M" ]; then
@@ -60,10 +62,13 @@ if [ ! -r "$M" ]; then
     topic=$(jq -r '.topic // empty' "$pending" 2>/dev/null)
     folder=$(jq -r '.folder // empty' "$pending" 2>/dev/null)
     from=$(cs_resolve_name "$OLD" 2>/dev/null)
+    # Shell-quoted, since the agent runs this line as written: the folder comes from a
+    # marker file, and splicing it inside '...' lets a quote in it end the argument.
+    qfolder=$(printf '%q' "$folder")
 
     mkdir -p "$HANDOFFS" 2>/dev/null && : >"$HANDOFFS/$sid.pickup-seen" 2>/dev/null || exit 0
-    printf 'A pending same-machine handoff is waiting to be claimed: topic%s, split from session "%s". If the user'\''s message is about continuing that work (or they say to claim it), claim it NOW — run: bash %s/handoff/claim.sh %s — it links the sessions and prints the handoff note as this session'\''s seed context; treat the user'\''s message itself as the confirmation, do not ask again. If their message is about something unrelated, mention the pending handoff in one sentence and answer their actual question; do not bring it up again.\n' \
-        "${topic:+ \"$topic\"}" "${from:-$OLD}" "$ROOT" "'$folder'"
+    printf 'A pending same-machine handoff is waiting to be claimed: topic%s, split from session "%s". If the user'\''s message is about continuing that work (or they say to claim it), ask them to confirm, and only once they agree run: bash %s/handoff/claim.sh %s — it links the sessions and prints the handoff note as this session'\''s seed context. If their message is about something unrelated, mention the pending handoff in one sentence and answer their actual question; do not bring it up again.\n' \
+        "${topic:+ \"$topic\"}" "${from:-$OLD}" "$ROOT" "$qfolder"
     exit 0
 fi
 
@@ -89,7 +94,7 @@ printf '%s\n' "$pid" >"$HANDOFFS/$sid.guard-seen" 2>/dev/null || exit 0
 # reading "not claimed yet" forever has no way to know them.
 if [ -z "$to" ] && [ -n "$(find "$M" -mmin +"$PICKUP_WINDOW" 2>/dev/null)" ]; then
     printf 'This session split off a topic%s on %s, but it was NEVER CLAIMED and the automatic pickup window has passed — the split has gone stale. Tell the user, and offer the three exits: (1) claim it manually from any fresh session: bash %s/handoff/claim.sh %s (claiming never expires, only the automatic nudge did); (2) re-split via the handoff skill — a fresh note re-arms automatic pickup, and is the right move if the old note no longer matches reality; (3) release, if the work belongs back here: bash %s/handoff/release.sh. The folder and its note are kept whichever way this goes.\n' \
-        "${topic:+ (\"$topic\")}" "${date:-an earlier date}" "$ROOT" "'$folder'" "$ROOT"
+        "${topic:+ (\"$topic\")}" "${date:-an earlier date}" "$ROOT" "$(printf '%q' "$folder")" "$ROOT"
     exit 0
 fi
 

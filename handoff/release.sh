@@ -23,6 +23,14 @@ MARKER="$HANDOFFS/$ID.handed"
 [ -r "$MARKER" ] || { echo "release: ${ID:0:8} has no active handoff — nothing to release" >&2; exit 1; }
 
 TO=$(jq -r '.to // empty' "$MARKER" 2>/dev/null)
+# TO names a file to delete, so it must be a session id and nothing else. Checked
+# before anything is removed: a marker carrying a path is not one claim.sh wrote.
+case "$TO" in
+    *[!A-Za-z0-9-]*)
+        echo "release: ${ID:0:8}'s marker links to '$TO', which is not a session id — refusing" >&2
+        echo "  nothing was removed; inspect $MARKER by hand" >&2
+        exit 1 ;;
+esac
 rm -f "$MARKER" "$HANDOFFS/$ID.guard-seen"
 [ -z "$TO" ] || rm -f "$HANDOFFS/$TO.claimed"
 

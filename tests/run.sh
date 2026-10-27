@@ -1203,6 +1203,20 @@ BOUT=$(CLAUDE_SESSION_KIT_HOME="$HA" bash "$ROOT/handoff/export.sh" \
 BUNDLE=$(printf '%s\n' "$BOUT" | sed -n 's/^bundle: //p')
 [ -f "$BUNDLE" ] && ok "export produces a bundle" || bad "export produces a bundle" "a tar.gz" "${BUNDLE:-nothing}"
 
+# With no -o the bundle must NOT land in the cwd: that is usually a repo, and the
+# bundle is raw transcripts. It goes to a private dir, and is itself owner-only.
+# GNU first: on Linux `stat -f` also succeeds, but means FILESYSTEM status and prints a
+# multi-line report, so BSD-first never reaches the fallback there.
+mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
+DEFCWD=$(mktemp -d)
+DOUT=$(cd "$DEFCWD" && CLAUDE_SESSION_KIT_HOME="$HA" bash "$ROOT/handoff/export.sh" "$S1" 2>/dev/null)
+DBUNDLE=$(printf '%s\n' "$DOUT" | sed -n 's/^bundle: //p')
+is "with no -o, nothing is written to the cwd" "" "$(ls -A "$DEFCWD")"
+is "…the bundle goes to the private exports dir" "$HA/.claude/session-handoffs/exports" "$(dirname "$DBUNDLE")"
+is "…which is mode 700" 700 "$(mode "$HA/.claude/session-handoffs/exports")"
+is "…and the bundle is mode 600" 600 "$(mode "$DBUNDLE")"
+rm -rf "$DEFCWD" "$HA/.claude/session-handoffs"
+
 # "parser" matches BOTH titles — this must exercise the ambiguity branch, not the
 # unknown-ref branch, so the assertion checks the message too.
 AMB=$(CLAUDE_SESSION_KIT_HOME="$HA" bash "$ROOT/handoff/export.sh" -o "$OUT" parser 2>&1 >/dev/null); RC=$?
@@ -1338,7 +1352,26 @@ jq --arg id "$S1" '(.sessions[] | select(.id==$id) | .title) |= "line one\nline 
 is "a multi-line manifest title is normalised on import" "line one line two" \
    "$(CLAUDE_SESSION_KIT_HOME="$HB4" bash -c '. "'"$ROOT"'/core/sessions.sh"; cs_resolve_name '"$S1"'')"
 
-rm -rf "$HA" "$HB" "$HB2" "$HB3" "$HB4" "$CWDB" "$OUT" "$TDIR" "$TDIR2"
+# A manifest id is a filename on the target machine. "../x" with a file and a checksum
+# that both line up would pass every other check and install one level above the
+# project dir, so the id itself must be refused, and the whole bundle with it.
+HB5=$(mktemp -d); TDIR3=$(mktemp -d)
+tar -xzf "$BUNDLE" -C "$TDIR3"
+cp "$TDIR3/sessions/$S1.jsonl" "$TDIR3/x.jsonl"
+TSHA=$( { sha256sum "$TDIR3/x.jsonl" 2>/dev/null || shasum -a 256 "$TDIR3/x.jsonl"; } | cut -d' ' -f1)
+jq --arg id "$S1" --arg sha "$TSHA" \
+    '(.sessions[] | select(.id==$id)) |= (.id = "../x" | .sha256 = $sha)' \
+    "$TDIR3/manifest.json" >"$TDIR3/m.tmp" && mv "$TDIR3/m.tmp" "$TDIR3/manifest.json"
+( cd "$TDIR3" && tar -czf "$OUT/traversal.tar.gz" . )
+TERR=$(cd "$CWDB" && CLAUDE_SESSION_KIT_HOME="$HB5" bash "$ROOT/handoff/import.sh" "$OUT/traversal.tar.gz" 2>&1 >/dev/null); RC=$?
+is "a manifest id like ../x refuses the import" 1 "$RC"
+case "$TERR" in *"unsafe session id"*) ok "…naming the id as the reason" ;;
+    *) bad "…naming the id as the reason" "'unsafe session id'" "$TERR";; esac
+[ -z "$(find "$HB5" -name '*.jsonl' 2>/dev/null)" ] \
+    && ok "…and installs nothing, inside the project dir or out of it" \
+    || bad "…and installs nothing" "no transcripts" "$(find "$HB5" -name '*.jsonl')"
+
+rm -rf "$HA" "$HB" "$HB2" "$HB3" "$HB4" "$HB5" "$CWDB" "$OUT" "$TDIR" "$TDIR2" "$TDIR3"
 
 # --- same-machine split: split / claim / guard / release ----------------------
 #
@@ -1421,6 +1454,19 @@ is "…and the guard goes quiet" "" "$(rm -f "$HDIR/$OLD.guard-seen"; guard "$OL
 is "releasing again refuses — nothing active" 1 \
    "$(bash "$ROOT/handoff/release.sh" "$OLD" >/dev/null 2>&1; echo $?)"
 
+# The marker's `to` names a file release deletes. One that is a path, not an id, must
+# refuse before removing anything, rather than delete $HDIR/../x.claimed.
+jq -n '{folder:"f", topic:"t", date:"d", to:"../x"}' >"$HDIR/$OLD.handed"
+: >"$FAKE/.claude/x.claimed"
+RERR=$(bash "$ROOT/handoff/release.sh" "$OLD" 2>&1 >/dev/null); RC=$?
+is "release refuses a marker whose 'to' is ../x" 1 "$RC"
+case "$RERR" in *"not a session id"*) ok "…saying why" ;;
+    *) bad "…saying why" "'not a session id'" "$RERR";; esac
+[ -e "$FAKE/.claude/x.claimed" ] && [ -e "$HDIR/$OLD.handed" ] \
+    && ok "…and removes nothing, the file outside or the marker" \
+    || bad "…and removes nothing" "both kept" "something deleted"
+rm -f "$HDIR/$OLD.handed" "$FAKE/.claude/x.claimed"
+
 # release with no argument means "this session" — the form the guard's own message
 # suggests, so it has to work.
 CLAUDE_CODE_SESSION_ID=$OLD bash "$ROOT/handoff/split.sh" -n "$FAKE/note.md" >/dev/null 2>&1
@@ -1453,6 +1499,13 @@ guard() { printf '{"session_id":"%s"}' "$1" | bash "$ROOT/hooks/session-guard.sh
 OUT=$(guard "$FRESH")
 case "$OUT" in *pending*"release pass"*"The source session"*claim.sh*) ok "a fresh session is told about the pending handoff" ;;
     *) bad "a fresh session is told about the pending handoff" "pickup payload" "${OUT:-silence}";; esac
+# Claiming links two sessions on the strength of a hook-injected line, so the payload
+# must send the agent to the user first, never treat the message itself as the yes.
+case "$OUT" in *"ask them to confirm"*) ok "…and told to confirm with the user before claiming" ;;
+    *) bad "…and told to confirm with the user before claiming" "a confirm step" "$OUT";; esac
+case "$OUT" in *"do not ask again"*|*"as the confirmation"*)
+    bad "…never told to skip the confirmation" "no skip wording" "$OUT" ;;
+    *) ok "…never told to skip the confirmation" ;; esac
 is "…once — the next message is quiet" "" "$(guard "$FRESH")"
 is "a session with real history is never nudged" "" "$(guard "$BUSY")"
 
@@ -1469,6 +1522,20 @@ bash "$ROOT/handoff/release.sh" "$OLD2" >/dev/null 2>&1
 FRESH3=ffff9999-0000-0000-0000-000000000005
 transcript "$FRESH3" >/dev/null; add_ai "$FRESH3" "x"
 is "a released handoff nudges nobody" "" "$(guard "$FRESH3")"
+
+# The claim command is run as written, and its folder comes from a marker file. A
+# folder with a quote in it must come back as ONE argument naming that exact path, not
+# end the quoting early. The $( ) would run under the old '...' splice once the quote
+# closed it, so it is a probe: it must survive as text.
+HOSTILE="$FAKE/it's a \"dir\" \$(touch $FAKE/ran)"
+jq -n --arg dir "$HOSTILE" '{folder:$dir, topic:"q", date:"2026-01-01T00:00:00Z", to:null}' \
+    >"$FAKE/.claude/session-handoffs/$OLD2.handed"
+FRESH6=ffff9999-0000-0000-0000-000000000008
+transcript "$FRESH6" >/dev/null; add_ai "$FRESH6" "x"
+QARG=$(guard "$FRESH6" | sed -n 's/.*handoff\/claim\.sh \(.*\) — it links.*/\1/p')
+is "a quote in the folder survives as one exact argument" "$HOSTILE" \
+   "$(eval "set -- $QARG" 2>/dev/null; [ $# -eq 1 ] && printf '%s' "$1")"
+[ ! -e "$FAKE/ran" ] && ok "…and nothing in it runs" || bad "…and nothing in it runs" "no file" "the probe ran"
 drop_home
 
 # Stale: unclaimed past the pickup window. The old session's guard must say so and
@@ -2390,6 +2457,32 @@ grep -q 'someone elses skill' "$P/skills/session-note/SKILL.md" \
 printf '%s' "$OUT" | grep -q 'shadows the plugin' \
     && ok "…and the run says it shadows the plugin" \
     || bad "…and the run says it shadows the plugin" "a shadowing warning" "$OUT"
+
+# Mentioning the kit is not owning: a user's own skill that talks ABOUT session-kit
+# under our name used to pass a bare `grep session-kit` and be deleted.
+mkdir -p "$P/skills/rename-session"
+printf -- '---\nname: rename-session\n---\nmy wrapper; see the session-kit README\n' \
+    > "$P/skills/rename-session/SKILL.md"
+CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$P" bash "$ROOT/install.sh" >/dev/null 2>&1
+[ -f "$P/skills/rename-session/SKILL.md" ] \
+    && ok "a skill that only mentions session-kit is not taken for ours" \
+    || bad "a skill that only mentions session-kit is kept" "kept" "deleted"
+
+# Uninstall used to rm -rf every skill dir of our names unconditionally. It must apply
+# the same check: the user's handoff survives, a copy of ours goes, and the run names
+# what it skipped.
+mkdir -p "$P/skills/handoff"
+printf -- '---\nname: handoff\n---\nmy own handoff skill\n' > "$P/skills/handoff/SKILL.md"
+cp "$ROOT/skills/session-note/SKILL.md" "$P/skills/session-note/SKILL.md"
+OUT=$(CLAUDE_SESSION_KIT_PREFIX="$P" bash "$ROOT/install.sh" --uninstall 2>&1)
+grep -q 'my own handoff skill' "$P/skills/handoff/SKILL.md" 2>/dev/null \
+    && ok "uninstall leaves a user-owned skills/handoff alone" \
+    || bad "uninstall leaves a user-owned skills/handoff alone" "kept" "deleted"
+printf '%s' "$OUT" | grep -q "skipped $P/skills/handoff" \
+    && ok "…and reports it as skipped" || bad "…and reports it as skipped" "a skipped line" "$OUT"
+[ -e "$P/skills/session-note" ] \
+    && bad "uninstall still removes a bare copy of ours" "absent" "present" \
+    || ok "uninstall still removes a bare copy of ours"
 drop_home
 
 # --- the plugin's own SessionStart hook reports a missing kit ------------------
@@ -2588,6 +2681,25 @@ d=$(mktemp -d)/.claude; mkdir -p "$d"; printf '{}' > "$d/settings.json"
 printf '%s' "$(pin_run "$d")" | grep -q 'not on a tag\|pinned to' \
     && bad "no pin, no pin report" "silence" "a report" \
     || ok "no pin, no pin report"
+rm -rf "$(dirname "$d")"
+
+# With no plugin at all, the add command it prints is pinned to the checkout's release,
+# not the bare form that follows the default branch. And with no tag anywhere, it falls
+# back to the bare form but says what that means rather than passing it off as a pin.
+d=$(mktemp -d)/.claude; mkdir -p "$d"; printf '{}' > "$d/settings.json"
+printf '%s' "$(pin_run "$d")" | grep -q 'marketplace add sabilmakbar/claude-session-kit@v0.3.1$' \
+    && ok "no plugin: the add command is pinned to the checkout's tag" \
+    || bad "no plugin: add command pinned" "@v0.3.1" "$(pin_run "$d" | grep 'marketplace add')"
+git -C "$PC" -c user.email=t@e -c user.name=t commit -q --allow-empty -m "past the tag" 2>/dev/null
+printf '%s' "$(pin_run "$d")" | grep -q 'marketplace add sabilmakbar/claude-session-kit@v0.3.1$' \
+    && ok "…and to the nearest tag behind it when HEAD has moved on" \
+    || bad "add command pinned to nearest tag" "@v0.3.1" "$(pin_run "$d" | grep 'marketplace add')"
+git -C "$PC" tag -d v0.3.1 >/dev/null 2>&1
+OUT=$(pin_run "$d")
+printf '%s' "$OUT" | grep -q 'marketplace add sabilmakbar/claude-session-kit$' \
+    && printf '%s' "$OUT" | grep -q 'unpinned: no release tag is known' \
+    && ok "no tag known: the bare form, labelled as unpinned" \
+    || bad "no tag: bare form labelled" "bare add + unpinned note" "$(printf '%s' "$OUT" | grep -A3 'marketplace add')"
 rm -rf "$(dirname "$d")" "$(dirname "$PC")"
 
 # --- the documented update command must work in every host ------------------------
@@ -2619,6 +2731,11 @@ git -C "$CB_C" -c user.email=t@e -c user.name=t commit -q --allow-empty -m "upst
 git -C "$CB_C" update-ref refs/remotes/origin/main upstream-probe
 git -C "$CB_C" checkout -q main 2>/dev/null
 git -C "$CB_C" branch -q --set-upstream-to=origin/main main 2>/dev/null
+# Hermetic tags: the clone inherits the checkout's, and on a shallow CI clone their history
+# is missing, so what they prove depends on how the runner fetched. Shed them and plant
+# one ON HEAD, which is the release this checkout is at and must never count as newer.
+for _t in $(git -C "$CB_C" tag); do git -C "$CB_C" tag -d "$_t" >/dev/null; done
+git -C "$CB_C" tag v0.0.1 main
 # The clone carries COMMITTED install.sh, so a working-tree change would not be under test.
 # Copy the one being tested over it; only its own logic is exercised here, and the gate is off.
 cp "$ROOT/install.sh" "$CB_C/install.sh"
@@ -2628,9 +2745,39 @@ OUT=$( cd "$CB_C" && CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$CB
 printf '%s' "$OUT" | grep -q 'commit(s) behind' \
     && ok "integration: a behind checkout is reported" \
     || bad "integration: behind checkout reported" "a behind line" "$(printf '%s' "$OUT" | tail -3)"
-printf '%s' "$OUT" | grep -q 'git -C' \
-    && ok "…naming git pull for the checkout" || bad "behind line names git pull" "git -C ... pull" "absent"
+# No release is newer than HEAD (its only tag is ON it), and HEAD is a branch,
+# so a pull is the only move, and it is named as unpinned rather than passed off as one.
+printf '%s' "$OUT" | grep -q 'git -C .* pull' && printf '%s' "$OUT" | grep -q 'unpinned' \
+    && ok "…with no newer release, naming git pull as the unpinned move" \
+    || bad "behind line names git pull, unpinned" "git -C ... pull + unpinned" "$(printf '%s' "$OUT" | grep -A2 'behind')"
 drop_home
+# A release upstream: the line names that tag, never a pull that follows the branch.
+git -C "$CB_C" tag -f v9.9.9 upstream-probe >/dev/null 2>&1
+cp "$ROOT/install.sh" "$CB_C/install.sh"
+new_home; CBP="$FAKE/.claude"; mkdir -p "$CBP"
+OUT=$( cd "$CB_C" && CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$CBP" \
+        bash install.sh 2>&1 </dev/null )
+printf '%s' "$OUT" | grep -q 'fetch --tags && git -C .* checkout v9.9.9' \
+    && ok "…with a newer release, naming a checkout of its tag" \
+    || bad "behind line names the tag" "fetch --tags && checkout v9.9.9" "$(printf '%s' "$OUT" | grep -A2 'behind')"
+printf '%s' "$OUT" | grep -q 'git -C .* pull' \
+    && bad "…and no pull" "no pull" "a pull" || ok "…and no pull"
+printf '%s' "$OUT" | grep -q 'marketplace add sabilmakbar/claude-session-kit@v9.9.9' \
+    && ok "…and the pin for the plugin half" || bad "behind line pins the plugin" "@v9.9.9" "absent"
+drop_home
+git -C "$CB_C" tag -d v9.9.9 >/dev/null 2>&1
+# Detached, as a tag-pinned clone is, with no newer release: no pull (there is no branch
+# to pull into), just the fact that nothing ahead is released.
+git -C "$CB_C" checkout -q --detach main 2>/dev/null
+cp "$ROOT/install.sh" "$CB_C/install.sh"
+new_home; CBP="$FAKE/.claude"; mkdir -p "$CBP"
+OUT=$( cd "$CB_C" && CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$CBP" \
+        bash install.sh 2>&1 </dev/null )
+printf '%s' "$OUT" | grep -q 'none of it is released yet' && ! printf '%s' "$OUT" | grep -q 'git -C .* pull' \
+    && ok "…detached with no newer release, no pull is offered" \
+    || bad "detached behind line" "no pull, 'not released'" "$(printf '%s' "$OUT" | grep -A2 'behind')"
+drop_home
+git -C "$CB_C" checkout -q main 2>/dev/null
 # Control: the same clone, level with its upstream, must say nothing.
 git -C "$CB_C" update-ref refs/remotes/origin/main main
 cp "$ROOT/install.sh" "$CB_C/install.sh"
@@ -2641,6 +2788,33 @@ is "integration: a current checkout says nothing about being behind" "" \
    "$(printf '%s' "$OUT" | grep 'commit(s) behind')"
 drop_home
 rm -rf "$(dirname "$CB_C")"
+
+# A shallow clone, as actions/checkout makes one, with an OLDER tag fetched. Its history is
+# cut, so the old tag is not provably an ancestor of HEAD, and "not an ancestor" once read
+# as "newer" and named v0.1.0 as the upgrade. Built from a temp repo so the real one's
+# tags and depth play no part.
+SH=$(mktemp -d); SR="$SH/src"; mkdir -p "$SR"
+tar -C "$ROOT" --exclude=.git -cf - . | tar -C "$SR" -xf -
+cp "$ROOT/install.sh" "$SR/install.sh"
+sgit() { git -C "$1" -c user.email=t@e -c user.name=t -c core.hooksPath=/dev/null "${@:2}"; }
+sgit "$SR" init -q -b main 2>/dev/null || { sgit "$SR" init -q; sgit "$SR" checkout -q -b main; }
+sgit "$SR" add -A; sgit "$SR" commit -q -m "release"; sgit "$SR" tag v0.1.0
+sgit "$SR" commit -q --allow-empty -m "after the release"
+git clone -q --depth 1 "file://$SR" "$SH/c" 2>/dev/null
+git -C "$SH/c" fetch -q --depth 1 origin tag v0.1.0 2>/dev/null
+sgit "$SR" commit -q --allow-empty -m "upstream moved"
+git -C "$SH/c" fetch -q --depth 1 origin main 2>/dev/null
+new_home; CBP="$FAKE/.claude"; mkdir -p "$CBP"
+OUT=$( cd "$SH/c" && CLAUDE_SESSION_KIT_NO_GATE=1 CLAUDE_SESSION_KIT_PREFIX="$CBP" \
+        bash install.sh 2>&1 </dev/null )
+printf '%s' "$OUT" | grep -q 'commit(s) behind' \
+    && ok "integration: a shallow clone behind upstream is reported" \
+    || bad "shallow clone behind reported" "a behind line" "$(printf '%s' "$OUT" | tail -3)"
+printf '%s' "$OUT" | grep -q 'checkout v0.1.0' \
+    && bad "…without naming an older tag as the upgrade" "no checkout v0.1.0" "$(printf '%s' "$OUT" | grep -A2 'behind')" \
+    || ok "…without naming an older tag as the upgrade"
+drop_home
+rm -rf "$SH"
 
 # Uninstall states the plugin order. Removing the marketplace before the plugin makes
 # `plugin uninstall` unable to resolve it, so listing the two commands in either order is

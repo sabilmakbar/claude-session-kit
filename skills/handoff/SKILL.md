@@ -37,11 +37,20 @@ conversation; never generate it mechanically. Sections:
   reading ONLY this note. Pick load-bearing facts stated once and briefly — those are
   what get lost. This is the note's quality bar, checked at claim time.
 
-Write it under `/tmp`, show the user, adjust, then hand that file to the script.
-Not the working directory: the script COPIES the note into the handoff folder, which
-is the permanent record, so the file you drafted is scratch the moment the script
-runs. Left in a repo it becomes an untracked stray that outlives the handoff, and
-seven of them had piled up in one directory before this line said where.
+Write it in a private scratch dir, show the user, adjust, then hand that file to
+the script:
+
+```bash
+mkdir -p "$HOME/.claude/session-handoffs" && mktemp -d "$HOME/.claude/session-handoffs/draft.XXXXXX"
+```
+
+`mktemp -d` makes the dir mode 700; write `note.md` inside the path it prints. Not
+`/tmp`, where the name is guessable and the file readable by anyone else on the
+machine, and the note is a summary of the conversation. Not the working directory
+either: the script COPIES the note into the handoff folder, which is the permanent
+record, so the file you drafted is scratch the moment the script runs. Left in a repo
+it becomes an untracked stray that outlives the handoff, and seven of them had piled
+up in one directory before this line said where.
 
 ## 2a. Cross-machine ending
 
@@ -53,8 +62,10 @@ seven of them had piled up in one directory before this line said where.
 > this skill; `install.sh` ships what the skill runs. Say so plainly and name the fix:
 > `install.sh` from the kit checkout, then a new session. Do not work around it.
 
-Ambiguous refs refuse with candidates — pick with the user, never guess. Tell the
-user where the bundle is and that they move it themselves (scp, drive, anything).
+Ambiguous refs refuse with candidates — pick with the user, never guess. The bundle
+lands in `~/.claude/session-handoffs/exports/`, owner-only, unless `-o <dir>` says
+otherwise; keep it out of a repo, since it holds the raw transcripts. Tell the user
+where the bundle is and that they move it themselves (scp, drive, anything).
 On the other machine: `handoff/import.sh <bundle>` — it verifies checksums before
 touching anything and prints this note at the end.
 
@@ -70,8 +81,9 @@ the user, exactly:
 1. Open a **fresh** session for the split-off topic.
 2. Type anything — their first message surfaces the pending handoff automatically
    (the session-guard hook watches for unclaimed handoffs), and that session's
-   agent claims it and receives the note as seed context. Manual fallback if the
-   hook is not wired there: run `handoff/claim.sh <folder>` in the fresh session.
+   agent asks them to confirm, then claims it and receives the note as seed
+   context. Manual fallback if the hook is not wired there: run
+   `handoff/claim.sh <folder>` in the fresh session.
 3. **Only if the receiving session is already open**, ring its doorbell rather than
    waiting for it to be reopened — the pickup hook fires on a session's first message,
    so a session already running hears nothing until then. `ListAgents` for the peers,

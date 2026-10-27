@@ -171,7 +171,8 @@ tab title, renaming other sessions, the built-in `/rename`, which hooks you need
 
 Removes the installed libraries and the knobs config, along with any bare skill copy an
 older version of the kit left in `~/.claude/skills`, and takes its four hooks back out of
-`settings.json`, backing the file up first. Hooks it did not put there are not touched.
+`settings.json`, backing the file up first. Hooks it did not put there are not touched,
+and neither is a skill of the same name it did not write: that one is reported as skipped.
 It leaves your notes (`~/.claude/session-notes/`), your handoff folders
 (`~/.claude/session-handoffs/`), and every transcript exactly where they are. The kit
 never owned those.

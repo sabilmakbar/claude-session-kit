@@ -227,7 +227,9 @@ pass them for the wrong reason.
 
 1. **`handoff/export.sh <session-ref>… [files…]`**: resolve refs via `core/` (title
    substring or id), validate each transcript (valid JSON tail), write manifest,
-   bundle. Refuses to run if a ref is ambiguous.
+   bundle. Refuses to run if a ref is ambiguous. The bundle is mode 0600 in
+   `~/.claude/session-handoffs/exports/` (mode 0700) unless `-o` names a directory:
+   it is raw transcripts, and the cwd it used to land in is usually a repo.
 2. **`handoff/import.sh <bundle>`**: verify checksums; refuse on session-id collision
    with a *different* file (byte-identical = skip silently); install under the current
    machine's project dir; append each session's manifest `title` as a `custom-title`
